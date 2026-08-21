@@ -94,7 +94,10 @@ function fmtAttr(k: string, v: unknown): string | null {
 function elementToJsx(node: unknown, indent: number, depth: number): string {
   const pad = "  ".repeat(indent)
   if (node === null || node === undefined || typeof node === "boolean") return ""
-  if (typeof node === "string" || typeof node === "number") return pad + String(node).replace(/\s+/g, " ").trim()
+  if (typeof node === "string" || typeof node === "number") {
+    const text = String(node).replace(/\s+/g, " ").trim()
+    return text ? pad + text : ""
+  }
   if (Array.isArray(node)) return node.map((n) => elementToJsx(n, indent, depth)).filter(Boolean).join("\n")
   const el = node as any
   if (!el.$$typeof) return pad + "{…}"
