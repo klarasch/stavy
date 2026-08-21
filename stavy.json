@@ -1,5 +1,5 @@
 {
-  "$schema": "./spec/protopact.schema.json",
+  "$schema": "./spec/stavy.schema.json",
   "version": "0.1",
   "product": {
     "name": "Orbit",

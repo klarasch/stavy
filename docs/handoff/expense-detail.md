@@ -60,4 +60,4 @@ A single expense across its whole lifecycle; actions depend on role × lifecycle
 
 - The decision buttons are the crux of PRD-118 §3. Reject and Request-changes branch into the variants further right on this row.
 
-_Generated from protopact.json — do not edit by hand._
+_Generated from stavy.json — do not edit by hand._

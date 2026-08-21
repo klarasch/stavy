@@ -1,4 +1,4 @@
-import type { PageProps } from "@/protopact/types"
+import type { PageProps } from "@/stavy/types"
 import { ApprovalActions } from "../organisms/ApprovalActions"
 
 export default function ApprovalActionsComponent({ dims, nav }: PageProps) {

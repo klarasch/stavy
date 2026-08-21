@@ -1,5 +1,5 @@
-// Protopact manifest types — the TypeScript mirror of SPEC.md (v0.1).
-// The manifest itself (protopact.json) is framework-agnostic JSON.
+// Stavy manifest types — the TypeScript mirror of SPEC.md (v0.1).
+// The manifest itself (stavy.json) is framework-agnostic JSON.
 
 export interface DimensionValue {
   id: string

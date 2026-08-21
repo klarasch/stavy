@@ -50,4 +50,4 @@ All expenses visible to the current role, with filters.
 
 - Error copy agreed with support. Keep the retry; don't add a status page link yet.
 
-_Generated from protopact.json — do not edit by hand._
+_Generated from stavy.json — do not edit by hand._

@@ -1,4 +1,4 @@
-import type { PageProps } from "@/protopact/types"
+import type { PageProps } from "@/stavy/types"
 import { FlowProgress } from "../organisms/FlowProgress"
 
 export default function FlowProgressComponent({ dims }: PageProps) {

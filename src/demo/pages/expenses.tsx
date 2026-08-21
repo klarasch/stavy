@@ -1,4 +1,4 @@
-import type { PageProps } from "@/protopact/types"
+import type { PageProps } from "@/stavy/types"
 import { ListTemplate } from "../templates/ListTemplate"
 
 export default function ExpensesPage(props: PageProps) {

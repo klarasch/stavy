@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Human-readable changelog between two versions of protopact.json.
+// Human-readable changelog between two versions of stavy.json.
 //
 //   node scripts/changelog.mjs [base-ref] [head-ref|--working]   (defaults: origin/main…working tree, falls back to HEAD)
 //   node scripts/changelog.mjs HEAD~1
@@ -11,13 +11,13 @@ import { readFileSync } from "node:fs"
 const [baseArg, headArg] = process.argv.slice(2)
 function gitShow(ref) {
   try {
-    return JSON.parse(execSync(`git show ${ref}:protopact.json`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }))
+    return JSON.parse(execSync(`git show ${ref}:stavy.json`, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }))
   } catch {
     return null
   }
 }
 const base = gitShow(baseArg ?? "origin/main") ?? gitShow("HEAD") ?? { dimensions: [], templates: [], pages: [], scenarios: [], prototypes: [], notes: [], boards: [], requirements: [] }
-const head = headArg && headArg !== "--working" ? gitShow(headArg) : JSON.parse(readFileSync("protopact.json", "utf8"))
+const head = headArg && headArg !== "--working" ? gitShow(headArg) : JSON.parse(readFileSync("stavy.json", "utf8"))
 const baseLabel = baseArg ?? "origin/main"
 const headLabel = headArg && headArg !== "--working" ? headArg : "working tree"
 
@@ -99,5 +99,5 @@ total += section("Notes", base.notes, head.notes, (a, b) => (a.text !== b.text ?
 total += section("Boards", base.boards, head.boards, (a, b) => (a.source !== b.source ? ["content edited"] : []))
 
 const coverage = (m) => m.pages.reduce((n, p) => n + (p.instances?.length ?? 0), 0)
-const header = `## Protopact changes — ${baseLabel} → ${headLabel}\n\n${total === 0 ? "No manifest changes." : `${total} change(s). Pinned states: ${coverage(base)} → ${coverage(head)} · scenarios: ${base.scenarios.length} → ${head.scenarios.length} · pages: ${base.pages.length} → ${head.pages.length}`}`
+const header = `## Stavy changes — ${baseLabel} → ${headLabel}\n\n${total === 0 ? "No manifest changes." : `${total} change(s). Pinned states: ${coverage(base)} → ${coverage(head)} · scenarios: ${base.scenarios.length} → ${head.scenarios.length} · pages: ${base.pages.length} → ${head.pages.length}`}`
 console.log([header, ...lines].join("\n"))

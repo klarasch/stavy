@@ -180,7 +180,7 @@ function AuthorField({ author, onAuthor }: { author: string; onAuthor: (a: strin
 const canWriteAnnotations = import.meta.env.DEV
 
 async function saveAnnotation(pageId: string, target: string, title: string, note: string) {
-  const res = await fetch("/__protopact/annotation", {
+  const res = await fetch("/__stavy/annotation", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ page: pageId, target, title, note }),
@@ -237,7 +237,7 @@ function Composer({
       {annotate && (
         <label className="flex items-center gap-2 mb-2 text-[11.5px] cursor-pointer select-none" style={{ color: "var(--ps-muted)" }}>
           <input type="checkbox" checked={asAnnotation} onChange={(e) => setAsAnnotation(e.target.checked)} />
-          Save as a design annotation (writes to protopact.json)
+          Save as a design annotation (writes to stavy.json)
         </label>
       )}
       {asAnnotation ? (

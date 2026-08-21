@@ -456,7 +456,7 @@ export function CanvasPage() {
         <>
           <div className="ps ps-glass absolute top-4 left-4 z-20 rounded-2xl px-3.5 py-2 flex items-center gap-2.5">
             <Layers className="size-4" style={{ color: "var(--ps-muted)" }} />
-            <span className="font-semibold text-[13px]">Protopact</span>
+            <span className="font-semibold text-[13px]">Stavy</span>
             <span style={{ color: "var(--ps-faint)" }}>/</span>
             <span className="font-medium text-[13px]">{manifest.product.name}</span>
             <Chip sm accent={!!activeSlice}>

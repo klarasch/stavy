@@ -48,4 +48,4 @@ Multi-step submission flow; each step is a value of the 'step' process dimension
 
 - Upload is deliberately mocked — static first. Real file handling only if a scenario needs to demonstrate it.
 
-_Generated from protopact.json — do not edit by hand._
+_Generated from stavy.json — do not edit by hand._

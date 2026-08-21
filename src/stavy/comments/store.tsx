@@ -104,9 +104,9 @@ export function CommentsProvider({ children }: { children: ReactNode }) {
       .then((list) => {
         const n = importMany(list)
         history.replaceState(null, "", window.location.pathname + window.location.search)
-        if (n > 0) console.info(`protopact: imported ${n} comment(s) from link`)
+        if (n > 0) console.info(`stavy: imported ${n} comment(s) from link`)
       })
-      .catch((e) => console.warn("protopact: could not unpack comments", e))
+      .catch((e) => console.warn("stavy: could not unpack comments", e))
   }, [importMany])
 
   const value = useMemo<CommentsState>(
@@ -176,7 +176,7 @@ export async function decodePayload(input: string): Promise<Comment[]> {
   if (s.startsWith("[")) return JSON.parse(s)
   if (s.startsWith("c1.")) return JSON.parse(await gunzip(b64u.dec(s.slice(3))))
   if (s.startsWith("c0.")) return JSON.parse(new TextDecoder().decode(b64u.dec(s.slice(3))))
-  throw new Error("Not a Protopact comments payload")
+  throw new Error("Not a Stavy comments payload")
 }
 
 export async function shareUrl(list: Comment[]): Promise<string> {
@@ -203,7 +203,7 @@ export async function toMarkdown(list: Comment[]): Promise<string> {
   const open = list.filter((c) => !c.resolved)
   const resolved = list.filter((c) => c.resolved)
   const fmtDate = (t: number) => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" })
-  const lines: string[] = [`*Protopact comments — ${manifest.product.name}* (${open.length} open, ${resolved.length} resolved)`, ""]
+  const lines: string[] = [`*Stavy comments — ${manifest.product.name}* (${open.length} open, ${resolved.length} resolved)`, ""]
   const block = (c: Comment) => {
     lines.push(`• ${c.resolved ? "✅ " : ""}*${describeAnchor(c)}* — ${c.author || "anonymous"}, ${fmtDate(c.createdAt)}`)
     lines.push(`  ${c.body.replace(/\n/g, "\n  ")}`)

@@ -20,7 +20,7 @@ jobs:
       - run: npm ci
       - run: npm run validate
       - run: npx tsc -b
-      - run: BASE_PATH=/protopact/ npx vite build
+      - run: BASE_PATH=/stavy/ npx vite build
       - run: cp dist/index.html dist/404.html   # SPA fallback for deep links on Pages
       - uses: actions/upload-pages-artifact@v3
         with: { path: dist }

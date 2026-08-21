@@ -1,8 +1,8 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom"
-import { CanvasPage } from "./protopact/canvas/CanvasPage"
-import { PageView } from "./protopact/PageView"
-import { ChromeProvider, EyeToggle } from "./protopact/chrome"
-import { CommentsProvider } from "./protopact/comments/store"
+import { CanvasPage } from "./stavy/canvas/CanvasPage"
+import { PageView } from "./stavy/PageView"
+import { ChromeProvider, EyeToggle } from "./stavy/chrome"
+import { CommentsProvider } from "./stavy/comments/store"
 
 export default function App() {
   return (

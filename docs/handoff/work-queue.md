@@ -37,4 +37,4 @@ Bespoke organism: the role-aware queue card from the dashboard.
 ## Scenarios that pass through (0)
 
 
-_Generated from protopact.json — do not edit by hand._
+_Generated from stavy.json — do not edit by hand._

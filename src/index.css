@@ -48,7 +48,7 @@
 }
 
 /* =====================================================================
-   Protopact chrome — its own token namespace (--ps-*), independent from
+   Stavy chrome — its own token namespace (--ps-*), independent from
    the prototype's design tokens, with light/dark via data-ps-theme.
    ===================================================================== */
 :root {

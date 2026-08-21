@@ -10,9 +10,9 @@ import { resolve, dirname } from "node:path"
 
 const args = process.argv.slice(2)
 const out = resolve(args[args.indexOf("--out") + 1] || "docs/strings.md")
-const m = JSON.parse(readFileSync("protopact.json", "utf8"))
+const m = JSON.parse(readFileSync("stavy.json", "utf8"))
 if (!m.strings) {
-  console.error("protopact.json has no `strings` entry (path to the copy catalog).")
+  console.error("stavy.json has no `strings` entry (path to the copy catalog).")
   process.exit(1)
 }
 const catalog = JSON.parse(readFileSync(resolve(m.strings), "utf8"))

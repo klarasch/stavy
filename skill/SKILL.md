@@ -1,12 +1,12 @@
 ---
-name: protopact
-description: Set up and operate a Protopact prototyping workspace — a manifest-driven system for vibe-coded prototypes with a zoomable canvas overview, guided scenario tours, dimension variants (states/roles/lifecycles), annotations, dev-mode inspection, and per-prototype build slicing. Use when the user wants to scaffold a prototyping workspace, register a page template, add a page/scenario/dimension/annotation to a prototype, create a demo build slice, or asks about protopact.json. Works with any UI kit or design system.
+name: stavy
+description: Set up and operate a Stavy prototyping workspace — a manifest-driven system for vibe-coded prototypes with a zoomable canvas overview, guided scenario tours, dimension variants (states/roles/lifecycles), annotations, dev-mode inspection, and per-prototype build slicing. Use when the user wants to scaffold a prototyping workspace, register a page template, add a page/scenario/dimension/annotation to a prototype, create a demo build slice, or asks about stavy.json. Works with any UI kit or design system.
 ---
 
-# Protopact skill
+# Stavy skill
 
-You are operating a **Protopact workspace**: a prototyping repo organized around
-a `protopact.json` manifest, per the spec in `SPEC.md` (read it if present;
+You are operating a **Stavy workspace**: a prototyping repo organized around
+a `stavy.json` manifest, per the spec in `SPEC.md` (read it if present;
 its rules win over this file on any conflict).
 
 ## Core model (memorize this)
@@ -35,7 +35,7 @@ its rules win over this file on any conflict).
 The manifest is the single source of truth and must never drift from the code:
 
 1. Any new page/template/scenario/dimension you code gets registered in
-   `protopact.json` in the same change, and vice versa.
+   `stavy.json` in the same change, and vice versa.
 2. Every scenario `target` and annotation `target` must exist as a
    `data-proto="<Target>"` attribute on the page it references, with dims under
    which it is actually rendered (a target inside a manager-only card needs
@@ -75,7 +75,7 @@ When a designer or legal reviewer changes text, change the catalog only; run
 
 ## Fidelity ladder — static first, behaviour on demand
 
-Prototypes drift toward "building the product". Protopact resists this with
+Prototypes drift toward "building the product". Stavy resists this with
 an explicit ladder. Every page declares its rung in the manifest (`fidelity`),
 and you only climb when a scenario step *requires* it:
 
@@ -107,11 +107,11 @@ Rules of thumb:
 
 ## Setting up a new workspace
 
-When asked to install Protopact in a repo (any framework, any UI kit):
+When asked to install Stavy in a repo (any framework, any UI kit):
 
 1. Ask which UI kit / design system package to build on; import components from
    it — never fork or restyle kit components in the workspace.
-2. Create `protopact.json` with the product info and an initial dimension set
+2. Create `stavy.json` with the product info and an initial dimension set
    drawn from the product's reality (typical starters: a `state` dimension with
    loaded/empty/loading/error; a role dimension if the product has roles).
 3. Implement the binding contract for the host framework:
@@ -122,12 +122,12 @@ When asked to install Protopact in a repo (any framework, any UI kit):
      `data-component="<Name>"` on the root node, and import from it;
    - a registry that maps page ids → modules **through a build-time filter** so
      a slice env var (`PROTO=<id>`) excludes unlisted pages from the bundle
-     (see `vite.config.ts` → `protopactSlice()` in the reference repo for the
+     (see `vite.config.ts` → `stavySlice()` in the reference repo for the
      virtual-module pattern; port the idea to the host bundler). **Edit the
      hardcoded page-import path** in the plugin's `load()` hook
      (`/src/demo/pages/${id}.tsx`) to wherever this product's pages live —
      if you forget, every page import 404s silently.
-4. Install the viewer: copy `src/protopact/` from the reference repo **as is**.
+4. Install the viewer: copy `src/stavy/` from the reference repo **as is**.
    It is self-contained (own CSS tokens in `index.css` under `--ps-*`, no
    imports from the host UI kit) — do **not** re-theme it in the host kit; the
    chrome is deliberately a different product from the prototype. Also copy
@@ -181,8 +181,8 @@ a reply — write `comments-resolved.json` containing the same comments with
 ## Designers: cheap edits without spending tokens
 
 Tell designers (and do it yourself when cheaper) that these are safe to edit
-by hand, with editor autocompletion from `spec/protopact.schema.json`:
-`protopact.json` labels, descriptions, `instances[].note`, `annotations`,
+by hand, with editor autocompletion from `spec/stavy.schema.json`:
+`stavy.json` labels, descriptions, `instances[].note`, `annotations`,
 `notes`, `boards`, scenario titles/notes; fixture data in `src/demo/fixtures.ts`;
 copy text and Tailwind spacing/colour classes in templates (the inspector shows
 the exact classes and has "open template in VS Code"). When a designer

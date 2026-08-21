@@ -12,7 +12,7 @@ import { resolve } from "node:path"
 
 const args = process.argv.slice(2)
 const out = resolve(args[args.indexOf("--out") + 1] || "tests/scenarios")
-const m = JSON.parse(readFileSync("protopact.json", "utf8"))
+const m = JSON.parse(readFileSync("stavy.json", "utf8"))
 mkdirSync(out, { recursive: true })
 const page = new Map(m.pages.map((p) => [p.id, p]))
 const resolveDims = (p, o = {}) => Object.fromEntries(Object.keys(p.dimensions).map((d) => [d, o[d] ?? p.defaults?.[d] ?? p.dimensions[d][0]]))
@@ -22,7 +22,7 @@ const esc = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 let n = 0
 for (const sc of m.scenarios) {
   const L = [
-    `// Generated from protopact.json — scenario "${sc.id}". Regenerate with \`npm run gen:tests\`.`,
+    `// Generated from stavy.json — scenario "${sc.id}". Regenerate with \`npm run gen:tests\`.`,
     `import { test, expect } from "@playwright/test"`,
     "",
     ...(sc.refs?.length ? [`// refs: ${sc.refs.join(", ")}`] : []),

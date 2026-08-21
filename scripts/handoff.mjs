@@ -11,7 +11,7 @@ import { resolve, dirname } from "node:path"
 
 const args = process.argv.slice(2)
 const out = resolve(args[args.indexOf("--out") + 1] || "docs/handoff")
-const m = JSON.parse(readFileSync("protopact.json", "utf8"))
+const m = JSON.parse(readFileSync("stavy.json", "utf8"))
 mkdirSync(out, { recursive: true })
 const tpl = new Map(m.templates.map((t) => [t.id, t]))
 const page = new Map(m.pages.map((p) => [p.id, p]))
@@ -83,7 +83,7 @@ for (const p of m.pages) {
     L.push("", "## Canvas notes", "")
     notes.forEach((x) => L.push(`- ${x.text}`))
   }
-  L.push("", `_Generated from protopact.json — do not edit by hand._`)
+  L.push("", `_Generated from stavy.json — do not edit by hand._`)
   writeFileSync(resolve(out, `${p.id}.md`), L.join("\n") + "\n")
   n++
 }

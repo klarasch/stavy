@@ -6,7 +6,7 @@ declare const __PROTO_ROOT__: string | null
 declare module "virtual:proto-pages" {
   export const pageModules: Record<
     string,
-    () => Promise<{ default: import("react").ComponentType<import("@/protopact/types").PageProps> }>
+    () => Promise<{ default: import("react").ComponentType<import("@/stavy/types").PageProps> }>
   >
 }
 
