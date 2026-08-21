@@ -328,7 +328,7 @@ export function EyeToggle() {
     <button
       className="ps-eye"
       data-hidden={hidden ? "true" : undefined}
-      title={`${hidden ? "Show" : "Hide"} Protoscope UI`}
+      title={`${hidden ? "Show" : "Hide"} Protopact UI`}
       onClick={() => setHidden(!hidden)}
     >
       {hidden ? <EyeOff /> : <Eye />}

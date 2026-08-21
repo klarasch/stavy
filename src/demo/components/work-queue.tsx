@@ -1,4 +1,4 @@
-import type { PageProps } from "@/protoscope/types"
+import type { PageProps } from "@/protopact/types"
 import { WorkQueue } from "../organisms/WorkQueue"
 import { dashboardFixture } from "../fixtures"
 

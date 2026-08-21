@@ -4,17 +4,17 @@ import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "node:url"
 import { readFileSync, writeFileSync } from "node:fs"
 
-// Protoscope slice plugin: when PROTO=<prototype-id> is set, the build only
-// includes the pages declared in that prototype slice of protoscope.json.
-function protoscopeSlice(): Plugin {
-  const manifestPath = fileURLToPath(new URL("./protoscope.json", import.meta.url))
+// Protopact slice plugin: when PROTO=<prototype-id> is set, the build only
+// includes the pages declared in that prototype slice of protopact.json.
+function protopactSlice(): Plugin {
+  const manifestPath = fileURLToPath(new URL("./protopact.json", import.meta.url))
   const virtualId = "virtual:proto-pages"
   const resolvedId = "\0" + virtualId
   const stringsId = "virtual:proto-strings"
   const resolvedStringsId = "\0" + stringsId
 
   return {
-    name: "protoscope-slice",
+    name: "protopact-slice",
     config() {
       return {
         define: {
@@ -25,10 +25,10 @@ function protoscopeSlice(): Plugin {
       }
     },
     // Dev-only authoring endpoint: the viewer can save a design annotation
-    // straight into protoscope.json (designers annotate without prompting;
+    // straight into protopact.json (designers annotate without prompting;
     // HMR reloads the manifest and the pin appears).
     configureServer(server) {
-      server.middlewares.use("/__protoscope/annotation", (req, res) => {
+      server.middlewares.use("/__protopact/annotation", (req, res) => {
         if (req.method !== "POST") {
           res.statusCode = 405
           return res.end()
@@ -74,7 +74,7 @@ function protoscopeSlice(): Plugin {
         : null
       if (sliceId && !slice) {
         throw new Error(
-          `PROTO="${sliceId}" does not match any prototype in protoscope.json. ` +
+          `PROTO="${sliceId}" does not match any prototype in protopact.json. ` +
             `Known: ${manifest.prototypes.map((p: { id: string }) => p.id).join(", ")}`
         )
       }
@@ -95,7 +95,9 @@ function protoscopeSlice(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), protoscopeSlice()],
+  // Sub-path hosting (GitHub Pages): BASE_PATH=/protopact/ npm run build
+  base: process.env.BASE_PATH ?? "/",
+  plugins: [react(), tailwindcss(), protopactSlice()],
   // Keep React component names in production builds so the inspector can
   // show "Badge" instead of "Ct" on deployed prototypes.
   esbuild: { keepNames: true },

@@ -33,4 +33,4 @@ Bespoke organism: step header driven by the process dimension.
 ## Scenarios that pass through (0)
 
 
-_Generated from protoscope.json — do not edit by hand._
+_Generated from protopact.json — do not edit by hand._

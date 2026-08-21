@@ -50,4 +50,4 @@ Landing page; content adapts to the viewer's role.
 
 - First-run: one calm CTA, no stats. Resist adding onboarding chrome here until the submit flow is validated.
 
-_Generated from protoscope.json — do not edit by hand._
+_Generated from protopact.json — do not edit by hand._

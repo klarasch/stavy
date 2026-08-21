@@ -44,4 +44,4 @@ Bespoke organism: the decision panel, reviewable on its own.
 
 - Registered as its own component so the decision matrix can be signed off without the page around it. Same contract, smaller frame.
 
-_Generated from protoscope.json — do not edit by hand._
+_Generated from protopact.json — do not edit by hand._

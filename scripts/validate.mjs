@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Protoscope check — validates the manifest against the code (the SKILL.md
+// Protopact check — validates the manifest against the code (the SKILL.md
 // invariants), optionally checks scenario refs against requirement documents,
 // and prints a coverage summary.
 //
-//   node scripts/validate.mjs [protoscope.json] [--refs docs/PRD-118.md ...] [--coverage]
+//   node scripts/validate.mjs [protopact.json] [--refs docs/PRD-118.md ...] [--coverage]
 //
 // Exit code 1 on errors; warnings never fail the run.
 import { readFileSync, existsSync } from "node:fs"
@@ -18,7 +18,7 @@ for (let i = 0; i < argv.length; i++) {
   } else if (argv[i] === "--coverage") flags.coverage = true
   else positional.push(argv[i])
 }
-const manifestPath = resolve(positional[0] ?? "protoscope.json")
+const manifestPath = resolve(positional[0] ?? "protopact.json")
 const root = dirname(manifestPath)
 const m = JSON.parse(readFileSync(manifestPath, "utf8"))
 
@@ -27,11 +27,11 @@ const warnings = []
 const err = (s) => errors.push(s)
 const warn = (s) => warnings.push(s)
 
-// ---- shape: JSON Schema (spec/protoscope.schema.json), if ajv is installed
+// ---- shape: JSON Schema (spec/protopact.schema.json), if ajv is installed
 try {
   const { default: Ajv } = await import("ajv/dist/2020.js")
   const { default: addFormats } = await import("ajv-formats")
-  const schemaPath = [resolve(root, "spec/protoscope.schema.json"), resolve(import.meta.dirname, "../spec/protoscope.schema.json")].find(existsSync)
+  const schemaPath = [resolve(root, "spec/protopact.schema.json"), resolve(import.meta.dirname, "../spec/protopact.schema.json")].find(existsSync)
   if (schemaPath) {
     const ajv = new Ajv({ allErrors: true, strict: false })
     addFormats(ajv)
@@ -239,6 +239,6 @@ if (flags.coverage) {
 for (const w of warnings) console.log(`  warn  ${w}`)
 for (const e of errors) console.log(`  ERROR ${e}`)
 console.log(
-  `\nprotoscope: ${m.pages.length} pages · ${m.templates.length} templates · ${m.scenarios.length} scenarios · ${m.prototypes.length} prototypes · ${(m.notes ?? []).length} notes — ${errors.length} error(s), ${warnings.length} warning(s)`
+  `\nprotopact: ${m.pages.length} pages · ${m.templates.length} templates · ${m.scenarios.length} scenarios · ${m.prototypes.length} prototypes · ${(m.notes ?? []).length} notes — ${errors.length} error(s), ${warnings.length} warning(s)`
 )
 process.exit(errors.length ? 1 : 0)

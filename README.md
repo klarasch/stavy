@@ -1,4 +1,4 @@
-# Protoscope
+# Protopact
 
 **An open standard for AI-assisted prototyping** — vibe-code your prototypes,
 keep them legible.
@@ -6,7 +6,7 @@ keep them legible.
 Code prototypes beat static design mocks at interactivity, but they lose the
 thing Figma had: the bird's-eye view. Nobody knows where to click, which
 scenarios and states are covered, and every demo deploy packs the whole app.
-Protoscope fixes that with one manifest file and a viewer:
+Protopact fixes that with one manifest file and a viewer:
 
 - 🗺 **Zoomable canvas** — every declared page variant live-rendered on a
   pan/zoom surface, grouped by page and by scenario. Click anything to drop
@@ -57,7 +57,7 @@ Protoscope fixes that with one manifest file and a viewer:
 - 💬 **Comments without a server** — leave comments on any page (anchored to
   semantic targets), share them as a link or a Slack-ready Markdown digest,
   unpack a colleague's link back in. Separate from annotations by design.
-- 🧾 **Manifest schema** — `spec/protoscope.schema.json` gives editor
+- 🧾 **Manifest schema** — `spec/protopact.schema.json` gives editor
   autocompletion and is enforced by `npm run check`.
 - ⌨️ **Tooltips + shortcuts** — N/W/I/T/D/C, arrows in tours, ? for the sheet.
 - ✏️ **Wireframe mode** — one toggle renders any page (or the whole canvas) as
@@ -68,9 +68,9 @@ Protoscope fixes that with one manifest file and a viewer:
 - 📦 **Sliced builds** — `PROTO=approval-flow vite build` ships only that
   prototype's pages. No more deploying the whole app to demo two screens.
 - 🧩 **Registered page templates** — components come from your UI kit
-  (this demo: shadcn/ui); Protoscope's layer is reusable page templates that
+  (this demo: shadcn/ui); Protopact's layer is reusable page templates that
   new prototypes start from.
-- 🤖 **AI-native** — `protoscope.json` doubles as machine-readable context: the
+- 🤖 **AI-native** — `protopact.json` doubles as machine-readable context: the
   bundled Claude skill (`skill/SKILL.md`) scaffolds workspaces, registers
   templates, and keeps the manifest true while vibe-coding.
 
@@ -79,8 +79,8 @@ Protoscope fixes that with one manifest file and a viewer:
 | Path | What it is |
 |---|---|
 | `SPEC.md` | The standard (v0.1 draft): manifest format + binding contract |
-| `protoscope.json` | The manifest for the demo workspace |
-| `skill/SKILL.md` | Claude skill that operates any Protoscope workspace |
+| `protopact.json` | The manifest for the demo workspace |
+| `skill/SKILL.md` | Claude skill that operates any Protopact workspace |
 | `docs/ADOPTION.md` | Hands-on guide: trial repo on another DS, rolling onto an existing mock repo, CI/CD |
 | `scripts/validate.mjs` | `npm run check` — manifest ↔ code validation, `--refs` PRD check, coverage summary |
 | `scripts/changelog.mjs` | `npm run changelog [ref]` — Markdown diff of the manifest for PRs |
@@ -91,7 +91,7 @@ Protoscope fixes that with one manifest file and a viewer:
 | `scripts/snapshot.mjs` | `npm run snapshot` — Playwright PNG of every pinned instance (for visual diffs) |
 | `docs/PRD-118.md` | Mock PRD the `refs` check runs against |
 | `../protoscope-mui-trial/` | Transferability trial on MUI, built cold from SPEC + skill; see its `FRICTION.md` |
-| `src/protoscope/` | Reference viewer (canvas, page view, tours, annotations, inspector) |
+| `src/protopact/` | Reference viewer (canvas, page view, tours, annotations, inspector) |
 | `src/demo/` | Demo product **Orbit** — expenses & approvals (employee / manager / finance) |
 | `src/ui/` | Vendored shadcn/ui components (the "public UI kit" of the demo) |
 
@@ -113,8 +113,8 @@ PROTO=approval-flow npm run build:proto   # only the manager/finance demo
 
 The manifest and skill are UI-kit-agnostic, and the viewer is self-contained
 (its own `--ps-*` tokens, zero imports from the host kit). To adopt on an
-existing prototype repo: copy `src/protoscope/` unchanged, add
-`protoscope.json`, implement the two-hook binding contract (page modules +
+existing prototype repo: copy `src/protopact/` unchanged, add
+`protopact.json`, implement the two-hook binding contract (page modules +
 `data-proto` targets — plus a one-file `data-component` wrapper layer if your
 kit doesn't stamp component names), and let the skill do the bookkeeping.
 See `SPEC.md` §2 and the skill's "Setting up a new workspace" section. A cold

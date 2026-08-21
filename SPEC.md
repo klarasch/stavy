@@ -1,13 +1,13 @@
-# Protoscope — an open standard for AI-assisted prototyping (v0.1, draft)
+# Protopact — an open standard for AI-assisted prototyping (v0.1, draft)
 
-Protoscope is a convention for organizing vibe-coded prototypes so that they stay
+Protopact is a convention for organizing vibe-coded prototypes so that they stay
 legible: anyone can see, bird's-eye, what scenarios, states, and screens exist,
 zoom into any of them and interact, and ship a demo build that only contains the
 pages actually being demoed.
 
 It has three parts:
 
-1. **The manifest** (`protoscope.json`) — a framework-agnostic description of the
+1. **The manifest** (`protopact.json`) — a framework-agnostic description of the
    prototype workspace. This file *is* the standard.
 2. **The binding contract** — the two small hooks a host codebase implements so a
    viewer can render what the manifest describes.
@@ -245,7 +245,7 @@ build scoping:
 
 A conforming build tool, given a prototype id, MUST exclude non-listed pages
 from the bundle and SHOULD filter the canvas to the slice. (Reference
-implementation: the `protoscope-slice` Vite plugin + `PROTO=<id> vite build`.)
+implementation: the `protopact-slice` Vite plugin + `PROTO=<id> vite build`.)
 
 ---
 
@@ -320,7 +320,7 @@ The viewer's own chrome (toolbars, tour cards, inspector, canvas panels) is a
 separate product with its own tokens; it is **not** required — or recommended —
 to be restyled in the host product's UI kit. The reference viewer is
 self-contained (no imports from the host kit), so adopting it means copying
-`src/protoscope/` unchanged and implementing only §2.1 and §2.2. Re-theming the
+`src/protopact/` unchanged and implementing only §2.1 and §2.2. Re-theming the
 chrome is optional polish, not part of conformance. (This was the single
 largest cost in a transferability trial on MUI before the viewer was made
 self-contained.)
@@ -396,7 +396,7 @@ A conforming viewer SHOULD provide:
 
 - **Authoring in dev** (optional): a dev server MAY expose an endpoint that
   writes a design annotation into the manifest from the viewer
-  (reference: `POST /__protoscope/annotation`), so designers annotate without
+  (reference: `POST /__protopact/annotation`), so designers annotate without
   prompting an agent; the manifest stays the source of truth.
 
 ## 3b. Tooling expectations
@@ -415,7 +415,7 @@ from the manifest alone: a **changelog** between two manifest versions
 
 ## 4. Conformance levels
 
-- **Level 0 — manifest only.** The workspace has an accurate `protoscope.json`.
+- **Level 0 — manifest only.** The workspace has an accurate `protopact.json`.
   Even without a viewer this is useful: it's machine-readable context for AI
   agents and a human-readable coverage map.
 - **Level 1 — viewable.** Binding contract implemented; some viewer renders

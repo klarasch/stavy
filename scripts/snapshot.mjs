@@ -17,7 +17,7 @@ const opt = (name, def) => {
 const url = opt("--url", "http://localhost:5173").replace(/\/$/, "")
 const out = resolve(opt("--out", "snapshots"))
 const sliceId = opt("--slice", null)
-const m = JSON.parse(readFileSync(resolve("protoscope.json"), "utf8"))
+const m = JSON.parse(readFileSync(resolve("protopact.json"), "utf8"))
 const slice = sliceId ? m.prototypes.find((p) => p.id === sliceId) : null
 const pages = m.pages.filter((p) => !slice || slice.pages.includes(p.id))
 mkdirSync(out, { recursive: true })

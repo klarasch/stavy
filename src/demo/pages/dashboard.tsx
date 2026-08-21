@@ -1,4 +1,4 @@
-import type { PageProps } from "@/protoscope/types"
+import type { PageProps } from "@/protopact/types"
 import { DashboardTemplate } from "../templates/DashboardTemplate"
 
 export default function DashboardPage(props: PageProps) {

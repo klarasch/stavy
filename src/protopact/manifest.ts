@@ -1,4 +1,4 @@
-import raw from "../../protoscope.json"
+import raw from "../../protopact.json"
 import type { Manifest, PageDef, Scenario } from "./types"
 
 const full = raw as unknown as Manifest

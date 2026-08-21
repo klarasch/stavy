@@ -1,4 +1,4 @@
-// Generated from protoscope.json — scenario "manager-approves". Regenerate with `npm run gen:tests`.
+// Generated from protopact.json — scenario "manager-approves". Regenerate with `npm run gen:tests`.
 import { test, expect } from "@playwright/test"
 
 // refs: PRD-118 §3, JIRA-ORB-412

@@ -1,7 +1,7 @@
 import { Check, X, MessageSquareWarning, Banknote, Pencil, Send } from "lucide-react"
 import { Button } from "@/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card"
-import { proto } from "@/protoscope/proto"
+import { proto } from "@/protopact/proto"
 import { makeT } from "../strings"
 
 /**

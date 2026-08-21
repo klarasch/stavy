@@ -1,6 +1,6 @@
 import { Check } from "lucide-react"
 import { Progress } from "@/ui/progress"
-import { proto } from "@/protoscope/proto"
+import { proto } from "@/protopact/proto"
 import { cn } from "@/lib/utils"
 import { makeT } from "../strings"
 

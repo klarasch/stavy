@@ -1,5 +1,5 @@
-// Protoscope manifest types — the TypeScript mirror of SPEC.md (v0.1).
-// The manifest itself (protoscope.json) is framework-agnostic JSON.
+// Protopact manifest types — the TypeScript mirror of SPEC.md (v0.1).
+// The manifest itself (protopact.json) is framework-agnostic JSON.
 
 export interface DimensionValue {
   id: string

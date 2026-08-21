@@ -543,7 +543,7 @@ export function Inspector({
                           <a className="ps-copy" href={`vscode://file/${__PROTO_ROOT__}/${ctx.template.source}`} title="Open the template in VS Code">
                             <ExternalLink className="size-3" /> template
                           </a>
-                          <a className="ps-copy" href={`vscode://file/${__PROTO_ROOT__}/protoscope.json`} title="Open the manifest in VS Code">
+                          <a className="ps-copy" href={`vscode://file/${__PROTO_ROOT__}/protopact.json`} title="Open the manifest in VS Code">
                             <ExternalLink className="size-3" /> manifest
                           </a>
                         </>

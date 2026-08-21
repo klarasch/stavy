@@ -1,9 +1,9 @@
-# Adopting Protoscope on your own design system
+# Adopting Protopact on your own design system
 
-This is the hands-on guide for trying Protoscope in a fresh repo with a
+This is the hands-on guide for trying Protopact in a fresh repo with a
 different UI kit, and for rolling it onto an existing prototype/mock repo at
 work. Steps marked **(skill)** are what Claude does for you when the
-`protoscope` skill is installed — you can do them by hand too.
+`protopact` skill is installed — you can do them by hand too.
 
 ---
 
@@ -15,20 +15,20 @@ work. Steps marked **(skill)** are what Claude does for you when the
    preflight, so nothing in your app changes) — `init` sets that up.
 2. **Install the viewer with one command** — do not re-theme it:
    ```bash
-   node /path/to/protoscope/scripts/init.mjs ../my-trial-repo
+   node /path/to/protopact/scripts/init.mjs ../my-trial-repo
    ```
-   It copies `src/protoscope/`, the scoped `src/protoscope.css`, the validator
+   It copies `src/protopact/`, the scoped `src/protopact.css`, the validator
    and snapshot scripts, the skill, `SPEC.md`, this guide, and a starter
-   `protoscope.json`, then prints the five things left to wire (deps, the
+   `protopact.json`, then prints the five things left to wire (deps, the
    Vite plugin with your page path, the CSS import, routes, scripts).
 3. **Install the skill**: copy `skill/SKILL.md` to
-   `.claude/skills/protoscope/SKILL.md` in the new repo (and `SPEC.md` next to
+   `.claude/skills/protopact/SKILL.md` in the new repo (and `SPEC.md` next to
    it or at the repo root — the skill reads it).
 4. **Let the skill set the workspace up** **(skill)** — in Claude Code:
-   > "Set up Protoscope for *<product>* on *<design system>*. Start with a
+   > "Set up Protopact for *<product>* on *<design system>*. Start with a
    > dashboard and a list page, roles *<a/b>*, a *<thing>* lifecycle
    > *<x → y → z>*, and two scenarios."
-   It will create `protoscope.json`, an `AppFrame`-style shell, the first
+   It will create `protopact.json`, an `AppFrame`-style shell, the first
    templates and pages, fixtures, scenarios, slices, and run the validator.
 5. **Binding contract checklist** (what the skill must have produced):
    - page modules `export default ({ dims, nav }) => …` at the paths the
@@ -45,7 +45,7 @@ work. Steps marked **(skill)** are what Claude does for you when the
        Object.assign((p: P) => React.createElement(C, { ...p, "data-component": name } as P), { displayName: name })
      export const Button = stamp<ButtonProps>("Button", MuiButton)
      ```
-6. **Adapt the inspector** **(skill)** — `src/protoscope/inspect-adapter.ts`:
+6. **Adapt the inspector** **(skill)** — `src/protopact/inspect-adapter.ts`:
    - React: nothing to do (component + props come from the React tree)
    - Tailwind + shadcn tokens: nothing to do
    - other token names (e.g. `--color-primary-500`): replace `tokenNames`
@@ -79,7 +79,7 @@ system, has the fixtures, and designers know it. But **rebuild the page
 templates clean**, extracted from the existing mocks one shape at a time
 (strangler pattern), rather than registering every old page as-is:
 
-1. Add the viewer, plugin, validator, skill, and an empty `protoscope.json`
+1. Add the viewer, plugin, validator, skill, and an empty `protopact.json`
    (product + dimensions only). Nothing else changes; old routes keep working.
 2. Audit the mock: list the 3–5 dominant page shapes (list, detail, dashboard,
    form flow, settings…). Those become the first `templates`, each extracted
@@ -116,7 +116,7 @@ straight back to Claude, which fixes the drift in the same turn:
         "hooks": [
           {
             "type": "command",
-            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *protoscope.json|*/pages/*|*/templates/*|*/organisms/*|*/components/*) npm run validate --silent ;; esac"
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *protopact.json|*/pages/*|*/templates/*|*/organisms/*|*/components/*) npm run validate --silent ;; esac"
           }
         ]
       }
@@ -167,7 +167,7 @@ hosted backend — the anchor model and UI stay the same.
   (no agent needed), or review it as `docs/strings.md` / `.csv` from
   `npm run strings`. Designers also edit manifest text/annotations/fixtures directly (schema
   autocompletion), or in dev use the comment composer's *Save as a design
-  annotation* to write straight into `protoscope.json`; reference changes to
+  annotation* to write straight into `protopact.json`; reference changes to
   Claude as "page URL + target id"; export comments as `.json`/`.md` and hand
   them to Claude as a task list — it returns a resolution file you import.
 
@@ -176,7 +176,7 @@ hosted backend — the anchor model and UI stay the same.
 One workflow, three jobs. Example for GitHub Actions (adapt to GitLab/Bitbucket 1:1):
 
 ```yaml
-name: protoscope
+name: protopact
 on: [pull_request, push]
 jobs:
   check:
@@ -214,12 +214,12 @@ jobs:
       # Deploy each slice artifact to your static host (Vercel/Netlify/Cloudflare
       # Pages/S3+CloudFront/GitHub Pages) under <pr>-<slice>.your-preview.host
       # and comment the canvas URLs on the PR. Slice ids come from
-      # `jq -r '.prototypes[].id' protoscope.json`.
+      # `jq -r '.prototypes[].id' protopact.json`.
       - run: echo "deploy + comment"
 ```
 
 Notes:
-- Read slice ids from the manifest (`jq -r '.prototypes[].id' protoscope.json`)
+- Read slice ids from the manifest (`jq -r '.prototypes[].id' protopact.json`)
   and expose them as a job output for the matrix; build only the slices whose
   pages changed if you want to save minutes (`git diff --name-only` against
   `manifest.pages[].module`).

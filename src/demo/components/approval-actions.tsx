@@ -1,4 +1,4 @@
-import type { PageProps } from "@/protoscope/types"
+import type { PageProps } from "@/protopact/types"
 import { ApprovalActions } from "../organisms/ApprovalActions"
 
 export default function ApprovalActionsComponent({ dims, nav }: PageProps) {
