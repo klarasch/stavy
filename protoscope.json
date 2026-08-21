@@ -1,0 +1,1016 @@
+{
+  "$schema": "./spec/protoscope.schema.json",
+  "version": "0.1",
+  "product": {
+    "name": "Orbit",
+    "description": "Demo product: team expense tracking & approvals. Employees submit expenses, managers approve, finance reimburses."
+  },
+  "viewer": {
+    "toolbar": "bottom"
+  },
+  "dimensions": [
+    {
+      "id": "role",
+      "label": "Role",
+      "kind": "role",
+      "values": [
+        {
+          "id": "employee",
+          "label": "Employee",
+          "description": "Submits own expenses"
+        },
+        {
+          "id": "manager",
+          "label": "Manager",
+          "description": "Reviews and approves team expenses"
+        },
+        {
+          "id": "finance",
+          "label": "Finance",
+          "description": "Reimburses approved expenses"
+        }
+      ]
+    },
+    {
+      "id": "state",
+      "label": "Data state",
+      "kind": "state",
+      "values": [
+        {
+          "id": "loaded",
+          "label": "Loaded"
+        },
+        {
+          "id": "empty",
+          "label": "Empty"
+        },
+        {
+          "id": "loading",
+          "label": "Loading"
+        },
+        {
+          "id": "error",
+          "label": "Error"
+        }
+      ]
+    },
+    {
+      "id": "lifecycle",
+      "label": "Expense lifecycle",
+      "kind": "lifecycle",
+      "values": [
+        {
+          "id": "draft",
+          "label": "Draft"
+        },
+        {
+          "id": "submitted",
+          "label": "Submitted"
+        },
+        {
+          "id": "in-review",
+          "label": "In review"
+        },
+        {
+          "id": "approved",
+          "label": "Approved"
+        },
+        {
+          "id": "rejected",
+          "label": "Rejected"
+        },
+        {
+          "id": "reimbursed",
+          "label": "Reimbursed"
+        }
+      ]
+    },
+    {
+      "id": "step",
+      "label": "Flow progress",
+      "kind": "process",
+      "values": [
+        {
+          "id": "details",
+          "label": "1 · Details"
+        },
+        {
+          "id": "receipt",
+          "label": "2 · Receipt"
+        },
+        {
+          "id": "review",
+          "label": "3 · Review"
+        },
+        {
+          "id": "done",
+          "label": "4 · Done"
+        }
+      ]
+    },
+    {
+      "id": "density",
+      "label": "Density",
+      "kind": "preference",
+      "values": [
+        {
+          "id": "comfortable",
+          "label": "Comfortable"
+        },
+        {
+          "id": "compact",
+          "label": "Compact"
+        }
+      ]
+    },
+    {
+      "id": "locale",
+      "label": "Locale",
+      "kind": "locale",
+      "values": [
+        {
+          "id": "en-US",
+          "label": "English (US)"
+        },
+        {
+          "id": "de-DE",
+          "label": "Deutsch"
+        }
+      ]
+    }
+  ],
+  "templates": [
+    {
+      "id": "dashboard-page",
+      "label": "Dashboard page",
+      "description": "Stat cards + role-specific work queue + activity feed",
+      "source": "src/demo/templates/DashboardTemplate.tsx",
+      "uiKit": [
+        "Card",
+        "Badge",
+        "Button",
+        "Skeleton",
+        "Avatar",
+        "Separator"
+      ],
+      "organisms": [
+        "work-queue"
+      ]
+    },
+    {
+      "id": "list-page",
+      "label": "List page",
+      "description": "Filter bar + data table with role-aware columns and empty/loading/error states",
+      "source": "src/demo/templates/ListTemplate.tsx",
+      "uiKit": [
+        "Input",
+        "Select",
+        "Table",
+        "Badge",
+        "Button",
+        "Skeleton",
+        "Alert"
+      ]
+    },
+    {
+      "id": "detail-page",
+      "label": "Detail page",
+      "description": "Record header + meta panel + lifecycle timeline + role/lifecycle-aware action bar",
+      "source": "src/demo/templates/DetailTemplate.tsx",
+      "uiKit": [
+        "Card",
+        "Badge",
+        "Button",
+        "Separator",
+        "Avatar"
+      ],
+      "organisms": [
+        "approval-actions"
+      ]
+    },
+    {
+      "id": "form-flow-page",
+      "label": "Form flow page",
+      "description": "Multi-step form with progress indicator and confirmation state",
+      "source": "src/demo/templates/FormFlowTemplate.tsx",
+      "uiKit": [
+        "Card",
+        "Progress",
+        "Input",
+        "Label",
+        "Select",
+        "Textarea",
+        "Button"
+      ],
+      "organisms": [
+        "flow-progress"
+      ]
+    },
+    {
+      "id": "approval-actions-organism",
+      "label": "Approval actions (organism)",
+      "description": "Role × lifecycle decision panel",
+      "source": "src/demo/organisms/ApprovalActions.tsx",
+      "uiKit": [
+        "Card",
+        "Button"
+      ]
+    },
+    {
+      "id": "flow-progress-organism",
+      "label": "Flow progress (organism)",
+      "description": "Step indicator for multi-step flows",
+      "source": "src/demo/organisms/FlowProgress.tsx",
+      "uiKit": [
+        "Progress"
+      ]
+    },
+    {
+      "id": "work-queue-organism",
+      "label": "Work queue (organism)",
+      "description": "Role-specific list of items needing attention",
+      "source": "src/demo/organisms/WorkQueue.tsx",
+      "uiKit": [
+        "Card",
+        "Badge",
+        "Skeleton"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "dashboard",
+      "label": "Dashboard",
+      "description": "Landing page; content adapts to the viewer's role.",
+      "template": "dashboard-page",
+      "fidelity": "navigable",
+      "dimensions": {
+        "role": [
+          "employee",
+          "manager",
+          "finance"
+        ],
+        "state": [
+          "loaded",
+          "empty",
+          "loading"
+        ]
+      },
+      "defaults": {
+        "role": "employee",
+        "state": "loaded"
+      },
+      "instances": [
+        {
+          "dims": {
+            "role": "employee",
+            "state": "loaded"
+          }
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "state": "loaded"
+          },
+          "note": "Manager gets an approvals queue"
+        },
+        {
+          "dims": {
+            "role": "finance",
+            "state": "loaded"
+          },
+          "note": "Finance gets a reimbursement queue"
+        },
+        {
+          "dims": {
+            "role": "employee",
+            "state": "empty"
+          },
+          "note": "First-run experience"
+        },
+        {
+          "dims": {
+            "role": "employee",
+            "state": "loading"
+          }
+        }
+      ],
+      "annotations": [
+        {
+          "target": "NewExpenseButton",
+          "title": "Primary CTA",
+          "note": "Always visible for employees; opens the submit flow. Managers/finance reach it via the top nav instead."
+        },
+        {
+          "target": "PendingApprovalsCard",
+          "title": "Work queue",
+          "note": "Role-specific queue: managers see items awaiting their review, finance sees the reimbursement queue. Sorted oldest-first."
+        }
+      ]
+    },
+    {
+      "id": "expenses",
+      "label": "Expenses list",
+      "description": "All expenses visible to the current role, with filters.",
+      "template": "list-page",
+      "fidelity": "navigable",
+      "dimensions": {
+        "role": [
+          "employee",
+          "manager",
+          "finance"
+        ],
+        "state": [
+          "loaded",
+          "empty",
+          "loading",
+          "error"
+        ]
+      },
+      "defaults": {
+        "role": "employee",
+        "state": "loaded"
+      },
+      "instances": [
+        {
+          "dims": {
+            "role": "employee",
+            "state": "loaded"
+          }
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "state": "loaded"
+          },
+          "note": "Manager sees submitter column + quick actions"
+        },
+        {
+          "dims": {
+            "role": "employee",
+            "state": "empty"
+          }
+        },
+        {
+          "dims": {
+            "role": "employee",
+            "state": "loading"
+          }
+        },
+        {
+          "dims": {
+            "role": "employee",
+            "state": "error"
+          },
+          "note": "API failure fallback with retry"
+        }
+      ],
+      "annotations": [
+        {
+          "target": "ExpenseTable",
+          "title": "Mock data",
+          "note": "Rows come from fixtures; totals are computed client-side. Clicking a row opens the detail page with the row's lifecycle stage."
+        },
+        {
+          "target": "StatusFilter",
+          "title": "Status filter",
+          "note": "Filters by lifecycle stage. Finance defaults to 'Approved' because that's their work queue."
+        }
+      ]
+    },
+    {
+      "id": "expense-detail",
+      "label": "Expense detail",
+      "description": "A single expense across its whole lifecycle; actions depend on role × lifecycle. Also varies by density and locale (4 dimensions → the toolbar switches to a panel).",
+      "template": "detail-page",
+      "fidelity": "interactive",
+      "dimensions": {
+        "role": [
+          "employee",
+          "manager",
+          "finance"
+        ],
+        "lifecycle": [
+          "draft",
+          "submitted",
+          "in-review",
+          "approved",
+          "rejected",
+          "reimbursed"
+        ],
+        "density": [
+          "comfortable",
+          "compact"
+        ],
+        "locale": [
+          "en-US",
+          "de-DE"
+        ]
+      },
+      "defaults": {
+        "role": "employee",
+        "lifecycle": "submitted",
+        "density": "comfortable",
+        "locale": "en-US"
+      },
+      "instances": [
+        {
+          "dims": {
+            "role": "employee",
+            "lifecycle": "draft"
+          },
+          "note": "Owner can still edit"
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "lifecycle": "submitted"
+          },
+          "note": "Approve / reject / request changes"
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "lifecycle": "in-review"
+          }
+        },
+        {
+          "dims": {
+            "role": "finance",
+            "lifecycle": "approved"
+          },
+          "note": "Finance marks reimbursed"
+        },
+        {
+          "dims": {
+            "role": "employee",
+            "lifecycle": "rejected"
+          }
+        },
+        {
+          "dims": {
+            "role": "finance",
+            "lifecycle": "reimbursed"
+          },
+          "note": "Terminal state"
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "lifecycle": "submitted",
+            "density": "compact"
+          },
+          "note": "Compact density"
+        }
+      ],
+      "annotations": [
+        {
+          "target": "ApprovalActions",
+          "title": "Action matrix",
+          "note": "Buttons are a function of role × lifecycle: employee edits drafts, manager decides on submitted/in-review, finance reimburses approved. In this prototype the buttons really advance the lifecycle dimension."
+        },
+        {
+          "target": "LifecycleTimeline",
+          "title": "Timeline",
+          "note": "Renders the audit trail up to the current lifecycle stage."
+        }
+      ]
+    },
+    {
+      "id": "submit-expense",
+      "label": "Submit expense",
+      "description": "Multi-step submission flow; each step is a value of the 'step' process dimension.",
+      "template": "form-flow-page",
+      "fidelity": "interactive",
+      "dimensions": {
+        "step": [
+          "details",
+          "receipt",
+          "review",
+          "done"
+        ]
+      },
+      "defaults": {
+        "step": "details"
+      },
+      "instances": [
+        {
+          "dims": {
+            "step": "details"
+          }
+        },
+        {
+          "dims": {
+            "step": "receipt"
+          }
+        },
+        {
+          "dims": {
+            "step": "review"
+          }
+        },
+        {
+          "dims": {
+            "step": "done"
+          },
+          "note": "Confirmation; links back to the list"
+        }
+      ],
+      "annotations": [
+        {
+          "target": "FlowProgress",
+          "title": "Process dimension",
+          "note": "The step indicator is driven by the 'step' dimension — every stage of the process is addressable and appears on the canvas."
+        },
+        {
+          "target": "ReceiptDropzone",
+          "title": "Mocked upload",
+          "note": "Upload is faked in the prototype; any interaction marks a receipt as attached."
+        }
+      ]
+    },
+    {
+      "id": "approval-actions",
+      "label": "Approval actions",
+      "kind": "component",
+      "frame": {
+        "width": 560,
+        "height": 340
+      },
+      "module": "src/demo/components/approval-actions.tsx",
+      "description": "Bespoke organism: the decision panel, reviewable on its own.",
+      "template": "approval-actions-organism",
+      "fidelity": "navigable",
+      "dimensions": {
+        "role": [
+          "employee",
+          "manager",
+          "finance"
+        ],
+        "lifecycle": [
+          "draft",
+          "submitted",
+          "in-review",
+          "approved",
+          "rejected",
+          "reimbursed"
+        ]
+      },
+      "defaults": {
+        "role": "manager",
+        "lifecycle": "submitted"
+      },
+      "instances": [
+        {
+          "dims": {
+            "role": "employee",
+            "lifecycle": "draft"
+          }
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "lifecycle": "submitted"
+          }
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "lifecycle": "in-review"
+          }
+        },
+        {
+          "dims": {
+            "role": "finance",
+            "lifecycle": "approved"
+          }
+        },
+        {
+          "dims": {
+            "role": "employee",
+            "lifecycle": "approved"
+          },
+          "note": "Empty state of the panel"
+        }
+      ],
+      "annotations": [
+        {
+          "target": "ApproveButton",
+          "title": "Primary decision",
+          "note": "Always first; Reject is secondary, Request changes is tertiary so the happy path reads top-down."
+        }
+      ]
+    },
+    {
+      "id": "flow-progress",
+      "label": "Flow progress",
+      "kind": "component",
+      "frame": {
+        "width": 720,
+        "height": 160
+      },
+      "module": "src/demo/components/flow-progress.tsx",
+      "description": "Bespoke organism: step header driven by the process dimension.",
+      "template": "flow-progress-organism",
+      "fidelity": "static",
+      "dimensions": {
+        "step": [
+          "details",
+          "receipt",
+          "review",
+          "done"
+        ]
+      },
+      "defaults": {
+        "step": "details"
+      },
+      "instances": [
+        {
+          "dims": {
+            "step": "details"
+          }
+        },
+        {
+          "dims": {
+            "step": "receipt"
+          }
+        },
+        {
+          "dims": {
+            "step": "review"
+          }
+        },
+        {
+          "dims": {
+            "step": "done"
+          }
+        }
+      ],
+      "annotations": [
+        {
+          "target": "FlowProgress",
+          "title": "Completed steps",
+          "note": "Completed steps turn green with a check; the current step is bold."
+        }
+      ]
+    },
+    {
+      "id": "work-queue",
+      "label": "Work queue",
+      "kind": "component",
+      "frame": {
+        "width": 720,
+        "height": 420
+      },
+      "module": "src/demo/components/work-queue.tsx",
+      "description": "Bespoke organism: the role-aware queue card from the dashboard.",
+      "template": "work-queue-organism",
+      "fidelity": "navigable",
+      "dimensions": {
+        "role": [
+          "employee",
+          "manager",
+          "finance"
+        ],
+        "state": [
+          "loaded",
+          "empty",
+          "loading"
+        ]
+      },
+      "defaults": {
+        "role": "manager",
+        "state": "loaded"
+      },
+      "instances": [
+        {
+          "dims": {
+            "role": "employee",
+            "state": "loaded"
+          }
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "state": "loaded"
+          }
+        },
+        {
+          "dims": {
+            "role": "finance",
+            "state": "loaded"
+          }
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "state": "empty"
+          }
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "state": "loading"
+          }
+        }
+      ],
+      "annotations": [
+        {
+          "target": "PendingApprovalsCard",
+          "title": "Sort order",
+          "note": "Managers and finance see oldest-first; employees see latest-first."
+        }
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "employee-submits",
+      "label": "Employee submits an expense",
+      "persona": "employee",
+      "description": "The core happy path: from the dashboard through the 4-step flow to seeing the expense as Submitted in the list.",
+      "refs": [
+        "PRD-118 §2 Submission"
+      ],
+      "steps": [
+        {
+          "page": "dashboard",
+          "dims": {
+            "role": "employee",
+            "state": "loaded"
+          },
+          "target": "NewExpenseButton",
+          "title": "Start a new expense",
+          "note": "The dashboard CTA is the main entry point for employees."
+        },
+        {
+          "page": "submit-expense",
+          "dims": {
+            "step": "details"
+          },
+          "target": "ContinueButton",
+          "title": "Fill in the details",
+          "note": "Merchant, amount, date, category. All fields are mock-validated only."
+        },
+        {
+          "page": "submit-expense",
+          "dims": {
+            "step": "receipt"
+          },
+          "target": "ContinueButton",
+          "title": "Attach a receipt",
+          "note": "The dropzone is mocked — continue to proceed."
+        },
+        {
+          "page": "submit-expense",
+          "dims": {
+            "step": "review"
+          },
+          "target": "SubmitButton",
+          "title": "Review and submit",
+          "note": "Summary of everything entered; submitting advances the lifecycle to Submitted."
+        },
+        {
+          "page": "submit-expense",
+          "dims": {
+            "step": "done"
+          },
+          "target": "ViewExpensesButton",
+          "title": "Confirmation",
+          "note": "The expense now exists. Jump to the list to see it."
+        },
+        {
+          "page": "expenses",
+          "dims": {
+            "role": "employee",
+            "state": "loaded"
+          },
+          "target": "ExpenseRow:exp-2101",
+          "title": "It shows up as Submitted",
+          "note": "The freshly submitted expense appears at the top of the employee's list."
+        }
+      ]
+    },
+    {
+      "id": "manager-approves",
+      "label": "Manager reviews and approves",
+      "persona": "manager",
+      "description": "A manager finds a submitted expense in their queue and approves it.",
+      "refs": [
+        "PRD-118 §3 Approvals",
+        "JIRA-ORB-412"
+      ],
+      "steps": [
+        {
+          "page": "dashboard",
+          "dims": {
+            "role": "manager",
+            "state": "loaded"
+          },
+          "target": "PendingApprovalsCard",
+          "title": "The approvals queue",
+          "note": "Managers land on a queue of expenses awaiting their review."
+        },
+        {
+          "page": "expenses",
+          "dims": {
+            "role": "manager",
+            "state": "loaded"
+          },
+          "target": "ExpenseRow:exp-2101",
+          "title": "Open the submitted expense",
+          "note": "The manager list adds a Submitted-by column. Click the row to open it."
+        },
+        {
+          "page": "expense-detail",
+          "dims": {
+            "role": "manager",
+            "lifecycle": "submitted"
+          },
+          "target": "ApproveButton",
+          "title": "Approve it",
+          "note": "Approve advances the lifecycle. Reject and Request-changes branch to other stages — see those variants on the canvas."
+        },
+        {
+          "page": "expense-detail",
+          "dims": {
+            "role": "manager",
+            "lifecycle": "approved"
+          },
+          "target": "LifecycleTimeline",
+          "title": "Approved",
+          "note": "The timeline records the decision; the expense now waits for finance."
+        }
+      ]
+    },
+    {
+      "id": "finance-reimburses",
+      "label": "Finance reimburses",
+      "persona": "finance",
+      "description": "Finance works the approved queue and closes the loop.",
+      "refs": [
+        "PRD-118 §4 Reimbursement"
+      ],
+      "steps": [
+        {
+          "page": "expenses",
+          "dims": {
+            "role": "finance",
+            "state": "loaded"
+          },
+          "target": "StatusFilter",
+          "title": "The approved queue",
+          "note": "Finance's list is pre-filtered to Approved — that's their inbox."
+        },
+        {
+          "page": "expense-detail",
+          "dims": {
+            "role": "finance",
+            "lifecycle": "approved"
+          },
+          "target": "ReimburseButton",
+          "title": "Mark as reimbursed",
+          "note": "The only finance action at this stage. Payment itself happens in an external system."
+        },
+        {
+          "page": "expense-detail",
+          "dims": {
+            "role": "finance",
+            "lifecycle": "reimbursed"
+          },
+          "title": "Done — terminal state",
+          "note": "Reimbursed is the end of the lifecycle; the record becomes read-only for everyone."
+        }
+      ]
+    }
+  ],
+  "prototypes": [
+    {
+      "id": "full",
+      "label": "Full workspace",
+      "description": "Everything registered in the manifest.",
+      "pages": [
+        "dashboard",
+        "expenses",
+        "expense-detail",
+        "submit-expense",
+        "approval-actions",
+        "flow-progress",
+        "work-queue"
+      ],
+      "scenarios": [
+        "employee-submits",
+        "manager-approves",
+        "finance-reimburses"
+      ]
+    },
+    {
+      "id": "submit-flow",
+      "label": "Submit flow demo",
+      "description": "Only the employee submission experience.",
+      "pages": [
+        "dashboard",
+        "submit-expense",
+        "expenses",
+        "flow-progress"
+      ],
+      "scenarios": [
+        "employee-submits"
+      ]
+    },
+    {
+      "id": "approval-flow",
+      "label": "Approval flow demo",
+      "description": "Manager + finance review experience, no submit flow.",
+      "pages": [
+        "dashboard",
+        "expenses",
+        "expense-detail",
+        "approval-actions",
+        "work-queue"
+      ],
+      "scenarios": [
+        "manager-approves",
+        "finance-reimburses"
+      ]
+    }
+  ],
+  "notes": [
+    {
+      "id": "n-actions",
+      "page": "expense-detail",
+      "dims": {
+        "role": "manager",
+        "lifecycle": "submitted"
+      },
+      "target": "ApprovalActions",
+      "placement": "top",
+      "text": "The decision buttons are the crux of PRD-118 §3. Reject and Request-changes branch into the variants further right on this row."
+    },
+    {
+      "id": "n-empty",
+      "page": "dashboard",
+      "dims": {
+        "role": "employee",
+        "state": "empty"
+      },
+      "placement": "top",
+      "text": "First-run: one calm CTA, no stats. Resist adding onboarding chrome here until the submit flow is validated."
+    },
+    {
+      "id": "n-receipt",
+      "page": "submit-expense",
+      "dims": {
+        "step": "receipt"
+      },
+      "target": "ReceiptDropzone",
+      "placement": "top",
+      "text": "Upload is deliberately mocked — static first. Real file handling only if a scenario needs to demonstrate it."
+    },
+    {
+      "id": "n-error",
+      "page": "expenses",
+      "dims": {
+        "role": "employee",
+        "state": "error"
+      },
+      "placement": "right",
+      "text": "Error copy agreed with support. Keep the retry; don't add a status page link yet."
+    },
+    {
+      "id": "n-organism",
+      "page": "approval-actions",
+      "dims": {
+        "role": "manager",
+        "lifecycle": "submitted"
+      },
+      "placement": "top",
+      "text": "Registered as its own component so the decision matrix can be signed off without the page around it. Same contract, smaller frame."
+    }
+  ],
+  "boards": [
+    {
+      "id": "ia",
+      "title": "Information architecture",
+      "description": "Top-level navigation and how the pages connect. Supporting material — not part of the coverage contract.",
+      "kind": "mermaid",
+      "width": 760,
+      "source": "flowchart LR\n  D[Dashboard] --> E[Expenses list]\n  D --> N[New expense flow]\n  E --> X[Expense detail]\n  N -->|submit| E\n  X -->|approve / reject| X\n  subgraph roles\n    R1[employee]\n    R2[manager]\n    R3[finance]\n  end"
+    },
+    {
+      "id": "lifecycle",
+      "title": "Expense lifecycle",
+      "description": "The state machine behind the lifecycle dimension (PRD-118 §3).",
+      "kind": "mermaid",
+      "width": 620,
+      "source": "stateDiagram-v2\n  [*] --> draft\n  draft --> submitted: employee submits\n  submitted --> in_review: manager requests changes\n  in_review --> approved: manager approves\n  submitted --> approved: manager approves\n  submitted --> rejected: manager rejects\n  in_review --> rejected\n  approved --> reimbursed: finance pays\n  reimbursed --> [*]\n  rejected --> [*]"
+    },
+    {
+      "id": "principles",
+      "title": "Design principles for this prototype",
+      "kind": "text",
+      "width": 420,
+      "source": "1. Static first — every state is a pinned instance before it is a handler.\n2. Roles change what you see, never where you are.\n3. The lifecycle is the product; make each stage unmistakable.\n4. Mock loudly: anything faked says so in an annotation."
+    }
+  ]
+}

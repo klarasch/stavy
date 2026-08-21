@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://protoscope.dev/spec/0.1/protoscope.schema.json",
+  "title": "Protoscope manifest",
+  "description": "A framework-agnostic description of a prototype workspace: dimensions, templates, pages, scenarios, prototypes (slices), notes, boards. See SPEC.md.",
+  "type": "object",
+  "required": ["version", "product", "dimensions", "templates", "pages", "scenarios", "prototypes"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string", "pattern": "^0\\.1" },
+    "product": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": { "name": { "type": "string", "minLength": 1 }, "description": { "type": "string" } }
+    },
+    "viewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "toolbar": { "enum": ["bottom", "top", "bottom-left", "bottom-right", "top-left", "top-right", "bar-bottom", "bar-top"] }
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "values"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string" },
+          "kind": { "type": "string", "description": "Advisory tag: state | role | lifecycle | process | locale | preference | anything" },
+          "values": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "label"],
+              "additionalProperties": false,
+              "properties": { "id": { "$ref": "#/$defs/valueId" }, "label": { "type": "string" }, "description": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "templates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string" },
+          "description": { "type": "string" },
+          "source": { "type": "string", "description": "Path of the template implementation" },
+          "uiKit": { "type": "array", "items": { "type": "string" } },
+          "organisms": { "type": "array", "items": { "$ref": "#/$defs/id" }, "description": "Registered components (kind: component) this template composes" }
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "template", "dimensions"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string" },
+          "description": { "type": "string" },
+          "kind": { "enum": ["page", "component"] },
+          "frame": {
+            "type": "object",
+            "required": ["width", "height"],
+            "additionalProperties": false,
+            "properties": { "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 } }
+          },
+          "module": { "type": "string", "description": "Module path relative to the workspace root" },
+          "template": { "$ref": "#/$defs/id" },
+          "fidelity": { "enum": ["static", "navigable", "interactive"] },
+          "dimensions": { "$ref": "#/$defs/dimensionMap" },
+          "defaults": { "$ref": "#/$defs/dims" },
+          "instances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["dims"],
+              "additionalProperties": false,
+              "properties": { "dims": { "$ref": "#/$defs/dims" }, "note": { "type": "string" } }
+            }
+          },
+          "annotations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["target", "title", "note"],
+              "additionalProperties": false,
+              "properties": { "target": { "$ref": "#/$defs/target" }, "title": { "type": "string" }, "note": { "type": "string" } }
+            }
+          }
+        }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "steps"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string" },
+          "persona": { "type": "string" },
+          "description": { "type": "string" },
+          "refs": { "type": "array", "items": { "type": "string" }, "description": "Requirement references (PRD sections, tickets)" },
+          "steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["page", "title"],
+              "additionalProperties": false,
+              "properties": {
+                "page": { "$ref": "#/$defs/id" },
+                "dims": { "$ref": "#/$defs/dims" },
+                "target": { "$ref": "#/$defs/target" },
+                "title": { "type": "string" },
+                "note": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "prototypes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "pages", "scenarios"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string" },
+          "description": { "type": "string" },
+          "pages": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+          "scenarios": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "page"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "text": { "type": "string" },
+          "page": { "$ref": "#/$defs/id" },
+          "dims": { "$ref": "#/$defs/dims" },
+          "target": { "$ref": "#/$defs/target" },
+          "placement": { "enum": ["top", "right", "bottom", "left"] },
+          "offset": { "type": "object", "additionalProperties": false, "properties": { "x": { "type": "number" }, "y": { "type": "number" } } }
+        }
+      }
+    },
+    "boards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "kind", "source"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "kind": { "enum": ["mermaid", "image", "text"] },
+          "source": { "type": "string" },
+          "width": { "type": "integer", "minimum": 100 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "description": "kebab-case identifier" },
+    "valueId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$" },
+    "target": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*(:[A-Za-z0-9_.-]+)?$", "description": "data-proto id: PascalCase, optionally Name:key" },
+    "dims": { "type": "object", "additionalProperties": { "$ref": "#/$defs/valueId" } },
+    "dimensionMap": { "type": "object", "additionalProperties": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/valueId" } } }
+  }
+}
