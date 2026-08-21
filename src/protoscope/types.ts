@@ -131,6 +131,20 @@ export interface BoardDef {
 }
 
 /** Floating anchors, or a full-width bar that shrinks the prototype viewport instead of covering it. */
+/**
+ * A requirement the prototype must demonstrate (PRD section, ticket, acceptance
+ * criterion). Scenarios cite them in `refs`; the coverage board shows which are
+ * demonstrated and which are gaps. Usually generated from the PRD by the skill.
+ */
+export interface RequirementDef {
+  id: string
+  title: string
+  /** Where it comes from: document + section, ticket URL… */
+  source?: string
+  /** Free-form: "must" | "should" | "later" — viewers group by it */
+  priority?: string
+}
+
 export type ToolbarAnchor = "bottom" | "top" | "bottom-left" | "bottom-right" | "top-left" | "top-right" | "bar-bottom" | "bar-top"
 
 /** Workspace-level viewer defaults (a product/design system picks these once; viewers may override per link). */
@@ -151,6 +165,7 @@ export interface Manifest {
   prototypes: PrototypeSlice[]
   notes?: CanvasNote[]
   boards?: BoardDef[]
+  requirements?: RequirementDef[]
 }
 
 /** Props every page module receives from the viewer */

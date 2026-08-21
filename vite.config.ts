@@ -2,7 +2,7 @@ import { defineConfig, type Plugin } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "node:url"
-import { readFileSync } from "node:fs"
+import { readFileSync, writeFileSync } from "node:fs"
 
 // Protoscope slice plugin: when PROTO=<prototype-id> is set, the build only
 // includes the pages declared in that prototype slice of protoscope.json.
@@ -17,8 +17,41 @@ function protoscopeSlice(): Plugin {
       return {
         define: {
           __PROTO_SLICE__: JSON.stringify(process.env.PROTO ?? null),
+          // Absolute workspace root, dev only — lets the inspector open files in the editor.
+          __PROTO_ROOT__: JSON.stringify(process.env.NODE_ENV === "production" ? null : process.cwd()),
         },
       }
+    },
+    // Dev-only authoring endpoint: the viewer can save a design annotation
+    // straight into protoscope.json (designers annotate without prompting;
+    // HMR reloads the manifest and the pin appears).
+    configureServer(server) {
+      server.middlewares.use("/__protoscope/annotation", (req, res) => {
+        if (req.method !== "POST") {
+          res.statusCode = 405
+          return res.end()
+        }
+        let body = ""
+        req.on("data", (c) => (body += c))
+        req.on("end", () => {
+          try {
+            const { page: pageId, target, title, note } = JSON.parse(body)
+            const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
+            const page = manifest.pages.find((p: { id: string }) => p.id === pageId)
+            if (!page || !target || !title) throw new Error("page, target and title are required")
+            page.annotations = page.annotations ?? []
+            const existing = page.annotations.find((a: { target: string }) => a.target === target)
+            if (existing) Object.assign(existing, { title, note: note ?? "" })
+            else page.annotations.push({ target, title, note: note ?? "" })
+            writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n")
+            res.setHeader("content-type", "application/json")
+            res.end(JSON.stringify({ ok: true, count: page.annotations.length }))
+          } catch (e) {
+            res.statusCode = 400
+            res.end(String(e))
+          }
+        })
+      })
     },
     resolveId(id) {
       if (id === virtualId) return resolvedId

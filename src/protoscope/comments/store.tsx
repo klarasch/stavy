@@ -20,7 +20,9 @@ export interface Comment {
   dims: Record<string, string>
   /** data-proto target the comment is anchored to (preferred: survives redesigns) */
   target?: string
-  /** position in % of the anchor (target element, or the page root) */
+  /** nth-child path from the anchor (target or page root) down to the exact element clicked */
+  path?: number[]
+  /** position in % of the resolved anchor element */
   x: number
   y: number
   body: string
@@ -225,4 +227,44 @@ export function timeAgo(t: number): string {
   const h = Math.round(m / 60)
   if (h < 48) return `${h}h ago`
   return `${Math.round(h / 24)}d ago`
+}
+
+/* ---------------- anchoring helpers ---------------- */
+
+/** nth-child path from `from` down to `el` (empty when el === from). */
+export function pathBetween(from: Element, el: Element): number[] {
+  const path: number[] = []
+  let cur: Element | null = el
+  while (cur && cur !== from) {
+    const parent: Element | null = cur.parentElement
+    if (!parent) return []
+    path.unshift(Array.prototype.indexOf.call(parent.children, cur))
+    cur = parent
+  }
+  return cur === from ? path : []
+}
+
+/** Follow an nth-child path; null if the DOM changed underneath it. */
+export function followPath(from: Element, path: number[] | undefined): Element | null {
+  let cur: Element | null = from
+  for (const i of path ?? []) {
+    cur = cur?.children[i] ?? null
+    if (!cur) return null
+  }
+  return cur
+}
+
+/** Resolve a comment's anchor: exact element via path → target → page root. */
+export function resolveAnchor(c: Comment, wrapper: HTMLElement, root: Element): Element {
+  const target = c.target ? wrapper.querySelector<HTMLElement>(`[data-proto="${CSS.escape(c.target)}"]`) : null
+  const base = target ?? root
+  return followPath(base, c.path) ?? base
+}
+
+export function downloadText(filename: string, text: string, type = "text/plain") {
+  const a = document.createElement("a")
+  a.href = URL.createObjectURL(new Blob([text], { type }))
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }

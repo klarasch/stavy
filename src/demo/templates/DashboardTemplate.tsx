@@ -83,6 +83,7 @@ export function DashboardTemplate({ dims, nav }: PageProps) {
               subtitle={role === "employee" ? "Latest first" : "Oldest first — keep the queue moving"}
               items={fx.queue}
               onOpen={(e) => nav("expense-detail", { role, lifecycle: e.status })}
+              onViewAll={() => nav("expenses", { role })}
             />
 
             <Card className="col-span-2" {...proto("ActivityFeed", { component: "Card + list", data: "static fixture" })}>

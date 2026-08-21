@@ -174,7 +174,22 @@ Notes differ from `pages[].annotations`: annotations are *about the UI* and
 travel with the page wherever it's shown; canvas notes are *about the review* —
 design rationale, open questions, scope remarks — and live on the overview.
 
-### 1.6 Boards (supporting material — outside the contract)
+### 1.6 Requirements (the PM's half of the contract)
+
+```jsonc
+{ "id": "PRD-118 §3", "title": "Managers approve, reject, or request changes",
+  "source": "docs/PRD-118.md §3", "priority": "must" }
+```
+
+`requirements[]` lists what the prototype must demonstrate; scenarios cite
+them in `refs` by exact id. A viewer SHOULD render a coverage board
+(requirement → scenarios → states, gaps highlighted); a validator SHOULD warn
+for requirements no scenario cites and refs no requirement declares, and MAY
+cross-check a requirements document's text (`check --refs`). Requirements are
+typically generated from the PRD by the agent; PMs review the board rather
+than editing the manifest.
+
+### 1.7 Boards (supporting material — outside the contract)
 
 Information architecture, flow/state diagrams, moodboard images, principles:
 things a team wants *next to* the prototype without them being part of what
@@ -189,7 +204,7 @@ Boards are deliberately not referenced by scenarios, slices, or refs; the
 validator only checks ids and kinds. Teams may ask their agent to generate
 boards freely — the contract (§1.3–1.5) stays unchanged.
 
-### 1.7 Viewer defaults
+### 1.8 Viewer defaults
 
 A product or design system picks viewer defaults once; individual links may
 override them (e.g. `?tb=top-right` moves the toolbar for a page whose footer
@@ -200,7 +215,7 @@ it would cover):
                                     // docked bar (prototype viewport shrinks, nothing is covered): bar-bottom | bar-top
 ```
 
-### 1.8 Prototypes (build slices)
+### 1.9 Prototypes (build slices)
 
 A **prototype** names a subset of the workspace — the unit of demoing and of
 build scoping:
@@ -340,7 +355,8 @@ A conforming viewer SHOULD provide:
   page/template, and active dimensions. Any level from the exact element
   outward through every semantic ancestor is selectable.
 - **Comments** (optional, viewer-level, never in the manifest): conversation
-  anchored to `page + dims + data-proto target` (with a % fallback position),
+  anchored to `page + dims + data-proto target + the exact element's child path`
+  (position in % of that element, so bubbles survive browser zoom and reflow),
   visually distinct from annotations, threadable and resolvable. A reference
   viewer SHOULD work without a server: local storage plus a shareable payload
   (URL hash) and a Markdown export; richer backends are adapters.
@@ -364,6 +380,11 @@ A conforming viewer SHOULD provide:
 
 ---
 
+- **Authoring in dev** (optional): a dev server MAY expose an endpoint that
+  writes a design annotation into the manifest from the viewer
+  (reference: `POST /__protoscope/annotation`), so designers annotate without
+  prompting an agent; the manifest stays the source of truth.
+
 ## 3b. Tooling expectations
 
 A workspace SHOULD ship a `check` that (a) validates the manifest against the
@@ -373,7 +394,10 @@ organisms resolve), (b) checks scenario `refs` against requirement documents
 demonstrated by some scenario — and (c) prints coverage (pinned instances per
 declared variant space). The reference implementation is `scripts/validate.mjs`
 (`npm run check`). Snapshots of every pinned instance (`scripts/snapshot.mjs`)
-make state-level visual diffs possible in CI.
+make state-level visual diffs possible in CI. Three more generators follow
+from the manifest alone: a **changelog** between two manifest versions
+(`changelog.mjs`), **handoff sheets** per page (`handoff.mjs`), and
+**acceptance-test skeletons** from scenarios (`gen-tests.mjs` → Playwright).
 
 ## 4. Conformance levels
 

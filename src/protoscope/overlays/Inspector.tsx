@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
-import { X, Crosshair, Copy, Check } from "lucide-react"
+import { X, Crosshair, Copy, Check, ExternalLink } from "lucide-react"
 import { Chip, Kbd, Keys } from "../chrome"
 import type { PageDef, TemplateDef } from "../types"
 import { valueLabel, dimensionLabel } from "../manifest"
@@ -531,9 +531,21 @@ export function Inspector({
               <Section title={ctx.page.kind === "component" ? "Component" : "Page"}>
                 <div className="font-semibold">{ctx.page.label}</div>
                 {ctx.template && (
-                  <div className="text-[11px] mt-0.5 flex flex-col" style={{ color: "var(--ps-muted)" }}>
+                  <div className="text-[11px] mt-0.5 flex flex-col gap-0.5" style={{ color: "var(--ps-muted)" }}>
                     <span>template <code className="ps-mono">{ctx.template.id}</code></span>
-                    <span className="ps-mono">{ctx.template.source}</span>
+                    <span className="flex items-center gap-1.5 flex-wrap">
+                      <span className="ps-mono">{ctx.template.source}</span>
+                      {typeof __PROTO_ROOT__ === "string" && __PROTO_ROOT__ && (
+                        <>
+                          <a className="ps-copy" href={`vscode://file/${__PROTO_ROOT__}/${ctx.template.source}`} title="Open the template in VS Code">
+                            <ExternalLink className="size-3" /> template
+                          </a>
+                          <a className="ps-copy" href={`vscode://file/${__PROTO_ROOT__}/protoscope.json`} title="Open the manifest in VS Code">
+                            <ExternalLink className="size-3" /> manifest
+                          </a>
+                        </>
+                      )}
+                    </span>
                   </div>
                 )}
                 {ctx.template?.uiKit && (

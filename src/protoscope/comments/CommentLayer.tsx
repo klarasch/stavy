@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Check, RotateCcw, Trash2, X, CornerDownRight } from "lucide-react"
-import { findProtoTarget } from "../proto"
 import { PsButton } from "../chrome"
-import { useComments, dimsEqual, timeAgo, type Comment } from "./store"
+import { useComments, dimsEqual, timeAgo, pathBetween, resolveAnchor, type Comment } from "./store"
 
 interface Placed {
   c: Comment
@@ -39,7 +38,7 @@ export function CommentLayer({
 }) {
   const { comments, add, update, remove, reply, author, setAuthor } = useComments()
   const [placed, setPlaced] = useState<Placed[]>([])
-  const [draft, setDraft] = useState<{ target?: string; x: number; y: number; left: number; top: number } | null>(null)
+  const [draft, setDraft] = useState<{ target?: string; path: number[]; x: number; y: number; left: number; top: number } | null>(null)
   const mine = comments.filter((c) => c.page === pageId && dimsEqual(c.dims, dims))
   const root = wrapper.firstElementChild as HTMLElement | null
 
@@ -48,7 +47,7 @@ export function CommentLayer({
     const w = wrapper.getBoundingClientRect()
     const out: Placed[] = []
     for (const c of mine) {
-      const anchor = (c.target && findProtoTarget(wrapper, c.target)) || root
+      const anchor = resolveAnchor(c, wrapper, root)
       const r = anchor.getBoundingClientRect()
       out.push({
         c,
@@ -81,11 +80,15 @@ export function CommentLayer({
       e.preventDefault()
       e.stopPropagation()
       const targetEl = e.target.closest<HTMLElement>("[data-proto]")
-      const anchor = targetEl ?? root
-      const r = anchor.getBoundingClientRect()
+      const base = targetEl ?? root
+      // Anchor to the exact element clicked (path under the semantic target), so the
+      // bubble stays glued through browser zoom, viewport changes and reflow.
+      const exact = e.target
+      const r = exact.getBoundingClientRect()
       const w = wrapper.getBoundingClientRect()
       setDraft({
         target: targetEl?.getAttribute("data-proto") ?? undefined,
+        path: pathBetween(base, exact),
         x: ((e.clientX - r.left) / r.width) * 100,
         y: ((e.clientY - r.top) / r.height) * 100,
         left: e.clientX - w.left + wrapper.scrollLeft,
@@ -142,13 +145,14 @@ export function CommentLayer({
           top={draft.top + 8}
           author={author}
           target={draft.target}
+          pageId={pageId}
           onAuthor={setAuthor}
           onCancel={() => {
             setDraft(null)
             onPlaced()
           }}
           onPost={(body) => {
-            add({ page: pageId, dims, target: draft.target, x: draft.x, y: draft.y, body, author })
+            add({ page: pageId, dims, target: draft.target, path: draft.path, x: draft.x, y: draft.y, body, author })
             setDraft(null)
             onPlaced()
           }}
@@ -173,57 +177,91 @@ function AuthorField({ author, onAuthor }: { author: string; onAuthor: (a: strin
   )
 }
 
+const canWriteAnnotations = import.meta.env.DEV
+
+async function saveAnnotation(pageId: string, target: string, title: string, note: string) {
+  const res = await fetch("/__protoscope/annotation", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ page: pageId, target, title, note }),
+  })
+  if (!res.ok) throw new Error(await res.text())
+}
+
 function Composer({
-  left, top, author, target, onAuthor, onCancel, onPost,
+  left, top, author, target, pageId, onAuthor, onCancel, onPost,
 }: {
   left: number
   top: number
   author: string
   target?: string
+  pageId: string
   onAuthor: (a: string) => void
   onCancel: () => void
   onPost: (body: string) => void
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  const [asAnnotation, setAsAnnotation] = useState(false)
+  const [title, setTitle] = useState("")
+  const [err, setErr] = useState<string | null>(null)
   useEffect(() => {
     if (author) ref.current?.focus()
   }, [author])
+  const annotate = canWriteAnnotations && !!target
+  const post = async () => {
+    const v = ref.current?.value.trim()
+    if (!v) return
+    if (asAnnotation && target) {
+      try {
+        await saveAnnotation(pageId, target, title.trim() || v.split(/[.!?\n]/)[0].slice(0, 60), v)
+        onCancel()
+      } catch (e) {
+        setErr(String(e))
+      }
+      return
+    }
+    onPost(v)
+  }
   return (
     <div className="ps ps-glass-strong ps-ccomposer pointer-events-auto absolute w-80 rounded-2xl p-3" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-2 mb-2">
-        <span className="ps-cbubble" style={{ position: "static", transform: "none" }}>{initials(author || "?")}</span>
-        <span className="text-[12px] font-semibold">New comment</span>
+        <span className="ps-cbubble" style={{ position: "static", transform: "none", ...(asAnnotation ? { background: "var(--ps-pin)", color: "var(--ps-pin-fg)" } : {}) }}>
+          {asAnnotation ? "!" : initials(author || "?")}
+        </span>
+        <span className="text-[12px] font-semibold">{asAnnotation ? "New design annotation" : "New comment"}</span>
         {target && <span className="ps-chip ps-chip-sm ps-mono">@{target}</span>}
         <button className="ml-auto" style={{ color: "var(--ps-faint)" }} onClick={onCancel} title="Cancel (Esc)">
           <X className="size-4" />
         </button>
       </div>
-      <AuthorField author={author} onAuthor={onAuthor} />
+      {annotate && (
+        <label className="flex items-center gap-2 mb-2 text-[11.5px] cursor-pointer select-none" style={{ color: "var(--ps-muted)" }}>
+          <input type="checkbox" checked={asAnnotation} onChange={(e) => setAsAnnotation(e.target.checked)} />
+          Save as a design annotation (writes to protoscope.json)
+        </label>
+      )}
+      {asAnnotation ? (
+        <input className="ps-cinput mb-1.5" placeholder="Title (e.g. Primary CTA)" value={title} onChange={(e) => setTitle(e.target.value)} />
+      ) : (
+        <AuthorField author={author} onAuthor={onAuthor} />
+      )}
       <textarea
         ref={ref}
         className="ps-cinput"
         rows={3}
-        placeholder="What should change, and why?"
+        placeholder={asAnnotation ? "What this part is and what it does" : "What should change, and why?"}
         onKeyDown={(e) => {
           if (e.key === "Escape") onCancel()
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            const v = (e.target as HTMLTextAreaElement).value.trim()
-            if (v) onPost(v)
-          }
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void post()
         }}
       />
+      {err && <div className="text-[11px] mt-1" style={{ color: "var(--ps-pin)" }}>{err}</div>}
       <div className="flex items-center justify-between mt-2">
-        <span className="text-[10.5px]" style={{ color: "var(--ps-faint)" }}>⌘↩ to post</span>
+        <span className="text-[10.5px]" style={{ color: "var(--ps-faint)" }}>⌘↩ to {asAnnotation ? "save" : "post"}</span>
         <div className="flex gap-1">
           <PsButton onClick={onCancel}>Cancel</PsButton>
-          <PsButton
-            primary
-            onClick={() => {
-              const v = ref.current?.value.trim()
-              if (v) onPost(v)
-            }}
-          >
-            Post
+          <PsButton primary onClick={() => void post()}>
+            {asAnnotation ? "Save annotation" : "Post"}
           </PsButton>
         </div>
       </div>

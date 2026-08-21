@@ -190,6 +190,14 @@ for (const b of m.boards ?? []) {
   if (!b.source) err(`board "${b.id}": empty source`)
 }
 
+// ---- requirements ↔ scenario refs (the in-manifest contract)
+if (m.requirements?.length) {
+  const cited = new Set(m.scenarios.flatMap((s) => s.refs ?? []))
+  for (const r of m.requirements) if (!cited.has(r.id)) warn(`requirement "${r.id}" (${r.title}) is not demonstrated by any scenario`)
+  const known = new Set(m.requirements.map((r) => r.id))
+  for (const sc of m.scenarios) for (const ref of sc.refs ?? []) if (!known.has(ref)) warn(`scenario "${sc.id}" cites "${ref}", which is not in requirements[]`)
+}
+
 // ---- refs against requirement documents (the PM ↔ design ↔ eng contract)
 if (flags.refs.length) {
   const docs = flags.refs.map((f) => ({ f, text: readFileSync(resolve(f), "utf8") }))

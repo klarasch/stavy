@@ -1,3 +1,4 @@
+import { ArrowRight } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/ui/card"
 import { Skeleton } from "@/ui/skeleton"
 import { proto } from "@/protoscope/proto"
@@ -11,6 +12,7 @@ export function WorkQueue({
   items,
   state = "loaded",
   onOpen,
+  onViewAll,
   className,
 }: {
   title: string
@@ -18,6 +20,7 @@ export function WorkQueue({
   items: Expense[]
   state?: string
   onOpen?: (e: Expense) => void
+  onViewAll?: () => void
   className?: string
 }) {
   return (
@@ -25,9 +28,20 @@ export function WorkQueue({
       className={className}
       {...proto("PendingApprovalsCard", { component: "WorkQueue (organism)", organism: "work-queue", roleAware: "queue contents depend on role" })}
     >
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {subtitle && <CardDescription>{subtitle}</CardDescription>}
+      <CardHeader className="flex flex-row items-start justify-between">
+        <div className="flex flex-col gap-1.5">
+          <CardTitle>{title}</CardTitle>
+          {subtitle && <CardDescription>{subtitle}</CardDescription>}
+        </div>
+        {onViewAll && (
+          <button
+            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+            onClick={onViewAll}
+            {...proto("ViewQueueLink", { component: "link", opens: "expenses" })}
+          >
+            View all <ArrowRight className="size-3.5" />
+          </button>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
         {state === "loading" &&

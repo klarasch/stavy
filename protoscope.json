@@ -305,6 +305,11 @@
           "target": "PendingApprovalsCard",
           "title": "Work queue",
           "note": "Role-specific queue: managers see items awaiting their review, finance sees the reimbursement queue. Sorted oldest-first."
+        },
+        {
+          "target": "StatCards",
+          "title": "Headline numbers",
+          "note": "Four KPIs; the set changes per role."
         }
       ]
     },
@@ -730,7 +735,7 @@
       "persona": "employee",
       "description": "The core happy path: from the dashboard through the 4-step flow to seeing the expense as Submitted in the list.",
       "refs": [
-        "PRD-118 §2 Submission"
+        "PRD-118 §2"
       ],
       "steps": [
         {
@@ -797,7 +802,7 @@
       "persona": "manager",
       "description": "A manager finds a submitted expense in their queue and approves it.",
       "refs": [
-        "PRD-118 §3 Approvals",
+        "PRD-118 §3",
         "JIRA-ORB-412"
       ],
       "steps": [
@@ -807,9 +812,9 @@
             "role": "manager",
             "state": "loaded"
           },
-          "target": "PendingApprovalsCard",
-          "title": "The approvals queue",
-          "note": "Managers land on a queue of expenses awaiting their review."
+          "target": "ViewQueueLink",
+          "title": "From the queue to the full list",
+          "note": "Managers land on a queue of expenses awaiting review; \"View all\" opens the complete list."
         },
         {
           "page": "expenses",
@@ -849,7 +854,7 @@
       "persona": "finance",
       "description": "Finance works the approved queue and closes the loop.",
       "refs": [
-        "PRD-118 §4 Reimbursement"
+        "PRD-118 §4"
       ],
       "steps": [
         {
@@ -858,9 +863,9 @@
             "role": "finance",
             "state": "loaded"
           },
-          "target": "StatusFilter",
-          "title": "The approved queue",
-          "note": "Finance's list is pre-filtered to Approved — that's their inbox."
+          "target": "ExpenseRow:exp-2102",
+          "title": "Open an approved expense",
+          "note": "Finance's list is pre-filtered to Approved — their inbox. Open one to work it."
         },
         {
           "page": "expense-detail",
@@ -1011,6 +1016,38 @@
       "kind": "text",
       "width": 420,
       "source": "1. Static first — every state is a pinned instance before it is a handler.\n2. Roles change what you see, never where you are.\n3. The lifecycle is the product; make each stage unmistakable.\n4. Mock loudly: anything faked says so in an annotation."
+    }
+  ],
+  "requirements": [
+    {
+      "id": "PRD-118 §2",
+      "title": "Employees submit expenses through a guided flow",
+      "source": "docs/PRD-118.md §2 Submission",
+      "priority": "must"
+    },
+    {
+      "id": "PRD-118 §3",
+      "title": "Managers approve, reject, or request changes from a queue",
+      "source": "docs/PRD-118.md §3 Approvals",
+      "priority": "must"
+    },
+    {
+      "id": "PRD-118 §4",
+      "title": "Finance marks approved expenses reimbursed; reimbursed is terminal",
+      "source": "docs/PRD-118.md §4 Reimbursement",
+      "priority": "must"
+    },
+    {
+      "id": "PRD-118 §5",
+      "title": "Employees can edit and resubmit a rejected expense",
+      "source": "docs/PRD-118.md §5 Resubmission",
+      "priority": "should"
+    },
+    {
+      "id": "JIRA-ORB-412",
+      "title": "Request-changes leaves a visible trail on the timeline",
+      "source": "https://jira.example.com/ORB-412",
+      "priority": "must"
     }
   ]
 }

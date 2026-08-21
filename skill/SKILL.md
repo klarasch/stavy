@@ -128,6 +128,58 @@ When asked to install Protoscope in a repo (any framework, any UI kit):
    templates that match the product's dominant page shapes (list, detail,
    dashboard, form flow are the usual suspects).
 
+## Working with PMs: requirements and coverage
+
+- `requirements[]` in the manifest is the PM-facing list of what must be
+  demonstrated (PRD sections, tickets). When given a PRD (Markdown, Confluence
+  export, Notion export), **extract requirements from its headings/criteria**
+  into `requirements[]` (`id` = the stable handle people already use, e.g.
+  `PRD-118 §3`; `title` = one line; `source` = document + section), then
+  propose a scenario for each uncovered one — don't silently invent scenarios.
+- Scenarios cite requirements in `refs` using the exact `requirements[].id`.
+  The canvas "Requirement coverage" board shows demonstrated vs. gaps; `npm run
+  check --refs <prd.md>` cross-checks the document text. PMs never edit the
+  manifest: they review the board, comment, and ask for scenarios.
+
+## Working from comments (designers' and PMs' feedback)
+
+When the user gives you a comments export (`.json` or `.md` from the viewer's
+Comments panel), treat **each open comment as a task**: it is anchored to
+`page + dims (+ target)`; open that state mentally, make the change, then
+produce a resolution payload the user can *Import* back so threads close with
+a reply — write `comments-resolved.json` containing the same comments with
+`resolved: true` and a reply `{ "author": "Claude", "body": "Done: …" }`
+(keep ids; merging is by id). Never delete comments; never invent new ones.
+
+## Changelog, handoff, tests — generate, don't write
+
+- `npm run changelog [base-ref]` prints a Markdown diff of the manifest
+  (states added, scenarios changed, fidelity bumps, requirement coverage).
+  **After every change that touches the manifest, run it and paste the result
+  into the PR description / your summary.** That is the changelog; do not
+  hand-write one.
+- `npm run handoff` writes `docs/handoff/<page>.md` per page/component —
+  template, organisms, dimensions, pinned states, semantic targets with their
+  meta, annotations, scenarios. Regenerate before a handoff; never edit by hand.
+- `npm run gen:tests` writes Playwright specs from scenarios (`tests/scenarios/`);
+  `npm run test:scenarios` runs them. Interactive pages get hard assertions,
+  navigable pages soft ones, static pages TODOs. A failing generated test is a
+  finding about the prototype's wiring or the scenario — fix the prototype or
+  the step, not the test.
+
+## Designers: cheap edits without spending tokens
+
+Tell designers (and do it yourself when cheaper) that these are safe to edit
+by hand, with editor autocompletion from `spec/protoscope.schema.json`:
+`protoscope.json` labels, descriptions, `instances[].note`, `annotations`,
+`notes`, `boards`, scenario titles/notes; fixture data in `src/demo/fixtures.ts`;
+copy text and Tailwind spacing/colour classes in templates (the inspector shows
+the exact classes and has "open template in VS Code"). When a designer
+describes a change, the most precise reference is **the page URL + the
+`data-proto` target** from the inspector — accept and prefer that form.
+In dev, the viewer can save a design annotation straight into the manifest
+(comment composer → "Save as a design annotation"); no prompt needed.
+
 ## Day-to-day operations
 
 **Extracting an organism**: when a region of a page is bespoke and will be

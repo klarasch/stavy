@@ -31,10 +31,15 @@ export function CanvasToc({ onJump, className }: { onJump: (tocId: string) => vo
               <span className="ps-toc-count">{p.instances?.length ?? 0}</span>
             </button>
           ))}
-          {(manifest.boards?.length ?? 0) > 0 && (
+          {((manifest.boards?.length ?? 0) > 0 || (manifest.requirements?.length ?? 0) > 0) && (
             <>
               <div className="ps-toc-h">Boards</div>
-              {manifest.boards!.map((b) => (
+              {(manifest.requirements?.length ?? 0) > 0 && (
+                <button className="ps-toc-item" onClick={() => onJump("board:coverage")}>
+                  <span className="truncate">Requirement coverage</span>
+                </button>
+              )}
+              {(manifest.boards ?? []).map((b) => (
                 <button key={b.id} className="ps-toc-item" onClick={() => onJump(`board:${b.id}`)} title={b.title}>
                   <span className="truncate">{b.title}</span>
                 </button>

@@ -168,6 +168,20 @@
         }
       }
     },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string" },
+          "source": { "type": "string" },
+          "priority": { "type": "string" }
+        }
+      }
+    },
     "boards": {
       "type": "array",
       "items": {

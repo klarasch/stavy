@@ -11,7 +11,11 @@
     "validate": "node scripts/validate.mjs",
     "check": "node scripts/validate.mjs --coverage --refs docs/PRD-118.md",
     "snapshot": "node scripts/snapshot.mjs",
-    "init": "node scripts/init.mjs"
+    "init": "node scripts/init.mjs",
+    "changelog": "node scripts/changelog.mjs",
+    "handoff": "node scripts/handoff.mjs",
+    "gen:tests": "node scripts/gen-tests.mjs",
+    "test:scenarios": "node scripts/gen-tests.mjs && playwright test"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",
@@ -30,6 +34,7 @@
     "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4.1.8",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",

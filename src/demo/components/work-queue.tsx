@@ -13,6 +13,7 @@ export default function WorkQueueComponent({ dims, nav }: PageProps) {
         items={fx.queue}
         state={dims.state}
         onOpen={(e) => nav("expense-detail", { role: dims.role, lifecycle: e.status })}
+        onViewAll={() => nav("expenses", { role: dims.role })}
       />
     </div>
   )

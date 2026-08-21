@@ -153,6 +153,22 @@ matter; the viewer falls back to the Markdown digest automatically beyond that.
 When the team outgrows links, swap the store for a GitHub-issues or small
 hosted backend — the anchor model and UI stay the same.
 
+## B4. What PMs, engineers, designers get without touching JSON
+
+- **PMs**: the *Requirement coverage* board on the canvas (requirements →
+  scenarios → states, gaps in amber; click a scenario to play it). Their input
+  is the PRD: the skill extracts `requirements[]` from its headings and proposes
+  scenarios for gaps. No special PRD format is needed beyond stable section
+  handles (`§3`, ticket ids); Markdown exports from Confluence/Notion work.
+- **Engineers / QA**: `npm run handoff` (a sheet per page), `npm run gen:tests`
+  (Playwright specs from scenarios; run with `npm run test:scenarios`),
+  the inspector's copyable JSX, and `npm run changelog` in every PR.
+- **Designers**: edit manifest text/annotations/fixtures directly (schema
+  autocompletion), or in dev use the comment composer's *Save as a design
+  annotation* to write straight into `protoscope.json`; reference changes to
+  Claude as "page URL + target id"; export comments as `.json`/`.md` and hand
+  them to Claude as a task list — it returns a resolution file you import.
+
 ## C. CI/CD
 
 One workflow, three jobs. Example for GitHub Actions (adapt to GitLab/Bitbucket 1:1):
@@ -169,6 +185,7 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npm run validate          # manifest ↔ code invariants (+ --refs docs/PRD.md for the contract)
+      - run: node scripts/changelog.mjs origin/${{ github.base_ref || 'main' }} > changelog.md   # post as PR comment
       - run: npx tsc -b
       - run: npx vite build            # full workspace
 

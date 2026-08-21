@@ -46,6 +46,10 @@ Protoscope fixes that with one manifest file and a viewer:
   component and its props, the element's classes (copyable), type/spacing
   tokens, and *where each color comes from* (the class that sets it, the
   ancestor it inherits from, the token variable behind it).
+- 📋 **Requirement coverage** — `requirements[]` + scenario `refs` render as a
+  board: demonstrated vs. gaps; the validator cross-checks the PRD text.
+- 🧰 **Generated, not written** — changelog between manifest versions, a
+  handoff sheet per page, and Playwright specs from scenarios.
 - 💬 **Comments without a server** — leave comments on any page (anchored to
   semantic targets), share them as a link or a Slack-ready Markdown digest,
   unpack a colleague's link back in. Separate from annotations by design.
@@ -75,6 +79,9 @@ Protoscope fixes that with one manifest file and a viewer:
 | `skill/SKILL.md` | Claude skill that operates any Protoscope workspace |
 | `docs/ADOPTION.md` | Hands-on guide: trial repo on another DS, rolling onto an existing mock repo, CI/CD |
 | `scripts/validate.mjs` | `npm run check` — manifest ↔ code validation, `--refs` PRD check, coverage summary |
+| `scripts/changelog.mjs` | `npm run changelog [ref]` — Markdown diff of the manifest for PRs |
+| `scripts/handoff.mjs` | `npm run handoff` — a handoff sheet per page/component |
+| `scripts/gen-tests.mjs` | `npm run test:scenarios` — Playwright specs generated from scenarios |
 | `scripts/init.mjs` | `node scripts/init.mjs ../other-repo` — installs the viewer + skill + CSS into any Vite/React repo |
 | `scripts/snapshot.mjs` | `npm run snapshot` — Playwright PNG of every pinned instance (for visual diffs) |
 | `docs/PRD-118.md` | Mock PRD the `refs` check runs against |

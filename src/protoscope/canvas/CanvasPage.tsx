@@ -11,6 +11,7 @@ import { CanvasNotes } from "./CanvasNotes"
 import { AnatomyCard } from "./AnatomyCard"
 import { CanvasToc } from "./CanvasToc"
 import { BoardCard } from "./BoardCard"
+import { CoverageBoard } from "./CoverageBoard"
 import { Inspector, type InspectContext } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
 import { useComments } from "../comments/store"
@@ -354,10 +355,15 @@ export function CanvasPage() {
           className={cn("ps flex flex-col items-start gap-14 p-12", wireframe && "proto-wireframe", inspect && "ps-inspect-on")}
         >
           {/* ---- Boards: supporting material, outside the contract ---- */}
-          {(manifest.boards?.length ?? 0) > 0 && (
+          {((manifest.boards?.length ?? 0) > 0 || (manifest.requirements?.length ?? 0) > 0) && (
             <Area title="Boards" kind="supporting material" icon={<MapIcon />} tocId="area:boards" className="self-start">
               <div className="flex flex-wrap items-start gap-10">
-                {manifest.boards!.map((b) => (
+                {(manifest.requirements?.length ?? 0) > 0 && (
+                  <div data-toc="board:coverage">
+                    <CoverageBoard />
+                  </div>
+                )}
+                {(manifest.boards ?? []).map((b) => (
                   <div key={b.id} data-toc={`board:${b.id}`}>
                     <BoardCard board={b} />
                   </div>

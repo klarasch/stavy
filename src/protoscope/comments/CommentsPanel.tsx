@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { X, MessageCircle, Link as LinkIcon, FileText, Upload, Trash2, Check } from "lucide-react"
+import { X, MessageCircle, Link as LinkIcon, FileText, Upload, Trash2, Check, Braces } from "lucide-react"
 import { PsButton, Kbd } from "../chrome"
 import { getPage, pageUrl } from "../manifest"
-import { useComments, shareUrl, toMarkdown, decodePayload, describeAnchor, timeAgo } from "./store"
+import { useComments, shareUrl, toMarkdown, decodePayload, describeAnchor, timeAgo, downloadText } from "./store"
+import { manifest } from "../manifest"
 
 /** The list of all comments in the workspace, with share / import actions. */
 export function CommentsPanel({ onClose, onAdd }: { onClose: () => void; onAdd?: () => void }) {
@@ -109,8 +110,27 @@ export function CommentsPanel({ onClose, onAdd }: { onClose: () => void; onAdd?:
           >
             <LinkIcon /> Link
           </PsButton>
-          <PsButton className="h-7" tip="Copy a Slack-ready Markdown digest" onClick={async () => copy(await toMarkdown(comments), "Markdown copied")} disabled={comments.length === 0}>
-            <FileText /> Markdown
+          <PsButton
+            className="h-7"
+            tip="Download a Slack/PR-ready Markdown digest"
+            onClick={async () => {
+              downloadText(`${manifest.product.name.toLowerCase()}-comments-${new Date().toISOString().slice(0, 10)}.md`, await toMarkdown(comments), "text/markdown")
+              say("Markdown downloaded")
+            }}
+            disabled={comments.length === 0}
+          >
+            <FileText /> .md
+          </PsButton>
+          <PsButton
+            className="h-7"
+            tip="Download as JSON — hand it to Claude as a to-do list, or archive it"
+            onClick={() => {
+              downloadText(`${manifest.product.name.toLowerCase()}-comments-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(comments, null, 2), "application/json")
+              say("JSON downloaded")
+            }}
+            disabled={comments.length === 0}
+          >
+            <Braces /> .json
           </PsButton>
           <PsButton className="h-7" active={importing} tip="Unpack a link or payload from a colleague" onClick={() => setImporting((v) => !v)}>
             <Upload /> Import
