@@ -62,6 +62,17 @@ The manifest is the single source of truth and must never drift from the code:
    you report done; treat warnings (missing fidelity, refs, defaults,
    un-pinned note targets) as prompts to decide, not noise.
 
+## Copy lives in the catalog, never in components
+
+If the manifest has `strings`, every user-visible string goes through the
+catalog (`t("key")`): labels, headings, buttons, placeholders, empty/error
+copy, status names. Never inline UI copy in templates or organisms. Keys are
+dotted and stable (`list.empty.title`); add every key to every locale (use the
+source language as a fallback and mark it `TODO` in other locales rather than
+omitting it). Fixture data — names, merchants, amounts — is data, not copy.
+When a designer or legal reviewer changes text, change the catalog only; run
+`npm run strings` to refresh the review document.
+
 ## Fidelity ladder — static first, behaviour on demand
 
 Prototypes drift toward "building the product". Protoscope resists this with

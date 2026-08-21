@@ -7,12 +7,14 @@ import type { PageProps } from "@/protoscope/types"
 import { AppFrame, StatusBadge, money } from "./AppFrame"
 import { expenseDetailFixture, timelineFor } from "../fixtures"
 import { ApprovalActions } from "../organisms/ApprovalActions"
+import { makeT } from "../strings"
 
 export function DetailTemplate({ dims, nav }: PageProps) {
   const role = dims.role ?? "employee"
   const lifecycle = dims.lifecycle ?? "submitted"
   const density = dims.density ?? "comfortable"
   const locale = dims.locale ?? "en-US"
+  const t = makeT(locale)
   const e = expenseDetailFixture(lifecycle)
   const events = timelineFor(lifecycle)
   const setLifecycle = (next: string) => nav("expense-detail", { role, lifecycle: next, density, locale })
@@ -29,12 +31,12 @@ export function DetailTemplate({ dims, nav }: PageProps) {
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 cursor-pointer"
         onClick={() => nav("expenses", { role })}
       >
-        <ArrowLeft className="size-4" /> Back to expenses
+        <ArrowLeft className="size-4" /> {t("detail.back")}
       </button>
 
       <div className="flex items-center gap-3 mb-6">
         <h1 className="text-2xl font-semibold tracking-tight">{e.merchant}</h1>
-        <StatusBadge status={lifecycle} />
+        <StatusBadge status={lifecycle} locale={locale} />
         <span className="ml-auto text-2xl font-semibold tabular-nums">{money(e.amount, locale)}</span>
       </div>
 
@@ -42,17 +44,17 @@ export function DetailTemplate({ dims, nav }: PageProps) {
         <div className="col-span-3 flex flex-col gap-4">
           <Card {...proto("ExpenseMeta", { component: "Card", data: "expenseDetailFixture(lifecycle)" })}>
             <CardHeader>
-              <CardTitle>Details</CardTitle>
+              <CardTitle>{t("detail.details")}</CardTitle>
             </CardHeader>
             <CardContent>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
                 {[
-                  ["Submitted by", "Klara Scholleová"],
-                  ["Date", `${e.date}, 2026`],
-                  ["Category", e.category],
-                  ["Cost center", e.costCenter],
-                  ["Expense ID", e.id.toUpperCase()],
-                  ["Note", e.note ?? "—"],
+                  [t("detail.field.submittedBy"), "Klara Scholleová"],
+                  [t("detail.field.date"), `${e.date}, 2026`],
+                  [t("detail.field.category"), e.category],
+                  [t("detail.field.costCenter"), e.costCenter],
+                  [t("detail.field.id"), e.id.toUpperCase()],
+                  [t("detail.field.note"), e.note ?? "—"],
                 ].map(([k, v]) => (
                   <div key={k}>
                     <dt className="text-muted-foreground">{k}</dt>
@@ -75,7 +77,7 @@ export function DetailTemplate({ dims, nav }: PageProps) {
 
           <Card {...proto("LifecycleTimeline", { component: "Card + custom timeline", drivenBy: "lifecycle dimension" })}>
             <CardHeader>
-              <CardTitle>Timeline</CardTitle>
+              <CardTitle>{t("detail.timeline")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-0 text-sm">
               {events.map((ev, i) => (
@@ -104,7 +106,7 @@ export function DetailTemplate({ dims, nav }: PageProps) {
         </div>
 
         <div className="col-span-2">
-          <ApprovalActions role={role} lifecycle={lifecycle} onAdvance={setLifecycle} />
+          <ApprovalActions role={role} lifecycle={lifecycle} onAdvance={setLifecycle} locale={locale} />
         </div>
       </div>
       </div>

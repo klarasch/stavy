@@ -9,3 +9,7 @@ declare module "virtual:proto-pages" {
     () => Promise<{ default: import("react").ComponentType<import("@/protoscope/types").PageProps> }>
   >
 }
+
+declare module "virtual:proto-strings" {
+  export const strings: Record<string, Record<string, string>>
+}

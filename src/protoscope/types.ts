@@ -158,6 +158,8 @@ export interface Manifest {
   version: string
   product: { name: string; description?: string }
   viewer?: ViewerDefaults
+  /** Path to the copy catalog (JSON: locale → key → string). All user-visible copy lives there. */
+  strings?: string
   dimensions: Dimension[]
   templates: TemplateDef[]
   pages: PageDef[]

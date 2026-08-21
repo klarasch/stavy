@@ -11,6 +11,8 @@
 export interface CompFrame {
   name: string
   props: Record<string, unknown>
+  /** The component's own root DOM node (first host descendant) — what the inspector should outline and measure */
+  host: Element | null
 }
 
 export interface InspectAdapter {
@@ -42,6 +44,18 @@ export function componentName(type: any): string | null {
   return null
 }
 
+/** First DOM node a fiber renders (depth-first through its children). */
+function hostOf(fiber: any): Element | null {
+  let f = fiber?.child
+  while (f) {
+    if (f.tag === 5 && f.stateNode instanceof Element) return f.stateNode // HostComponent
+    const inner = hostOf(f)
+    if (inner) return inner
+    f = f.sibling
+  }
+  return null
+}
+
 export function reactComponentStack(el: Element, stopAt: string): CompFrame[] {
   const out: CompFrame[] = []
   let f = fiberOf(el)
@@ -52,12 +66,65 @@ export function reactComponentStack(el: Element, stopAt: string): CompFrame[] {
       const internal =
         SKIP.test(name) || /(Context|Provider|Consumer|Impl|Boundary)$/.test(name) || name.startsWith("_") || name.includes("$")
       if (!internal && /^[A-Z]/.test(name) && out[out.length - 1]?.name !== name) {
-        out.push({ name, props: (f.memoizedProps ?? {}) as Record<string, unknown> })
+        out.push({ name, props: (f.memoizedProps ?? {}) as Record<string, unknown>, host: hostOf(f) })
       }
     }
     f = f.return
   }
   return out
+}
+
+/* ---------------- JSX serialization (what the author wrote, nested) ---------------- */
+
+function fmtAttr(k: string, v: unknown): string | null {
+  if (v === undefined || v === null || v === false) return null
+  if (v === true) return k
+  if (typeof v === "string") return `${k}=${JSON.stringify(v)}`
+  if (typeof v === "number") return `${k}={${v}}`
+  if (typeof v === "function") return `${k}={${v.name || "handler"}}`
+  if (typeof v === "object" && (v as any).$$typeof) return `${k}={${elementToJsx(v, 0, 1)}}`
+  try {
+    const j = JSON.stringify(v)
+    return `${k}={${j.length > 60 ? j.slice(0, 57) + "…}" : j}}`
+  } catch {
+    return `${k}={…}`
+  }
+}
+
+function elementToJsx(node: unknown, indent: number, depth: number): string {
+  const pad = "  ".repeat(indent)
+  if (node === null || node === undefined || typeof node === "boolean") return ""
+  if (typeof node === "string" || typeof node === "number") return pad + String(node).replace(/\s+/g, " ").trim()
+  if (Array.isArray(node)) return node.map((n) => elementToJsx(n, indent, depth)).filter(Boolean).join("\n")
+  const el = node as any
+  if (!el.$$typeof) return pad + "{…}"
+  const type = el.type
+  const name = typeof type === "string" ? type : type?.$$typeof && !componentName(type) ? "" : componentName(type) ?? "Component"
+  if (!name) return elementToJsx(el.props?.children, indent, depth) // Fragment: flatten
+  const attrs = Object.entries(el.props ?? {})
+    .filter(([k]) => k !== "children" && !k.startsWith("data-proto"))
+    .map(([k, v]) => fmtAttr(k, v))
+    .filter(Boolean) as string[]
+  const open = `${pad}<${name}${attrs.length ? " " + attrs.join(" ") : ""}`
+  const children = el.props?.children
+  if (children === undefined || children === null || (Array.isArray(children) && children.length === 0)) return `${open} />`
+  if (depth <= 0) return `${open}>…</${name}>`
+  if (typeof children === "string" || typeof children === "number") return `${open}>${String(children).trim()}</${name}>`
+  const inner = elementToJsx(children, indent + 1, depth - 1)
+  return `${open}>\n${inner}\n${pad}</${name}>`
+}
+
+/** JSX for a component frame as its author wrote it: props as attributes, children nested (3 levels). */
+export function frameToJsx(frame: CompFrame): string {
+  const attrs = Object.entries(frame.props)
+    .filter(([k]) => k !== "children" && !k.startsWith("data-proto"))
+    .map(([k, v]) => fmtAttr(k, v))
+    .filter(Boolean) as string[]
+  const open = attrs.length <= 2 ? `<${frame.name}${attrs.length ? " " + attrs.join(" ") : ""}` : `<${frame.name}\n  ${attrs.join("\n  ")}\n`
+  const ch = frame.props.children
+  if (ch === undefined || ch === null || (Array.isArray(ch) && ch.length === 0)) return `${open}${attrs.length <= 2 ? " />" : "/>"}`
+  if (typeof ch === "string" || typeof ch === "number") return `${open}>${String(ch).trim()}</${frame.name}>`
+  return `${open}>\n${elementToJsx(ch, 1, 3)}\n</${frame.name}>`
 }
 
 /* ---------------- Tailwind + shadcn tokens ---------------- */

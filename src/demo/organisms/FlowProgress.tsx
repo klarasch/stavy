@@ -2,12 +2,12 @@ import { Check } from "lucide-react"
 import { Progress } from "@/ui/progress"
 import { proto } from "@/protoscope/proto"
 import { cn } from "@/lib/utils"
+import { makeT } from "../strings"
 
 export const flowSteps = ["details", "receipt", "review", "done"] as const
-const stepLabels: Record<string, string> = { details: "Details", receipt: "Receipt", review: "Review", done: "Done" }
-
 /** Organism: the multi-step progress header, driven by the `step` process dimension. */
-export function FlowProgress({ step }: { step: string }) {
+export function FlowProgress({ step, locale }: { step: string; locale?: string }) {
+  const t = makeT(locale)
   const idx = Math.max(0, flowSteps.indexOf(step as (typeof flowSteps)[number]))
   return (
     <div {...proto("FlowProgress", { component: "FlowProgress (organism)", organism: "flow-progress", drivenBy: "step dimension" })}>
@@ -19,7 +19,7 @@ export function FlowProgress({ step }: { step: string }) {
             className={cn("flex items-center gap-1", i < idx ? "text-emerald-600" : i === idx ? "font-semibold" : "text-muted-foreground")}
           >
             {i < idx && <Check className="size-3" />}
-            {stepLabels[s]}
+            {t(`flow.step.${s}`)}
           </span>
         ))}
       </div>

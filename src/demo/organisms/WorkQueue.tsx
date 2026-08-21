@@ -4,6 +4,7 @@ import { Skeleton } from "@/ui/skeleton"
 import { proto } from "@/protoscope/proto"
 import { StatusBadge, money } from "../templates/AppFrame"
 import type { Expense } from "../fixtures"
+import { makeT } from "../strings"
 
 /** Organism: the role-specific work queue card on the dashboard. */
 export function WorkQueue({
@@ -14,6 +15,7 @@ export function WorkQueue({
   onOpen,
   onViewAll,
   className,
+  locale,
 }: {
   title: string
   subtitle?: string
@@ -22,7 +24,9 @@ export function WorkQueue({
   onOpen?: (e: Expense) => void
   onViewAll?: () => void
   className?: string
+  locale?: string
 }) {
+  const t = makeT(locale)
   return (
     <Card
       className={className}
@@ -39,14 +43,14 @@ export function WorkQueue({
             onClick={onViewAll}
             {...proto("ViewQueueLink", { component: "link", opens: "expenses" })}
           >
-            View all <ArrowRight className="size-3.5" />
+            {t("queue.viewAll")} <ArrowRight className="size-3.5" />
           </button>
         )}
       </CardHeader>
       <CardContent className="flex flex-col gap-1">
         {state === "loading" &&
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8 my-0.5" />)}
-        {state === "empty" && <p className="text-sm text-muted-foreground py-4 text-center">Nothing waiting on you.</p>}
+        {state === "empty" && <p className="text-sm text-muted-foreground py-4 text-center">{t("queue.empty")}</p>}
         {state === "loaded" &&
           items.map((e) => (
             <button
@@ -57,7 +61,7 @@ export function WorkQueue({
               <span className="font-medium flex-1 truncate">{e.merchant}</span>
               <span className="text-muted-foreground w-24 truncate">{e.submitter}</span>
               <span className="w-20 text-right tabular-nums">{money(e.amount)}</span>
-              <StatusBadge status={e.status} />
+              <StatusBadge status={e.status} locale={locale} />
             </button>
           ))}
       </CardContent>

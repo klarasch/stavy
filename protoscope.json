@@ -8,6 +8,7 @@
   "viewer": {
     "toolbar": "bottom"
   },
+  "strings": "src/demo/strings.json",
   "dimensions": [
     {
       "id": "role",

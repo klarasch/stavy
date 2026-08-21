@@ -163,7 +163,9 @@ hosted backend — the anchor model and UI stay the same.
 - **Engineers / QA**: `npm run handoff` (a sheet per page), `npm run gen:tests`
   (Playwright specs from scenarios; run with `npm run test:scenarios`),
   the inspector's copyable JSX, and `npm run changelog` in every PR.
-- **Designers**: edit manifest text/annotations/fixtures directly (schema
+- **Designers and legal**: all copy is in `src/…/strings.json`; rewrite there
+  (no agent needed), or review it as `docs/strings.md` / `.csv` from
+  `npm run strings`. Designers also edit manifest text/annotations/fixtures directly (schema
   autocompletion), or in dev use the comment composer's *Save as a design
   annotation* to write straight into `protoscope.json`; reference changes to
   Claude as "page URL + target id"; export comments as `.json`/`.md` and hand

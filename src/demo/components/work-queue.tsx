@@ -14,6 +14,7 @@ export default function WorkQueueComponent({ dims, nav }: PageProps) {
         state={dims.state}
         onOpen={(e) => nav("expense-detail", { role: dims.role, lifecycle: e.status })}
         onViewAll={() => nav("expenses", { role: dims.role })}
+        locale={dims.locale}
       />
     </div>
   )

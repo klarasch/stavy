@@ -2,6 +2,7 @@ import { Check, X, MessageSquareWarning, Banknote, Pencil, Send } from "lucide-r
 import { Button } from "@/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card"
 import { proto } from "@/protoscope/proto"
+import { makeT } from "../strings"
 
 /**
  * Organism: the role × lifecycle action matrix for an expense.
@@ -11,11 +12,14 @@ export function ApprovalActions({
   role,
   lifecycle,
   onAdvance,
+  locale,
 }: {
   role: string
   lifecycle: string
   onAdvance: (next: string) => void
+  locale?: string
 }) {
+  const t = makeT(locale)
   const employeeDraft = role === "employee" && lifecycle === "draft"
   const managerDecides = role === "manager" && ["submitted", "in-review"].includes(lifecycle)
   const financeReimburses = role === "finance" && lifecycle === "approved"
@@ -29,43 +33,42 @@ export function ApprovalActions({
       })}
     >
       <CardHeader>
-        <CardTitle>Actions</CardTitle>
+        <CardTitle>{t("actions.title")}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         {employeeDraft && (
           <>
             <Button onClick={() => onAdvance("submitted")} {...proto("SubmitButton", { component: "Button", advancesTo: "submitted" })}>
-              <Send /> Submit for approval
+              <Send /> {t("actions.submit")}
             </Button>
             <Button variant="outline">
-              <Pencil /> Edit draft
+              <Pencil /> {t("actions.edit")}
             </Button>
           </>
         )}
         {managerDecides && (
           <>
             <Button onClick={() => onAdvance("approved")} {...proto("ApproveButton", { component: "Button", advancesTo: "approved" })}>
-              <Check /> Approve
+              <Check /> {t("actions.approve")}
             </Button>
             <Button variant="outline" onClick={() => onAdvance("rejected")} {...proto("RejectButton", { component: "Button", advancesTo: "rejected" })}>
-              <X /> Reject
+              <X /> {t("actions.reject")}
             </Button>
             {lifecycle === "submitted" && (
               <Button variant="ghost" onClick={() => onAdvance("in-review")} {...proto("RequestChangesButton", { component: "Button", advancesTo: "in-review" })}>
-                <MessageSquareWarning /> Request changes
+                <MessageSquareWarning /> {t("actions.requestChanges")}
               </Button>
             )}
           </>
         )}
         {financeReimburses && (
           <Button onClick={() => onAdvance("reimbursed")} {...proto("ReimburseButton", { component: "Button", advancesTo: "reimbursed" })}>
-            <Banknote /> Mark as reimbursed
+            <Banknote /> {t("actions.reimburse")}
           </Button>
         )}
         {!employeeDraft && !managerDecides && !financeReimburses && (
           <p className="text-sm text-muted-foreground">
-            No actions for <span className="font-medium capitalize">{role}</span> while this expense is{" "}
-            <span className="font-medium">{lifecycle.replace("-", " ")}</span>.
+            {t("actions.none", { role, lifecycle: t(`status.${lifecycle}` as Parameters<typeof t>[0]).toLowerCase() })}
           </p>
         )}
       </CardContent>

@@ -204,6 +204,20 @@ Boards are deliberately not referenced by scenarios, slices, or refs; the
 validator only checks ids and kinds. Teams may ask their agent to generate
 boards freely — the contract (§1.3–1.5) stays unchanged.
 
+### 1.7b Copy catalog (optional, strongly recommended)
+
+```jsonc
+"strings": "src/demo/strings.json"     // { "<locale>": { "<key>": "text" } }
+```
+
+All user-visible copy lives in one catalog, keyed, per locale; templates never
+inline it. This makes copy a **document** rather than code: designers rewrite
+it without touching components (and without an agent), legal/compliance review
+it as Markdown/CSV (`strings.mjs`), translators get a file, a `locale`
+dimension switches it, and the inspector shows which key produced any text on
+screen. Fixture *data* (names, merchants, amounts) is not copy and stays in
+fixtures.
+
 ### 1.8 Viewer defaults
 
 A product or design system picks viewer defaults once; individual links may

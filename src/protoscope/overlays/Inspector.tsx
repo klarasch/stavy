@@ -4,7 +4,8 @@ import { X, Crosshair, Copy, Check, ExternalLink } from "lucide-react"
 import { Chip, Kbd, Keys } from "../chrome"
 import type { PageDef, TemplateDef } from "../types"
 import { valueLabel, dimensionLabel } from "../manifest"
-import { adapter, componentName, type CompFrame } from "../inspect-adapter"
+import { adapter, frameToJsx, type CompFrame } from "../inspect-adapter"
+import { strings as copyCatalog } from "virtual:proto-strings"
 
 /* ================================================================== */
 /* Selection model                                                     */
@@ -69,32 +70,21 @@ function rectOf(el: Element, wrapper: HTMLElement, k: number): Rect {
   }
 }
 
-/** Render a component frame as JSX, Figma Dev Mode style: props as attributes, visible text as children. */
-function toJsx(comp: CompFrame, el: Element): string {
-  const attrs: string[] = []
-  for (const [k, v] of Object.entries(comp.props)) {
-    if (k === "children" || k.startsWith("data-proto")) continue
-    if (v === undefined || v === null || v === false) continue
-    if (v === true) attrs.push(k)
-    else if (typeof v === "string") attrs.push(`${k}=${JSON.stringify(v)}`)
-    else if (typeof v === "number") attrs.push(`${k}={${v}}`)
-    else if (typeof v === "function") attrs.push(`${k}={${v.name || "handler"}}`)
-    else if (typeof v === "object" && (v as any).$$typeof) attrs.push(`${k}={<${componentName((v as any).type) ?? "…"} />}`)
-    else {
-      try {
-        attrs.push(`${k}={${JSON.stringify(v)}}`)
-      } catch {
-        attrs.push(`${k}={…}`)
-      }
+/* ---- copy provenance: which catalog key produced this element's text ---- */
+let copyIndex: Map<string, { key: string; locale: string }> | null = null
+function copyKeyFor(el: Element): { key: string; locale: string } | null {
+  if (!copyIndex) {
+    copyIndex = new Map()
+    for (const [locale, table] of Object.entries(copyCatalog)) for (const [key, text] of Object.entries(table)) {
+      const t = String(text).replace(/\s+/g, " ").trim()
+      if (t && !copyIndex.has(t)) copyIndex.set(t, { key, locale })
     }
   }
-  const ch = comp.props.children
-  let content = ""
-  if (typeof ch === "string" || typeof ch === "number") content = String(ch)
-  else if (ch !== undefined && ch !== null) content = (el.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 140)
-  const open = attrs.length <= 2 ? `<${comp.name}${attrs.length ? " " + attrs.join(" ") : ""}` : `<${comp.name}\n  ${attrs.join("\n  ")}\n`
-  if (!content) return `${open}${attrs.length <= 2 ? " />" : "/>"}`
-  return attrs.length <= 2 ? `${open}>${content}</${comp.name}>` : `${open}>\n  ${content}\n</${comp.name}>`
+  if (copyIndex.size === 0) return null
+  // Own text first (direct text nodes), then the whole subtree for small elements.
+  const own = Array.from(el.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent ?? "").join("").replace(/\s+/g, " ").trim()
+  const all = (el.textContent ?? "").replace(/\s+/g, " ").trim()
+  return copyIndex.get(own) ?? (all.length <= 140 ? copyIndex.get(all) ?? null : null)
 }
 
 /* ================================================================== */
@@ -351,14 +341,18 @@ export function Inspector({
   const idx = levelIdx ?? defaultIdx
   const focus = levels?.[Math.min(idx, (levels?.length ?? 1) - 1)] ?? null
   const k = scale?.() ?? 1
-  const rect = focus ? rectOf(focus.el, wrapper, k) : null
-  const ctx = focus ? context(focus.el) : null
-  const styles = useMemo(() => (focus ? stylesFor(focus.el, wrapper) : null), [focus, wrapper])
   const stack = useMemo<CompFrame[]>(() => (focus ? adapter.componentStack(focus.el, "PageRenderer") : []), [focus])
   const comp = stack[Math.min(compIdx, Math.max(0, stack.length - 1))]
-  const classes = focus ? Array.from(focus.el.classList) : []
-  const attrs = focus
-    ? Array.from(focus.el.attributes).filter((a) => /^(data-(?!proto)|aria-|role$|href$|type$|disabled$|tabindex$|id$|name$|placeholder$)/.test(a.name))
+  // Choosing a parent component re-targets everything (outline, element, styles) to that
+  // component's own root node — not the node that was clicked.
+  const subject: Element | null = compIdx > 0 && comp?.host ? comp.host : (focus?.el ?? null)
+  const rect = subject ? rectOf(subject, wrapper, k) : null
+  const ctx = focus ? context(focus.el) : null
+  const styles = useMemo(() => (subject ? stylesFor(subject, wrapper) : null), [subject, wrapper])
+  const classes = subject ? Array.from(subject.classList) : []
+  const copyKey = subject ? copyKeyFor(subject) : null
+  const attrs = subject
+    ? Array.from(subject.attributes).filter((a) => /^(data-(?!proto)|aria-|role$|href$|type$|disabled$|tabindex$|id$|name$|placeholder$)/.test(a.name))
     : []
 
   const Section = ({ title, children, right }: { title: string; children: React.ReactNode; right?: React.ReactNode }) => (
@@ -433,7 +427,7 @@ export function Inspector({
           {focus && (
             <Section
               title="React component"
-              right={comp ? <CopyButton text={toJsx(comp, focus.el)} label="copy JSX" /> : null}
+              right={comp ? <CopyButton text={frameToJsx(comp)} label="copy JSX" /> : null}
             >
               {stack.length === 0 ? (
                 <span style={{ color: "var(--ps-muted)" }}>No React component found for this element.</span>
@@ -451,11 +445,20 @@ export function Inspector({
                   </div>
                   {comp && (
                     <pre className="rounded-lg p-2.5 ps-mono text-[11.5px] leading-relaxed whitespace-pre-wrap" style={{ background: "var(--ps-hover)", margin: 0 }}>
-                      {toJsx(comp, focus.el)}
+                      {frameToJsx(comp)}
                     </pre>
                   )}
                 </>
               )}
+            </Section>
+          )}
+
+          {copyKey && (
+            <Section title="Copy" right={<CopyButton text={copyKey.key} label="copy key" />}>
+              <div className="text-[12px]">
+                <code className="ps-mono" style={{ color: "var(--ps-focus)" }}>{copyKey.key}</code>
+                <span style={{ color: "var(--ps-muted)" }}> from the strings catalog ({copyKey.locale}) — edit the text there, not in the component</span>
+              </div>
             </Section>
           )}
 
@@ -477,8 +480,8 @@ export function Inspector({
           )}
 
           {/* ---- 4. DOM element: classes & attributes ---- */}
-          {focus && (
-            <Section title={`Element <${focus.el.tagName.toLowerCase()}>`} right={classes.length > 0 ? <CopyButton text={classes.join(" ")} label="copy classes" /> : null}>
+          {subject && (
+            <Section title={`Element <${subject.tagName.toLowerCase()}>${compIdx > 0 && comp?.host ? ` (root of ${comp.name})` : ""}`} right={classes.length > 0 ? <CopyButton text={classes.join(" ")} label="copy classes" /> : null}>
               {classes.length > 0 ? (
                 <div className="ps-classes">
                   {classes.map((c) => (

@@ -10,6 +10,8 @@ function protoscopeSlice(): Plugin {
   const manifestPath = fileURLToPath(new URL("./protoscope.json", import.meta.url))
   const virtualId = "virtual:proto-pages"
   const resolvedId = "\0" + virtualId
+  const stringsId = "virtual:proto-strings"
+  const resolvedStringsId = "\0" + stringsId
 
   return {
     name: "protoscope-slice",
@@ -55,8 +57,15 @@ function protoscopeSlice(): Plugin {
     },
     resolveId(id) {
       if (id === virtualId) return resolvedId
+      if (id === stringsId) return resolvedStringsId
     },
     load(id) {
+      if (id === resolvedStringsId) {
+        // The copy catalog, if the manifest points at one — the inspector uses it to show copy keys.
+        const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
+        const file = manifest.strings ? fileURLToPath(new URL(manifest.strings, new URL("./", import.meta.url))) : null
+        return `export const strings = ${file ? readFileSync(file, "utf8") : "{}"}\n`
+      }
       if (id !== resolvedId) return
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
       const sliceId = process.env.PROTO

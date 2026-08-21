@@ -8,23 +8,21 @@ import type { PageProps } from "@/protoscope/types"
 import { AppFrame } from "./AppFrame"
 import { WorkQueue } from "../organisms/WorkQueue"
 import { dashboardFixture } from "../fixtures"
+import { makeT } from "../strings"
 
 export function DashboardTemplate({ dims, nav }: PageProps) {
   const role = dims.role ?? "employee"
   const state = dims.state ?? "loaded"
+  const t = makeT(dims.locale)
   const fx = dashboardFixture(role)
 
   return (
     <AppFrame dims={dims} nav={nav} active="dashboard">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Good morning, Klara</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("dashboard.greeting")}</h1>
           <p className="text-sm text-muted-foreground">
-            {role === "employee"
-              ? "Here's where your expenses stand."
-              : role === "manager"
-                ? "Your team's spend at a glance."
-                : "Reimbursement pipeline overview."}
+            {role === "employee" ? t("dashboard.sub.employee") : role === "manager" ? t("dashboard.sub.manager") : t("dashboard.sub.finance")}
           </p>
         </div>
         {role === "employee" && (
@@ -32,7 +30,7 @@ export function DashboardTemplate({ dims, nav }: PageProps) {
             onClick={() => nav("submit-expense")}
             {...proto("NewExpenseButton", { component: "Button", variant: "default", opens: "submit-expense" })}
           >
-            <Plus /> New expense
+            <Plus /> {t("nav.new")}
           </Button>
         )}
       </div>
@@ -47,16 +45,14 @@ export function DashboardTemplate({ dims, nav }: PageProps) {
         <Card className="mb-6">
           <CardContent className="py-12 flex flex-col items-center text-center gap-3">
             <Inbox className="size-10 text-muted-foreground/50" />
-            <div className="font-medium">Nothing here yet</div>
-            <p className="text-sm text-muted-foreground max-w-sm">
-              Submit your first expense and it will show up here along with its approval status.
-            </p>
+            <div className="font-medium">{t("dashboard.empty.title")}</div>
+            <p className="text-sm text-muted-foreground max-w-sm">{t("dashboard.empty.body")}</p>
             <Button
               className="mt-2"
               onClick={() => nav("submit-expense")}
               {...proto("NewExpenseButton", { component: "Button", context: "empty state CTA" })}
             >
-              <Plus /> Submit your first expense
+              <Plus /> {t("dashboard.empty.cta")}
             </Button>
           </CardContent>
         </Card>
@@ -80,15 +76,16 @@ export function DashboardTemplate({ dims, nav }: PageProps) {
             <WorkQueue
               className="col-span-3"
               title={fx.queueTitle}
-              subtitle={role === "employee" ? "Latest first" : "Oldest first — keep the queue moving"}
+              subtitle={role === "employee" ? t("dashboard.queue.latest") : t("dashboard.queue.oldest")}
               items={fx.queue}
+              locale={dims.locale}
               onOpen={(e) => nav("expense-detail", { role, lifecycle: e.status })}
               onViewAll={() => nav("expenses", { role })}
             />
 
             <Card className="col-span-2" {...proto("ActivityFeed", { component: "Card + list", data: "static fixture" })}>
               <CardHeader>
-                <CardTitle>Activity</CardTitle>
+                <CardTitle>{t("dashboard.activity")}</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col">
                 {fx.activity.map((a, i) => (

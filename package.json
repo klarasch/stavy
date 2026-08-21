@@ -15,7 +15,8 @@
     "changelog": "node scripts/changelog.mjs",
     "handoff": "node scripts/handoff.mjs",
     "gen:tests": "node scripts/gen-tests.mjs",
-    "test:scenarios": "node scripts/gen-tests.mjs && playwright test"
+    "test:scenarios": "node scripts/gen-tests.mjs && playwright test",
+    "strings": "node scripts/strings.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",

@@ -181,6 +181,9 @@ for (const n of m.notes ?? []) {
   }
 }
 
+// ---- copy catalog
+if (m.strings && !existsSync(resolve(root, m.strings))) err(`strings catalog "${m.strings}" not found`)
+
 // ---- boards
 const boardIds = new Set()
 for (const b of m.boards ?? []) {

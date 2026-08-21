@@ -9,6 +9,7 @@ export default function ApprovalActionsComponent({ dims, nav }: PageProps) {
           role={dims.role}
           lifecycle={dims.lifecycle}
           onAdvance={(next) => nav("approval-actions", { role: dims.role, lifecycle: next })}
+          locale={dims.locale}
         />
       </div>
     </div>

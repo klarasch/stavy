@@ -3,6 +3,7 @@ import { Avatar, AvatarFallback } from "@/ui/avatar"
 import { proto } from "@/protoscope/proto"
 import { cn } from "@/lib/utils"
 import type { PageProps } from "@/protoscope/types"
+import { makeT } from "../strings"
 
 const roleInitials: Record<string, string> = { employee: "KS", manager: "MN", finance: "FT" }
 
@@ -13,10 +14,11 @@ export function AppFrame({
   children,
 }: PageProps & { active: string; children: React.ReactNode }) {
   const role = dims.role ?? "employee"
+  const t = makeT(dims.locale)
   const links = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "expenses", label: "Expenses" },
-    { id: "submit-expense", label: "New expense" },
+    { id: "dashboard", label: t("nav.dashboard") },
+    { id: "expenses", label: t("nav.expenses") },
+    { id: "submit-expense", label: t("nav.new") },
   ]
   return (
     <div className="min-h-full bg-muted/40 flex flex-col">
@@ -67,7 +69,8 @@ export const statusStyles: Record<string, string> = {
   reimbursed: "bg-violet-100 text-violet-800",
 }
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, locale }: { status: string; locale?: string }) {
+  const t = makeT(locale)
   return (
     <span
       className={cn(
@@ -76,7 +79,7 @@ export function StatusBadge({ status }: { status: string }) {
       )}
       data-slot="badge"
     >
-      {status.replace("-", " ")}
+      {t(`status.${status}` as Parameters<typeof t>[0])}
     </span>
   )
 }
