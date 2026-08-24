@@ -4,7 +4,7 @@ import { PageRenderer } from "../PageRenderer"
 import { pageUrl, valueLabel, instanceKey } from "../manifest"
 import { findProtoTarget } from "../proto"
 import type { AnnotationDef } from "../types"
-import { cn } from "@/lib/utils"
+import { cn } from "../cn"
 import { useComments } from "../comments/store"
 
 export const VIEWPORT_W = 1280

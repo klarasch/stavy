@@ -20,7 +20,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "toolbar": { "enum": ["bottom", "top", "bottom-left", "bottom-right", "top-left", "top-right", "bar-bottom", "bar-top"] }
+        "toolbar": { "enum": ["bottom", "top", "bottom-left", "bottom-right", "top-left", "top-right", "bar-bottom", "bar-top"] },
+        "base": { "type": "string", "pattern": "^(/[^/?#]+)*$", "description": "Path prefix the viewer is mounted under in the host app, e.g. \"/canvas\". Default: root." }
       }
     },
     "dimensions": {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { ArrowLeft, ArrowRight, X, Check } from "lucide-react"
+import { ArrowLeft, ArrowRight, X, Check } from "../icons"
 import { findProtoTarget } from "../proto"
 import { getPage, pageUrl, resolveDims } from "../manifest"
 import { PsButton, Chip, useHotkeys } from "../chrome"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { Check, RotateCcw, Trash2, X, CornerDownRight } from "lucide-react"
+import { Check, RotateCcw, Trash2, X, CornerDownRight } from "../icons"
 import { PsButton } from "../chrome"
 import { useComments, dimsEqual, timeAgo, pathBetween, resolveAnchor, type Comment } from "./store"
 

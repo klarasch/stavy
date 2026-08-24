@@ -34,7 +34,7 @@ for (const p of pages) {
     const dims = Object.fromEntries(Object.keys(p.dimensions).map((d) => [d, inst.dims[d] ?? p.defaults?.[d] ?? p.dimensions[d][0]]))
     const qs = new URLSearchParams(Object.fromEntries(Object.entries(dims).map(([k, v]) => [`d_${k}`, v])))
     qs.set("ui", "0") // hide the viewer chrome
-    const href = `${url}/p/${p.id}?${qs}`
+    const href = `${url}${(m.viewer?.base ?? "").replace(/\/+$/, "")}/p/${p.id}?${qs}`
     await page.goto(href, { waitUntil: "networkidle" })
     await page.waitForTimeout(250)
     const name = `${p.id}__${Object.entries(dims).map(([k, v]) => `${k}=${v}`).join("__")}.png`

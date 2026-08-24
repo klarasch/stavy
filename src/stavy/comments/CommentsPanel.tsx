@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { X, MessageCircle, Link as LinkIcon, FileText, Upload, Trash2, Check, Braces } from "lucide-react"
+import { X, MessageCircle, Link as LinkIcon, FileText, Upload, Trash2, Check, Braces } from "../icons"
 import { PsButton, Kbd } from "../chrome"
 import { getPage, pageUrl } from "../manifest"
 import { useComments, shareUrl, toMarkdown, decodePayload, describeAnchor, timeAgo, downloadText } from "./store"

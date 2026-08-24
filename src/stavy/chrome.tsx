@@ -9,8 +9,8 @@ import {
   type ReactNode,
 } from "react"
 import { createPortal } from "react-dom"
-import { Sun, Moon, SunMoon, ChevronDown, Check, Eye, EyeOff, Keyboard } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Sun, Moon, SunMoon, ChevronDown, Check, Eye, EyeOff, Keyboard } from "./icons"
+import { cn } from "./cn"
 
 /* ------------------------------------------------------------------ */
 /* Chrome state: theme (independent from the prototype) + hide/show UI */

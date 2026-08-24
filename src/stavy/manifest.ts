@@ -18,6 +18,14 @@ export const manifest: Manifest = slice
 
 export const activeSlice = slice
 
+/** Path prefix the viewer is mounted under (manifest `viewer.base`), without trailing slash. "" at root. */
+export const viewerBase: string = (full.viewer?.base ?? "").replace(/\/+$/, "")
+
+/** URL of the canvas (the viewer home). */
+export function canvasUrl(): string {
+  return viewerBase || "/"
+}
+
 export function getPage(pageId: string): PageDef | undefined {
   return manifest.pages.find((p) => p.id === pageId)
 }
@@ -56,7 +64,7 @@ export function pageUrl(
   for (const [k, v] of Object.entries(dims ?? {})) sp.set(`d_${k}`, v)
   for (const [k, v] of Object.entries(extra ?? {})) sp.set(k, v)
   const qs = sp.toString()
-  return `/p/${pageId}${qs ? `?${qs}` : ""}`
+  return `${viewerBase}/p/${pageId}${qs ? `?${qs}` : ""}`
 }
 
 /** Parse dimension overrides for a page out of URLSearchParams. */

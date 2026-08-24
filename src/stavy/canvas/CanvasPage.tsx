@@ -2,8 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   ArrowRight, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+} from "../icons"
+import { cn } from "../cn"
 import { manifest, activeSlice, getPage, resolveDims, pageUrl, valueLabel, dimensionLabel } from "../manifest"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "./PanZoom"
 import { InstanceCard, VIEWPORT_W } from "./InstanceCard"

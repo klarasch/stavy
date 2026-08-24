@@ -1,7 +1,7 @@
 import { useState } from "react"
-import { ChevronDown, ChevronRight, List } from "lucide-react"
+import { ChevronDown, ChevronRight, List } from "../icons"
 import { manifest } from "../manifest"
-import { cn } from "@/lib/utils"
+import { cn } from "../cn"
 
 /** Table of contents for the canvas: jump to any scenario, page, or component. */
 export function CanvasToc({ onJump, className }: { onJump: (tocId: string) => void; className?: string }) {

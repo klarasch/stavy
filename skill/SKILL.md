@@ -127,7 +127,11 @@ When asked to install Stavy in a repo (any framework, any UI kit):
      hardcoded page-import path** in the plugin's `load()` hook
      (`/src/demo/pages/${id}.tsx`) to wherever this product's pages live —
      if you forget, every page import 404s silently.
-4. Install the viewer: copy `src/stavy/` from the reference repo **as is**.
+4. Install the viewer: copy `src/stavy/` from the reference repo **as is**
+   (`scripts/init.mjs <repo> [--route /canvas]` does this) and mount it with
+   one route: `<Route path="/canvas/*" element={<StavyApp />} />` inside the
+   host's router, with `viewer.base: "/canvas"` in the manifest — the viewer
+   builds every link under that prefix. Root-mounted: `path="/*"`, no base.
    It is self-contained (own CSS tokens in `index.css` under `--ps-*`, no
    imports from the host UI kit) — do **not** re-theme it in the host kit; the
    chrome is deliberately a different product from the prototype. Also copy

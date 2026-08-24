@@ -1,8 +1,9 @@
 import { useMemo, useRef, useState } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { Layers, MessageSquare, Crosshair, Play, PencilRuler, ChevronLeft, SlidersHorizontal, RotateCcw, GripVertical, MessageCircle, MessageCirclePlus, PanelBottom, PictureInPicture2 } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Layers, MessageSquare, Crosshair, Play, PencilRuler, ChevronLeft, SlidersHorizontal, RotateCcw, GripVertical, MessageCircle, MessageCirclePlus, PanelBottom, PictureInPicture2 } from "./icons"
+import { cn } from "./cn"
 import {
+  canvasUrl,
   manifest,
   getPage,
   getScenario,
@@ -53,7 +54,7 @@ export function PageView() {
           Page <code className="ps-mono">{pageId}</code> is not registered in this workspace
           {__PROTO_SLICE__ ? ` (slice: ${__PROTO_SLICE__})` : ""}.
         </p>
-        <PsButton onClick={() => navigate("/")}>
+        <PsButton onClick={() => navigate(canvasUrl())}>
           <Layers /> Back to canvas
         </PsButton>
       </div>
@@ -135,7 +136,7 @@ export function PageView() {
     w: () => setParam("w", wireOn ? null : "1"),
     m: () => setPlacing((p) => !p),
     d: () => setDimPanel((o) => !o),
-    c: () => navigate("/"),
+    c: () => navigate(canvasUrl()),
     t: () => setTheme(cycleTheme(theme)),
     Escape: () => {
       if (placing) setPlacing(false)
@@ -238,7 +239,7 @@ export function PageView() {
               {isBar ? <PictureInPicture2 /> : <PanelBottom />}
             </PsButton>
             {/* Where am I */}
-            <PsButton tip="Back to canvas" keys={["C"]} onClick={() => navigate("/")}>
+            <PsButton tip="Back to canvas" keys={["C"]} onClick={() => navigate(canvasUrl())}>
               <ChevronLeft />
               <Layers style={{ color: "var(--ps-accent)" }} />
             </PsButton>

@@ -113,13 +113,15 @@ PROTO=approval-flow npm run build:proto   # only the manager/finance demo
 
 The manifest and skill are UI-kit-agnostic, and the viewer is self-contained
 (its own `--ps-*` tokens, zero imports from the host kit). To adopt on an
-existing prototype repo: copy `src/stavy/` unchanged, add
-`stavy.json`, implement the two-hook binding contract (page modules +
+existing prototype repo: `node scripts/init.mjs ../that-repo --route /canvas`
+(copies `src/stavy/` unchanged + a starter `stavy.json`), mount one route
+(`<Route path="/canvas/*" element={<StavyApp />} />`), then implement the two-hook binding contract (page modules +
 `data-proto` targets — plus a one-file `data-component` wrapper layer if your
 kit doesn't stamp component names), and let the skill do the bookkeeping.
 See `SPEC.md` §2 and the skill's "Setting up a new workspace" section. A cold
 Sonnet agent did exactly this on MUI in under two hours; its friction report
 drove the current wording of both documents.
+First trial on a branch of an existing mock, step by step: `docs/MONDAY.md`.
 
 ## Status
 

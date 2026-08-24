@@ -16,7 +16,8 @@ const m = JSON.parse(readFileSync("stavy.json", "utf8"))
 mkdirSync(out, { recursive: true })
 const page = new Map(m.pages.map((p) => [p.id, p]))
 const resolveDims = (p, o = {}) => Object.fromEntries(Object.keys(p.dimensions).map((d) => [d, o[d] ?? p.defaults?.[d] ?? p.dimensions[d][0]]))
-const url = (pid, dims) => `/p/${pid}?${new URLSearchParams({ ...Object.fromEntries(Object.entries(dims).map(([k, v]) => [`d_${k}`, v])), ui: "0" })}`
+const base = (m.viewer?.base ?? "").replace(/\/+$/, "")
+const url = (pid, dims) => `${base}/p/${pid}?${new URLSearchParams({ ...Object.fromEntries(Object.entries(dims).map(([k, v]) => [`d_${k}`, v])), ui: "0" })}`
 const esc = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
 
 let n = 0

@@ -16,7 +16,8 @@
     "handoff": "node scripts/handoff.mjs",
     "gen:tests": "node scripts/gen-tests.mjs",
     "test:scenarios": "node scripts/gen-tests.mjs && playwright test",
-    "strings": "node scripts/strings.mjs"
+    "strings": "node scripts/strings.mjs",
+    "build:css": "node scripts/build-css.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
+    "@tailwindcss/cli": "^4.3.3",
     "@tailwindcss/vite": "^4.1.8",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",

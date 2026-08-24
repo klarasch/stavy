@@ -30,7 +30,7 @@ export const BoardCard = memo(function BoardCard({ board }: { board: BoardDef })
         const { svg } = await mermaid.render(`ps-board-${board.id}-${dark ? "d" : "l"}`, board.source)
         if (!cancelled) setSvg(svg)
       } catch (e) {
-        if (!cancelled) setError(String(e))
+        if (!cancelled) setError(/Cannot find|Failed to (fetch|resolve)/i.test(String(e)) ? "mermaid is not installed \u2014 showing the diagram source" : String(e))
       }
     })()
     return () => {
@@ -43,7 +43,10 @@ export const BoardCard = memo(function BoardCard({ board }: { board: BoardDef })
       <div className="ps-board">
         {board.kind === "mermaid" &&
           (error ? (
-            <pre className="ps-mono text-[11px]" style={{ color: "var(--ps-muted)" }}>{error}</pre>
+            <div className="ps flex flex-col gap-2">
+              <div className="ps-sub">{error}</div>
+              <pre className="ps-mono text-[11px]" style={{ color: "var(--ps-muted)", whiteSpace: "pre-wrap" }}>{board.source}</pre>
+            </div>
           ) : svg ? (
             <div dangerouslySetInnerHTML={{ __html: svg }} />
           ) : (

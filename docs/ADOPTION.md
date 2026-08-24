@@ -11,8 +11,9 @@ work. Steps marked **(skill)** are what Claude does for you when the
 
 1. **Scaffold** a Vite + React + TypeScript app and install your design system
    package (MUI, Ant, Chakra, your in-house kit). Your *product* does not need
-   Tailwind; the viewer chrome uses Tailwind utilities scoped to itself (no
-   preflight, so nothing in your app changes) — `init` sets that up.
+   Tailwind — `init` writes the viewer's styles as prebuilt, self-contained
+   plain CSS (no preflight, so nothing in your app changes). The viewer also
+   vendors its icons and helpers; its only npm dependency is react-router-dom.
 2. **Install the viewer with one command** — do not re-theme it:
    ```bash
    node /path/to/stavy/scripts/init.mjs ../my-trial-repo
@@ -80,7 +81,11 @@ templates clean**, extracted from the existing mocks one shape at a time
 (strangler pattern), rather than registering every old page as-is:
 
 1. Add the viewer, plugin, validator, skill, and an empty `stavy.json`
-   (product + dimensions only). Nothing else changes; old routes keep working.
+   (product + dimensions only): `node …/stavy/scripts/init.mjs . --route /canvas`,
+   then one route in the existing router — `<Route path="/canvas/*" element={<StavyApp />} />`
+   (`viewer.base` in the manifest matches the mount path, so every viewer link
+   stays under it). Nothing else changes; old routes keep working.
+   Step-by-step for a first trial on a branch: `docs/MONDAY.md`.
 2. Audit the mock: list the 3–5 dominant page shapes (list, detail, dashboard,
    form flow, settings…). Those become the first `templates`, each extracted
    from the cleanest existing page and fixed to the `({ dims, nav })` contract.

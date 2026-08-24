@@ -151,6 +151,8 @@ export type ToolbarAnchor = "bottom" | "top" | "bottom-left" | "bottom-right" | 
 export interface ViewerDefaults {
   /** Where the prototype-mode toolbar docks by default */
   toolbar?: ToolbarAnchor
+  /** Path prefix the viewer is mounted under in the host app, e.g. "/canvas". Default: "" (root). */
+  base?: string
 }
 
 export interface Manifest {

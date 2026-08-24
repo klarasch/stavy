@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
-import { X, Crosshair, Copy, Check, ExternalLink } from "lucide-react"
+import { X, Crosshair, Copy, Check, ExternalLink } from "../icons"
 import { Chip, Kbd, Keys } from "../chrome"
 import type { PageDef, TemplateDef } from "../types"
 import { valueLabel, dimensionLabel } from "../manifest"
