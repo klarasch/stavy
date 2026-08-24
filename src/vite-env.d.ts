@@ -10,6 +10,15 @@ declare module "virtual:proto-pages" {
   >
 }
 
+declare module "virtual:proto-mermaid" {
+  /** mermaid's default export when the optional package is installed, else null. Typed structurally so repos without mermaid still typecheck. */
+  const mermaid: {
+    initialize(config: Record<string, unknown>): void
+    render(id: string, source: string): Promise<{ svg: string }>
+  } | null
+  export default mermaid
+}
+
 declare module "virtual:proto-strings" {
   export const strings: Record<string, Record<string, string>>
 }

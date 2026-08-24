@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "node:url"
 import { readFileSync, writeFileSync } from "node:fs"
+import { createRequire } from "node:module"
 
 // Stavy slice plugin: when PROTO=<prototype-id> is set, the build only
 // includes the pages declared in that prototype slice of stavy.json.
@@ -12,6 +13,16 @@ function stavySlice(): Plugin {
   const resolvedId = "\0" + virtualId
   const stringsId = "virtual:proto-strings"
   const resolvedStringsId = "\0" + stringsId
+  // mermaid is optional: boards of kind "mermaid" render with it, show their
+  // source without it. Resolved here because a bare import("mermaid") makes
+  // Vite fail at transform time when the package is absent.
+  const mermaidId = "virtual:proto-mermaid"
+  const resolvedMermaidId = "\0" + mermaidId
+  let hasMermaid = false
+  try {
+    createRequire(import.meta.url).resolve("mermaid")
+    hasMermaid = true
+  } catch {}
 
   return {
     name: "stavy-slice",
@@ -58,8 +69,10 @@ function stavySlice(): Plugin {
     resolveId(id) {
       if (id === virtualId) return resolvedId
       if (id === stringsId) return resolvedStringsId
+      if (id === mermaidId) return hasMermaid ? this.resolve("mermaid") : resolvedMermaidId
     },
     load(id) {
+      if (id === resolvedMermaidId) return "export default null\n"
       if (id === resolvedStringsId) {
         // The copy catalog, if the manifest points at one — the inspector uses it to show copy keys.
         const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
