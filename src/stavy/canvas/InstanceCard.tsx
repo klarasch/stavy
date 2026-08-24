@@ -1,7 +1,8 @@
-import { memo, useEffect, useRef, useState } from "react"
+import { memo, useContext, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { PageRenderer } from "../PageRenderer"
-import { pageUrl, valueLabel, instanceKey } from "../manifest"
+import { CanvasInspectContext, useLiveWhenVisible } from "./visibility"
+import { getPage, pageUrl, valueLabel, instanceKey } from "../manifest"
 import { findProtoTarget } from "../proto"
 import type { AnnotationDef } from "../types"
 import { cn } from "../cn"
@@ -32,6 +33,7 @@ export const InstanceCard = memo(function InstanceCard({
   scope = "pages",
   frame,
   hideChips = false,
+  wireframe = false,
 }: {
   pageId: string
   dims: Record<string, string>
@@ -43,6 +45,8 @@ export const InstanceCard = memo(function InstanceCard({
   scope?: "pages" | "scenarios"
   frame?: { width: number; height: number }
   hideChips?: boolean
+  /** Canvas wireframe mode: opened page should keep it on (SPEC.md §3 deep links). */
+  wireframe?: boolean
 }) {
   const FW = frame?.width ?? VIEWPORT_W
   const FH = frame?.height ?? VIEWPORT_H
@@ -50,12 +54,15 @@ export const InstanceCard = memo(function InstanceCard({
   const commentCount = countFor(pageId, dims)
   const navigate = useNavigate()
   const frameRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const live = useLiveWhenVisible(frameRef)
+  const inspecting = useContext(CanvasInspectContext)
+  const [portalHost, setPortalHost] = useState<HTMLDivElement | null>(null)
   const [pins, setPins] = useState<PinPos[]>([])
   const [open, setOpen] = useState<string | null>(null)
   const w = Math.round(FW * scale)
   const h = Math.round(FH * scale)
-  const url = href ?? pageUrl(pageId, dims)
+  const url = href ?? pageUrl(pageId, dims, wireframe ? { w: "1" } : undefined)
   const key = instanceKey(pageId, dims)
 
   useEffect(() => {
@@ -88,7 +95,7 @@ export const InstanceCard = memo(function InstanceCard({
     measure()
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotations, showPins, pageId, key])
+  }, [annotations, showPins, pageId, key, live])
 
   return (
     <div
@@ -104,13 +111,26 @@ export const InstanceCard = memo(function InstanceCard({
           className="ps-card-frame rounded-lg bg-white overflow-hidden cursor-zoom-in transition-[box-shadow,transform] duration-150 hover:-translate-y-px"
           style={{ width: w, height: h }}
         >
-          <div
-            ref={contentRef}
-            className="ps-proto-content pointer-events-none select-none origin-top-left"
-            style={{ width: FW, height: FH, transform: `scale(${scale})` }}
-          >
-            <PageRenderer pageId={pageId} dims={dims} nav={() => {}} />
-          </div>
+          {live ? (
+            <div
+              ref={(el) => {
+                contentRef.current = el
+                setPortalHost(el)
+              }}
+              inert={!inspecting}
+              className="ps-proto-content relative pointer-events-none select-none origin-top-left"
+              style={{ width: FW, height: FH, transform: `scale(${scale})` }}
+            >
+              {portalHost && <PageRenderer pageId={pageId} dims={dims} nav={() => {}} portalContainer={portalHost} />}
+            </div>
+          ) : (
+            <div
+              className="w-full h-full flex items-center justify-center text-[11px] font-medium"
+              style={{ color: "var(--ps-faint)" }}
+            >
+              {getPage(pageId)?.label ?? pageId}
+            </div>
+          )}
         </div>
         {commentCount > 0 && (
           <span className="ps-cbubble ps-cbubble-badge" data-ps-ui title={`${commentCount} open comment(s)`}>{commentCount}</span>
@@ -168,5 +188,6 @@ export const InstanceCard = memo(function InstanceCard({
   a.showPins === b.showPins &&
   a.scope === b.scope &&
   a.hideChips === b.hideChips &&
+  a.wireframe === b.wireframe &&
   a.frame?.width === b.frame?.width &&
   a.frame?.height === b.frame?.height)

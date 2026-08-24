@@ -10,8 +10,9 @@ import { Chip } from "../chrome"
  * an explicit gap. Data comes from the manifest only; the PRD document itself is
  * cross-checked by `npm run check --refs`.
  */
-export function CoverageBoard() {
+export function CoverageBoard({ wireframe }: { wireframe?: boolean }) {
   const navigate = useNavigate()
+  const carry = wireframe ? { w: "1" } : undefined
   const reqs = manifest.requirements ?? []
   if (!reqs.length) return null
   const byRef = new Map<string, typeof manifest.scenarios>()
@@ -60,7 +61,7 @@ export function CoverageBoard() {
                           key={sc.id}
                           className="ps-chip ps-chip-sm cursor-pointer"
                           title={`Play "${sc.label}" (${sc.steps.length} steps across ${pages} page${pages === 1 ? "" : "s"})`}
-                          onClick={() => page && navigate(stepUrl(sc, 0))}
+                          onClick={() => page && navigate(stepUrl(sc, 0, carry))}
                         >
                           <Play className="size-3" /> {sc.label}
                           <span className="ps-chip-k">{sc.steps.length} steps</span>
@@ -81,7 +82,7 @@ export function CoverageBoard() {
           {uncited.map((s, i) => (
             <span key={s.id}>
               {i > 0 && ", "}
-              <button className="underline cursor-pointer" onClick={() => navigate(stepUrl(s, 0))}>
+              <button className="underline cursor-pointer" onClick={() => navigate(stepUrl(s, 0, carry))}>
                 {s.label}
               </button>
             </span>

@@ -13,11 +13,11 @@ interface Rect {
   height: number
 }
 
-function stepUrl(scenario: Scenario, idx: number): string {
+function stepUrl(scenario: Scenario, idx: number, carry?: Record<string, string>): string {
   const st = scenario.steps[idx]
   const page = getPage(st.page)
   const dims = page ? resolveDims(page, st.dims) : (st.dims ?? {})
-  return pageUrl(st.page, dims, { tour: scenario.id, ts: String(idx) })
+  return pageUrl(st.page, dims, { tour: scenario.id, ts: String(idx), ...carry })
 }
 
 export function TourOverlay({
@@ -25,11 +25,14 @@ export function TourOverlay({
   stepIdx,
   wrapper,
   exitUrl,
+  carry,
 }: {
   scenario: Scenario
   stepIdx: number
   wrapper: HTMLElement
   exitUrl: string
+  /** Viewer mode flags (w/a/i) to keep across tour steps. */
+  carry?: Record<string, string>
 }) {
   const navigate = useNavigate()
   const step = scenario.steps[stepIdx]
@@ -76,16 +79,16 @@ export function TourOverlay({
       if (el && e.target instanceof Node && el.contains(e.target)) {
         e.preventDefault()
         e.stopPropagation()
-        navigate(isLast ? exitUrl : stepUrl(scenario, stepIdx + 1))
+        navigate(isLast ? exitUrl : stepUrl(scenario, stepIdx + 1, carry))
       }
     }
     wrapper.addEventListener("click", onClick, { capture: true })
     return () => wrapper.removeEventListener("click", onClick, { capture: true })
-  }, [step, wrapper, scenario, stepIdx, isLast, exitUrl, navigate])
+  }, [step, wrapper, scenario, stepIdx, isLast, exitUrl, carry, navigate])
 
   useHotkeys({
-    ArrowRight: () => navigate(isLast ? exitUrl : stepUrl(scenario, stepIdx + 1)),
-    ArrowLeft: () => stepIdx > 0 && navigate(stepUrl(scenario, stepIdx - 1)),
+    ArrowRight: () => navigate(isLast ? exitUrl : stepUrl(scenario, stepIdx + 1, carry)),
+    ArrowLeft: () => stepIdx > 0 && navigate(stepUrl(scenario, stepIdx - 1, carry)),
   })
 
   if (!step) return null
@@ -142,7 +145,7 @@ export function TourOverlay({
           </p>
         )}
         <div className="flex items-center justify-between">
-          <PsButton disabled={stepIdx === 0} onClick={() => navigate(stepUrl(scenario, stepIdx - 1))}>
+          <PsButton disabled={stepIdx === 0} onClick={() => navigate(stepUrl(scenario, stepIdx - 1, carry))}>
             <ArrowLeft /> Prev
           </PsButton>
           {isLast ? (
@@ -150,7 +153,7 @@ export function TourOverlay({
               <Check /> Done
             </PsButton>
           ) : (
-            <PsButton primary onClick={() => navigate(stepUrl(scenario, stepIdx + 1))}>
+            <PsButton primary onClick={() => navigate(stepUrl(scenario, stepIdx + 1, carry))}>
               Next <ArrowRight />
             </PsButton>
           )}

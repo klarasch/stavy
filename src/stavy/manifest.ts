@@ -21,9 +21,11 @@ export const activeSlice = slice
 /** Path prefix the viewer is mounted under (manifest `viewer.base`), without trailing slash. "" at root. */
 export const viewerBase: string = (full.viewer?.base ?? "").replace(/\/+$/, "")
 
-/** URL of the canvas (the viewer home). */
-export function canvasUrl(): string {
-  return viewerBase || "/"
+/** URL of the canvas (the viewer home), optionally carrying mode flags (e.g. `w=1`). */
+export function canvasUrl(extra?: Record<string, string>): string {
+  const base = viewerBase || "/"
+  const qs = extra ? new URLSearchParams(extra).toString() : ""
+  return qs ? `${base}?${qs}` : base
 }
 
 export function getPage(pageId: string): PageDef | undefined {

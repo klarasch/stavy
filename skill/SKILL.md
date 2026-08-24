@@ -23,7 +23,11 @@ its rules win over this file on any conflict).
   states/notes on the canvas. Templates list the organisms they compose in
   `organisms` (their anatomy).
 - **Scenarios** are executable step lists (page + dims + `target` + note) that
-  power guided tours, canvas lanes, and written walkthroughs.
+  power guided tours, canvas lanes, and written walkthroughs. Every step is
+  rendered as a live instance card in its canvas lane — a 13-step scenario puts
+  13 more product pages on the canvas — so keep step lists purposeful; steps
+  that show the same page state as an existing pinned instance still cost a
+  full extra mount.
 - **Prototypes** are named slices (pages + scenarios) used for scoped demo
   builds — a demo deploy must not pack the whole workspace.
 - Every interactive "state change" in a prototype is navigation across dimension
@@ -105,6 +109,58 @@ Rules of thumb:
   and climb one rung at a time; never jump a whole page to `interactive` because
   one button needed state.
 
+## Modals and overlays — portal into the card, never document.body
+
+Most kits (MUI/Base, Radix, Ant, Headless UI…) portal modals, drawers and
+toasts to `document.body`. On the canvas that escapes the card's scale and
+clip: the overlay lands at the document root at full viewport size and covers
+the whole canvas — pin a few modal states and the first thing a viewer sees is
+a stack of full-screen modals, not a canvas. The viewer hands every page a
+container instead:
+
+- Page modules receive `portalContainer` in their props, and any component can
+  read it with `useStavyPortalContainer()` (from `src/stavy/portal`).
+- Pass it to the kit's escape hatch: MUI/Base `<Modal container={…}>`, Radix
+  `<Portal container={…}>`, Ant `getContainer={…}`, or plain
+  `createPortal(node, portalContainer ?? document.body)`. Inside the card,
+  `position: fixed` resolves against the card frame (a scaled ancestor is a
+  containing block), so a full-screen modal fills the card — the modal state
+  stays live on the canvas, which is the point of pinning it.
+- If the host's wrapper component hard-codes `document.body` and forwards no
+  container prop, extend the wrapper to forward one. Do NOT adopt the
+  portalled node into the card after mount (MutationObserver + appendChild):
+  moving DOM that React owns desyncs React from the document and crashes the
+  canvas on unmount. If the wrapper can't be extended, drop the page to
+  `fidelity: static` and pin a screenshot, noting the limitation.
+
+Escape-hatch cheat sheet (where the container goes, per kit): MUI / Base UI /
+Joy `container` · Radix & shadcn `<DialogPortal container>` / `<Portal
+container>` · Ant `getContainer` (popovers: `getPopupContainer`) · Chakra
+`<Portal containerRef>` · Mantine `portalProps={{ target }}` ·
+react-bootstrap `container` · Fluent `mountNode` · no kit at all: plain
+`createPortal(node, portalContainer ?? document.body)` — the reference
+`ConfirmModal` organism in the demo does exactly this.
+
+Two rules beyond the container:
+
+- **Prototype overlays never trap focus or lock scroll.** Those are product
+  behaviours, not prototype behaviours — and kit scroll-locks (Radix's
+  react-remove-scroll, MUI's ScrollLock) install document-level listeners
+  that block canvas panning even when the modal is correctly contained in its
+  card. Disable them when wiring a kit modal: MUI `disableEnforceFocus
+  disableAutoFocus disableScrollLock`, Radix `<Dialog modal={false}>`, or the
+  kit's equivalent. (The viewer renders thumbnails `inert`, so a forgotten
+  focus trap can't steal focus on the canvas — but `inert` cannot neutralise
+  scroll locks or other document-level listeners; those must be off in the
+  page.)
+- **Imperative / singleton overlay APIs can't see the container.**
+  `Modal.confirm()`, `message.success()`, `notification.open()`, and global
+  toast libraries (sonner, react-hot-toast) render outside the component
+  tree, so context never reaches them. Prefer the declarative component
+  form; where the kit has global config, point it at the container (Ant:
+  `<App>` / `ConfigProvider` `getContainer`); otherwise treat that state as
+  `fidelity: static`.
+
 ## Setting up a new workspace
 
 When asked to install Stavy in a repo (any framework, any UI kit):
@@ -120,6 +176,12 @@ When asked to install Stavy in a repo (any framework, any UI kit):
    - if the kit does not stamp component names (MUI, Ant, most in-house kits),
      add a wrapper layer that re-exports the components you use with
      `data-component="<Name>"` on the root node, and import from it;
+   - **probe the kit's overlay escape hatch on day one**: find the modal /
+     drawer / toast components pages will use and confirm a portal container
+     can reach them (see "Modals and overlays" below). If the product's
+     wrapper swallows the kit's `container` prop, extend the wrapper *now* —
+     discovering this when the first modal page lands on the canvas is the
+     single most expensive surprise in adoption trials;
    - a registry that maps page ids → modules **through a build-time filter** so
      a slice env var (`PROTO=<id>`) excludes unlisted pages from the bundle
      (see `vite.config.ts` → `stavySlice()` in the reference repo for the

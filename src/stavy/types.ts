@@ -176,4 +176,11 @@ export interface Manifest {
 export interface PageProps {
   dims: Record<string, string>
   nav: (pageId: string, dims?: Record<string, string>) => void
+  /**
+   * Positioned element to portal overlays (modals, drawers, toasts) into,
+   * so they land inside the canvas card / page frame instead of
+   * `document.body` (SPEC §3 "Overlay containment"). Pass it to the kit's
+   * container prop; also available anywhere via `useStavyPortalContainer()`.
+   */
+  portalContainer?: HTMLElement
 }

@@ -20,7 +20,11 @@ export const BoardCard = memo(function BoardCard({ board }: { board: BoardDef })
     let cancelled = false
     ;(async () => {
       try {
-        const mermaid = (await import("mermaid")).default
+        const mermaid = (await import("virtual:proto-mermaid")).default
+        if (!mermaid) {
+          if (!cancelled) setError("mermaid is not installed — showing the diagram source")
+          return
+        }
         mermaid.initialize({
           startOnLoad: false,
           theme: dark ? "dark" : "neutral",
@@ -30,7 +34,7 @@ export const BoardCard = memo(function BoardCard({ board }: { board: BoardDef })
         const { svg } = await mermaid.render(`ps-board-${board.id}-${dark ? "d" : "l"}`, board.source)
         if (!cancelled) setSvg(svg)
       } catch (e) {
-        if (!cancelled) setError(/Cannot find|Failed to (fetch|resolve)/i.test(String(e)) ? "mermaid is not installed \u2014 showing the diagram source" : String(e))
+        if (!cancelled) setError(String(e))
       }
     })()
     return () => {

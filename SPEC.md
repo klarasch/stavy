@@ -259,9 +259,12 @@ Each page id maps to a renderable module with a uniform interface:
 
 ```ts
 // The viewer calls every page the same way:
-Page({ dims, nav })
+Page({ dims, nav, portalContainer })
 // dims: full dimension assignment, e.g. { role: "manager", lifecycle: "submitted" }
 // nav(pageId, dimOverrides): navigate to another page/variant
+// portalContainer (optional): positioned element to portal overlays (modals,
+//   drawers, toasts) into — see §3 "Overlay containment". Pages that open
+//   overlays SHOULD pass it to their kit's container prop.
 ```
 
 Pages resolve their own mock data (fixtures) from `dims`. Interactions that
@@ -331,8 +334,45 @@ self-contained.)
 
 A conforming viewer SHOULD provide:
 
-- **Canvas**: pan/zoom overview rendering every page's `instances` live, grouped
-  by page, plus scenario lanes; anything clickable zooms into the interactive page.
+- **Canvas**: pan/zoom overview showing every page's `instances` live, grouped
+  by page, plus scenario lanes — note every scenario *step* is an instance card
+  too, so step count multiplies canvas cost; anything clickable zooms into the
+  interactive page. "Live" constrains what a card is (the real page module, not
+  a screenshot), **not** when it mounts: a conforming viewer SHOULD mount cards
+  lazily — when they come near the viewport, sticky once mounted so panning
+  never re-runs a page's effects or loses its state — because instances are
+  real product pages (grids, charts, providers) and eager mounting does not
+  scale past toy workspaces. Off-screen cards render as placeholders, and at
+  zoom levels where a page is illegible anyway (below ~15%) a placeholder MAY
+  stand in even on screen. Compute visibility from the pan/zoom transform
+  arithmetically, not with IntersectionObserver: a viewer that writes its
+  transform to the DOM outside the framework (the reference viewer does, for
+  gesture performance) can be observed before the initial transform settles,
+  reading every card as off-screen and coming up blank.
+- **Overlay containment**: most kits portal modals, drawers and toasts to
+  `document.body`, which escapes the card's scale + clip and lands a
+  full-viewport overlay over the entire canvas. The viewer MUST hand every
+  rendered page a positioned portal container (`portalContainer` in the §2.1
+  props; the reference viewer also exposes it via `useStavyPortalContainer()`),
+  and page modules SHOULD route overlays into it (MUI/Base `container`, Radix
+  `<Portal container>`, Ant `getContainer`, raw `createPortal`). Inside the
+  container, `position: fixed` resolves against the card frame (a transformed
+  ancestor is a containing block), so a "full-screen" modal fills its card and
+  the flow step stays live on the canvas. Viewers MUST NOT re-parent an
+  already-portalled DOM node into the card after mount — moving nodes the UI
+  framework owns desynchronises its tree from the document and crashes on
+  unmount. For kit wrappers that hard-code `document.body` and forward no
+  container prop, the fallback is `fidelity: static` with a screenshot, noted
+  as a limitation. Two boundary conditions complete the contract: the viewer
+  SHOULD render thumbnails `inert` so a page overlay's focus trap / autoFocus
+  cannot steal focus from the viewer chrome (defense that needs no page
+  cooperation); and page overlays SHOULD NOT trap focus or lock scroll —
+  scroll-lock libraries install document-level listeners that block canvas
+  panning even when the overlay is correctly contained, and `inert` cannot
+  neutralise them. Imperative / singleton overlay APIs that render outside
+  the component tree (confirm helpers, global toasts) are outside this
+  contract; such states degrade to `fidelity: static` unless the kit's global
+  config can point them at the container.
 - **Dimension switcher**: flip any dimension of the open page at runtime. Pages
   may carry many axes (ten is realistic); beyond a handful the switcher MUST
   degrade to a panel rather than overflow (reference: inline pills up to 3

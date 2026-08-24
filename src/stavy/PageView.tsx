@@ -42,10 +42,12 @@ export function PageView() {
   const [dimPanel, setDimPanel] = useState(false)
   const [drag, setDrag] = useState<{ dx: number; dy: number; target: ToolbarAnchor } | null>(null)
   const [placing, setPlacing] = useState(false)
+  const [protoHost, setProtoHost] = useState<HTMLDivElement | null>(null)
   const { countFor } = useComments()
 
   const page = getPage(pageId)
   const dims = useMemo(() => (page ? dimsFromParams(page, sp) : {}), [page, sp])
+  const wireOn = sp.get("w") === "1"
 
   if (!page) {
     return (
@@ -54,7 +56,7 @@ export function PageView() {
           Page <code className="ps-mono">{pageId}</code> is not registered in this workspace
           {__PROTO_SLICE__ ? ` (slice: ${__PROTO_SLICE__})` : ""}.
         </p>
-        <PsButton onClick={() => navigate(canvasUrl())}>
+        <PsButton onClick={() => navigate(canvasUrl(wireOn ? { w: "1" } : undefined))}>
           <Layers /> Back to canvas
         </PsButton>
       </div>
@@ -67,7 +69,6 @@ export function PageView() {
   const annotOn = annotMode !== null
   const cycleAnnot = () => setParam("a", annotMode === null ? "hover" : annotMode === "hover" ? "all" : null)
   const inspectOn = sp.get("i") === "1"
-  const wireOn = sp.get("w") === "1"
   const commentsOpen = sp.get("comments") === "1"
   const openCommentId = sp.get("c")
   const tourId = sp.get("tour")
@@ -82,17 +83,19 @@ export function PageView() {
     setSp(next, { replace: true })
   }
 
+  // Viewer mode flags to keep alive across every in-viewer navigation (SPEC.md §3).
+  const carry: Record<string, string> = {}
+  if (annotMode) carry.a = annotMode
+  if (inspectOn) carry.i = "1"
+  if (wireOn) carry.w = "1"
+
   const nav = (pid: string, overrides?: Record<string, string>) => {
     const target = getPage(pid)
     if (!target) return
-    const extra: Record<string, string> = {}
-    if (annotMode) extra.a = annotMode
-    if (inspectOn) extra.i = "1"
-    if (wireOn) extra.w = "1"
-    navigate(pageUrl(pid, resolveDims(target, overrides), extra))
+    navigate(pageUrl(pid, resolveDims(target, overrides), carry))
   }
 
-  const exitUrl = pageUrl(page.id, dims, wireOn ? { w: "1" } : undefined)
+  const exitUrl = pageUrl(page.id, dims, carry)
 
   // Toolbar dock: manifest default, overridable per link (?tb=) and by dragging the grip.
   const tbParam = sp.get("tb") as ToolbarAnchor | null
@@ -136,7 +139,7 @@ export function PageView() {
     w: () => setParam("w", wireOn ? null : "1"),
     m: () => setPlacing((p) => !p),
     d: () => setDimPanel((o) => !o),
-    c: () => navigate(canvasUrl()),
+    c: () => navigate(canvasUrl(wireOn ? { w: "1" } : undefined)),
     t: () => setTheme(cycleTheme(theme)),
     Escape: () => {
       if (placing) setPlacing(false)
@@ -163,14 +166,14 @@ export function PageView() {
         }}
       >
         <div className="relative min-h-full">
-          <div className={cn("min-h-full", wireOn && "proto-wireframe")}>
-            <PageRenderer pageId={page.id} dims={dims} nav={nav} />
+          <div ref={setProtoHost} className={cn("relative min-h-full", wireOn && "proto-wireframe")}>
+            {protoHost && <PageRenderer pageId={page.id} dims={dims} nav={nav} portalContainer={protoHost} />}
           </div>
           {wrapperRef.current && annotMode && page.annotations && (
             <AnnotationOverlay annotations={page.annotations} wrapper={wrapperRef.current} mode={annotMode} />
           )}
           {wrapperRef.current && scenario && (
-            <TourOverlay scenario={scenario} stepIdx={tourStep} wrapper={wrapperRef.current} exitUrl={exitUrl} />
+            <TourOverlay scenario={scenario} stepIdx={tourStep} wrapper={wrapperRef.current} exitUrl={exitUrl} carry={carry} />
           )}
           {wrapperRef.current && (
             <CommentLayer
@@ -239,7 +242,7 @@ export function PageView() {
               {isBar ? <PictureInPicture2 /> : <PanelBottom />}
             </PsButton>
             {/* Where am I */}
-            <PsButton tip="Back to canvas" keys={["C"]} onClick={() => navigate(canvasUrl())}>
+            <PsButton tip="Back to canvas" keys={["C"]} onClick={() => navigate(canvasUrl(wireOn ? { w: "1" } : undefined))}>
               <ChevronLeft />
               <Layers style={{ color: "var(--ps-accent)" }} />
             </PsButton>
@@ -285,7 +288,7 @@ export function PageView() {
                 options={pageScenarios.map((s) => ({ value: s.id, label: s.label }))}
                 onChange={(id) => {
                   const sc = getScenario(id)
-                  if (sc) navigate(stepUrl(sc, 0))
+                  if (sc) navigate(stepUrl(sc, 0, carry))
                 }}
               />
             )}
@@ -329,7 +332,7 @@ export function PageView() {
         </div>
       )}
       {drag && <DockTargetGhost anchor={drag.target} />}
-      {commentsOpen && !hidden && <CommentsPanel onClose={() => setParam("comments", null)} onAdd={() => { setParam("comments", null); setPlacing(true) }} />}
+      {commentsOpen && !hidden && <CommentsPanel wireframe={wireOn} onClose={() => setParam("comments", null)} onAdd={() => { setParam("comments", null); setPlacing(true) }} />}
       <ShortcutsSheet
         items={[
           ["Annotations: hidden → on hover → all", "N"], ["Inspect", "I"], ["Wireframe", "W"], ["Leave a comment", "M"], ["Dimensions panel", "D"], ["Back to canvas", "C"],

@@ -96,6 +96,12 @@ templates clean**, extracted from the existing mocks one shape at a time
 4. Promote organisms as they recur (`kind: "component"`), and make the
    canvas the place PRs are reviewed from (the PR description links the
    preview's canvas URL).
+   - **Pages that open modals/drawers**: most kits portal overlays to
+     `document.body`, which would cover the whole canvas. Route them into the
+     `portalContainer` the viewer passes to every page (SPEC §3 "Overlay
+     containment", SKILL "Modals and overlays"). If your kit's wrapper
+     (in-house `Modal` components often) doesn't forward a container prop,
+     extend the wrapper — never re-parent the portalled DOM after mount.
 5. Retire the separate builds repo once slice builds cover the demos
    (see CI below).
 

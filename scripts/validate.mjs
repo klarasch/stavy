@@ -6,7 +6,7 @@
 //   node scripts/validate.mjs [stavy.json] [--refs docs/PRD-118.md ...] [--coverage]
 //
 // Exit code 1 on errors; warnings never fail the run.
-import { readFileSync, existsSync } from "node:fs"
+import { readFileSync, existsSync, statSync } from "node:fs"
 import { resolve, dirname } from "node:path"
 
 const argv = process.argv.slice(2)
@@ -68,8 +68,10 @@ function readSource(abs) {
 }
 function resolveImport(fromFile, spec) {
   const base = resolve(dirname(fromFile), spec)
+  // isFile guards directory-style imports (`./BillingSetup` resolving to a
+  // directory would EISDIR in readSource before `./BillingSetup/index.tsx` is tried)
   for (const cand of [base, `${base}.tsx`, `${base}.ts`, `${base}.jsx`, `${base}.js`, `${base}/index.tsx`, `${base}/index.ts`])
-    if (existsSync(cand) && !cand.endsWith("/")) return cand
+    if (existsSync(cand) && statSync(cand).isFile()) return cand
   return null
 }
 function collectSources(entry, depth = 2, seen = new Set()) {

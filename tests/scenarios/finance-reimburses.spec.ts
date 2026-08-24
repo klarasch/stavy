@@ -14,10 +14,11 @@ test.describe("Finance reimburses", () => {
     await expect.soft(page).toHaveURL(new RegExp("d_lifecycle=approved"))
     await expect.soft(page).toHaveURL(new RegExp("d_density=comfortable"))
     await expect.soft(page).toHaveURL(new RegExp("d_locale=en-US"))
+    await expect.soft(page).toHaveURL(new RegExp("d_overlay=none"))
   })
 
   test("2. Mark as reimbursed", async ({ page }) => {
-    await page.goto("/p/expense-detail?d_role=finance&d_lifecycle=approved&d_density=comfortable&d_locale=en-US&ui=0")
+    await page.goto("/p/expense-detail?d_role=finance&d_lifecycle=approved&d_density=comfortable&d_locale=en-US&d_overlay=none&ui=0")
     const target = page.locator('[data-proto="ReimburseButton"]').first()
     await expect(target, "The only finance action at this stage. Payment itself happens in an external system.").toBeVisible()
     await target.click()
@@ -27,7 +28,7 @@ test.describe("Finance reimburses", () => {
   })
 
   test("3. Done — terminal state", async ({ page }) => {
-    await page.goto("/p/expense-detail?d_role=finance&d_lifecycle=reimbursed&d_density=comfortable&d_locale=en-US&ui=0")
+    await page.goto("/p/expense-detail?d_role=finance&d_lifecycle=reimbursed&d_density=comfortable&d_locale=en-US&d_overlay=none&ui=0")
     await expect(page.locator("[data-proto]").first()).toBeVisible() // observe step
   })
 

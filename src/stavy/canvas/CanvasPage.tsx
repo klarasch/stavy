@@ -6,6 +6,7 @@ import {
 import { cn } from "../cn"
 import { manifest, activeSlice, getPage, resolveDims, pageUrl, valueLabel, dimensionLabel } from "../manifest"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "./PanZoom"
+import { CanvasInspectContext, CanvasViewportContext, type CanvasViewport } from "./visibility"
 import { InstanceCard, VIEWPORT_W } from "./InstanceCard"
 import { CanvasNotes } from "./CanvasNotes"
 import { AnatomyCard } from "./AnatomyCard"
@@ -68,7 +69,7 @@ function Area({
 /* dimensions, declared-but-unpinned cells shown as dashed placeholders */
 /* ------------------------------------------------------------------ */
 
-const PageGroup = memo(function PageGroup({ page, showNotes }: { page: PageDef; showNotes: boolean }) {
+const PageGroup = memo(function PageGroup({ page, showNotes, wireframe }: { page: PageDef; showNotes: boolean; wireframe: boolean }) {
   const navigate = useNavigate()
   const template = manifest.templates.find((tp) => tp.id === page.template)
   const scale = cardScale(page)
@@ -177,7 +178,8 @@ const PageGroup = memo(function PageGroup({ page, showNotes }: { page: PageDef; 
                     scale={scale}
                     hideChips={hideChips}
                     showNotes={showNotes}
-                    onOpen={(dims) => navigate(pageUrl(page.id, dims))}
+                    wireframe={wireframe}
+                    onOpen={(dims) => navigate(pageUrl(page.id, dims, wireframe ? { w: "1" } : undefined))}
                   />
                 ))}
               </div>
@@ -199,7 +201,7 @@ const PageGroup = memo(function PageGroup({ page, showNotes }: { page: PageDef; 
 })
 
 function RowFragment({
-  page, r, cols, colDim, rowDim, groupDims, find, w, h, scale, hideChips, showNotes, onOpen,
+  page, r, cols, colDim, rowDim, groupDims, find, w, h, scale, hideChips, showNotes, wireframe, onOpen,
 }: {
   page: PageDef
   r: string | null
@@ -213,6 +215,7 @@ function RowFragment({
   scale: number
   hideChips: boolean
   showNotes: boolean
+  wireframe: boolean
   onOpen: (dims: Record<string, string>) => void
 }) {
   return (
@@ -238,6 +241,7 @@ function RowFragment({
               hideChips={hideChips}
               annotations={page.annotations}
               showPins={showNotes}
+              wireframe={wireframe}
             />
           )
         }
@@ -271,7 +275,26 @@ export function CanvasPage() {
   const pz = useRef<PanZoomHandle>(null)
   const zoomLabel = useRef<HTMLSpanElement>(null)
   const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null)
+  const contentElRef = useRef<HTMLDivElement | null>(null)
   const initialT = useRef(t)
+
+  // Lazy card mounting: cards subscribe to the live transform and mount when
+  // they come near the viewport (see visibility.tsx for why not IO).
+  const vpListeners = useRef<Set<() => void>>(new Set())
+  const canvasViewport = useMemo<CanvasViewport>(
+    () => ({
+      get: () => pz.current?.get() ?? initialT.current,
+      subscribe: (fn) => {
+        vpListeners.current.add(fn)
+        return () => {
+          vpListeners.current.delete(fn)
+        }
+      },
+      viewportEl: () => contentElRef.current?.parentElement ?? null,
+      contentEl: () => contentElRef.current,
+    }),
+    []
+  )
 
   const { theme, setTheme, setHidden } = useChrome()
   const { open: openComments } = useComments()
@@ -304,6 +327,7 @@ export function CanvasPage() {
   const getScale = useCallback(() => pz.current?.get().k ?? initialT.current.k, [])
   const onLive = useCallback((lt: Transform) => {
     if (zoomLabel.current) zoomLabel.current.textContent = fmtZoom(lt.k)
+    for (const fn of vpListeners.current) fn()
   }, [])
 
   // Zoom the viewport to fit the chosen section.
@@ -348,8 +372,10 @@ export function CanvasPage() {
   const components = manifest.pages.filter((p) => p.kind === "component")
 
   return (
+    <CanvasViewportContext.Provider value={canvasViewport}>
+    <CanvasInspectContext.Provider value={inspect}>
     <div className="h-screen relative overflow-hidden">
-      <PanZoom ref={pz} initial={initialT.current} onCommit={setT} onLive={onLive} contentRef={(el) => { if (el !== contentEl) setContentEl(el) }}>
+      <PanZoom ref={pz} initial={initialT.current} onCommit={setT} onLive={onLive} contentRef={(el) => { contentElRef.current = el; if (el !== contentEl) setContentEl(el) }}>
         <div
           data-canvas-root
           className={cn("ps flex flex-col items-start gap-14 p-12", wireframe && "proto-wireframe", inspect && "ps-inspect-on")}
@@ -360,7 +386,7 @@ export function CanvasPage() {
               <div className="flex flex-wrap items-start gap-10">
                 {(manifest.requirements?.length ?? 0) > 0 && (
                   <div data-toc="board:coverage">
-                    <CoverageBoard />
+                    <CoverageBoard wireframe={wireframe} />
                   </div>
                 )}
                 {(manifest.boards ?? []).map((b) => (
@@ -411,7 +437,7 @@ export function CanvasPage() {
                               scale={page.kind === "component" ? cardScale(page) * 0.7 : 0.14}
                               frame={page.frame}
                               scope="scenarios"
-                              href={pageUrl(st.page, dims, { tour: sc.id, ts: String(i) })}
+                              href={pageUrl(st.page, dims, { tour: sc.id, ts: String(i), ...(wireframe ? { w: "1" } : {}) })}
                             />
                           </div>
                         </div>
@@ -427,7 +453,7 @@ export function CanvasPage() {
           <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
             {pages.map((page) => (
               <Area key={page.id} title={page.label} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
-                <PageGroup page={page} showNotes={showNotes} />
+                <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} />
               </Area>
             ))}
           </div>
@@ -437,7 +463,7 @@ export function CanvasPage() {
             <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
               {components.map((page) => (
                 <Area key={page.id} title={page.label} kind="component" icon={<Boxes />} tocId={`page:${page.id}`}>
-                  <PageGroup page={page} showNotes={showNotes} />
+                  <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} />
                 </Area>
               ))}
             </div>
@@ -497,7 +523,7 @@ export function CanvasPage() {
             <ThemeToggle tipBelow />
             <HelpButton tipBelow />
           </div>
-          {commentsOpen && <CommentsPanel onClose={() => setFlag("comments", false)} />}
+          {commentsOpen && <CommentsPanel wireframe={wireframe} onClose={() => setFlag("comments", false)} />}
           <ShortcutsSheet
             items={[
               ["Notes", "N"], ["Wireframe", "W"], ["Inspect", "I"], ["Theme", "T"],
@@ -514,5 +540,7 @@ export function CanvasPage() {
         </>
       )}
     </div>
+    </CanvasInspectContext.Provider>
+    </CanvasViewportContext.Provider>
   )
 }

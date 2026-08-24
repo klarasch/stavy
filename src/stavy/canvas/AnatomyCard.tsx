@@ -3,6 +3,7 @@ import { PageRenderer } from "../PageRenderer"
 import { resolveDims } from "../manifest"
 import { findProtoTarget } from "../proto"
 import { VIEWPORT_W, VIEWPORT_H } from "./InstanceCard"
+import { useLiveWhenVisible } from "./visibility"
 import type { PageDef } from "../types"
 
 interface Callout {
@@ -29,7 +30,9 @@ export const AnatomyCard = memo(function AnatomyCard({ page, scale = 0.3 }: { pa
   const w = Math.round(FW * scale)
   const h = Math.round(FH * scale)
   const frameRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const live = useLiveWhenVisible(frameRef)
+  const [portalHost, setPortalHost] = useState<HTMLDivElement | null>(null)
   const [callouts, setCallouts] = useState<Callout[]>([])
 
   useEffect(() => {
@@ -62,16 +65,26 @@ export const AnatomyCard = memo(function AnatomyCard({ page, scale = 0.3 }: { pa
     }
     measure()
     return () => clearTimeout(timer)
-  }, [page.id, annotations])
+  }, [page.id, annotations, live])
 
   if (!annotations.length) return null
 
   return (
     <div className="ps flex items-start gap-6" data-ps-ui>
       <div ref={frameRef} className="ps-card-frame relative rounded-lg bg-white overflow-hidden shrink-0" style={{ width: w, height: h }}>
-        <div ref={contentRef} className="pointer-events-none select-none origin-top-left" style={{ width: FW, height: FH, transform: `scale(${scale})` }}>
-          <PageRenderer pageId={page.id} dims={dims} nav={() => {}} />
-        </div>
+        {live && (
+          <div
+            ref={(el) => {
+              contentRef.current = el
+              setPortalHost(el)
+            }}
+            inert
+            className="relative pointer-events-none select-none origin-top-left"
+            style={{ width: FW, height: FH, transform: `scale(${scale})` }}
+          >
+            {portalHost && <PageRenderer pageId={page.id} dims={dims} nav={() => {}} portalContainer={portalHost} />}
+          </div>
+        )}
         {callouts.map((c) => (
           <div key={c.n}>
             <div className="ps-anat-box" style={{ left: `${c.left}%`, top: `${c.top}%`, width: `${c.width}%`, height: `${c.height}%` }} />

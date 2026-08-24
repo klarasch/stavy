@@ -7,6 +7,7 @@ import type { PageProps } from "@/stavy/types"
 import { AppFrame, StatusBadge, money } from "./AppFrame"
 import { expenseDetailFixture, timelineFor } from "../fixtures"
 import { ApprovalActions } from "../organisms/ApprovalActions"
+import { ConfirmModal } from "../organisms/ConfirmModal"
 import { makeT } from "../strings"
 
 export function DetailTemplate({ dims, nav }: PageProps) {
@@ -14,10 +15,16 @@ export function DetailTemplate({ dims, nav }: PageProps) {
   const lifecycle = dims.lifecycle ?? "submitted"
   const density = dims.density ?? "comfortable"
   const locale = dims.locale ?? "en-US"
+  const overlay = dims.overlay ?? "none"
   const t = makeT(locale)
   const e = expenseDetailFixture(lifecycle)
   const events = timelineFor(lifecycle)
-  const setLifecycle = (next: string) => nav("expense-detail", { role, lifecycle: next, density, locale })
+  const goTo = (patch: Record<string, string>) =>
+    nav("expense-detail", { role, lifecycle, density, locale, overlay: "none", ...patch })
+  // Rejecting is destructive, so it walks to the overlay dimension first; the
+  // modal's confirm advances the lifecycle. Both are nav() — every state on canvas.
+  const setLifecycle = (next: string) =>
+    next === "rejected" ? goTo({ overlay: "reject-confirm" }) : goTo({ lifecycle: next })
 
   return (
     <AppFrame dims={dims} nav={nav} active="expenses">
@@ -110,6 +117,16 @@ export function DetailTemplate({ dims, nav }: PageProps) {
         </div>
       </div>
       </div>
+      {overlay === "reject-confirm" && (
+        <ConfirmModal
+          title={t("actions.rejectConfirm.title")}
+          body={t("actions.rejectConfirm.body")}
+          confirmLabel={t("actions.rejectConfirm.confirm")}
+          cancelLabel={t("actions.rejectConfirm.cancel")}
+          onConfirm={() => goTo({ lifecycle: "rejected" })}
+          onCancel={() => goTo({})}
+        />
+      )}
     </AppFrame>
   )
 }

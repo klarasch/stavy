@@ -1,6 +1,6 @@
 # Copy — Orbit
 
-89 strings · locales: en-US, de-DE · source: `src/demo/strings.json`
+93 strings · locales: en-US, de-DE · source: `src/demo/strings.json`
 
 | key | en-US | de-DE |
 |---|---|---|
@@ -57,6 +57,10 @@
 | `actions.requestChanges` | Request changes | Änderungen anfordern |
 | `actions.reimburse` | Mark as reimbursed | Als erstattet markieren |
 | `actions.none` | No actions for {role} while this expense is {lifecycle}. | Keine Aktionen für {role}, solange diese Ausgabe {lifecycle} ist. |
+| `actions.rejectConfirm.title` | Reject this expense? | Diese Ausgabe ablehnen? |
+| `actions.rejectConfirm.body` | The employee is notified and can revise and resubmit the expense. | Der Mitarbeiter wird benachrichtigt und kann die Ausgabe überarbeiten und erneut einreichen. |
+| `actions.rejectConfirm.confirm` | Reject expense | Ausgabe ablehnen |
+| `actions.rejectConfirm.cancel` | Cancel | Abbrechen |
 | `flow.title` | New expense | Neue Ausgabe |
 | `flow.sub` | Takes about a minute. Drafts save automatically. | Dauert etwa eine Minute. Entwürfe werden automatisch gespeichert. |
 | `flow.step.details` | Details | Details |

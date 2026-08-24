@@ -25,10 +25,11 @@ test.describe("Manager reviews and approves", () => {
     await expect.soft(page).toHaveURL(new RegExp("d_lifecycle=submitted"))
     await expect.soft(page).toHaveURL(new RegExp("d_density=comfortable"))
     await expect.soft(page).toHaveURL(new RegExp("d_locale=en-US"))
+    await expect.soft(page).toHaveURL(new RegExp("d_overlay=none"))
   })
 
   test("3. Approve it", async ({ page }) => {
-    await page.goto("/p/expense-detail?d_role=manager&d_lifecycle=submitted&d_density=comfortable&d_locale=en-US&ui=0")
+    await page.goto("/p/expense-detail?d_role=manager&d_lifecycle=submitted&d_density=comfortable&d_locale=en-US&d_overlay=none&ui=0")
     const target = page.locator('[data-proto="ApproveButton"]').first()
     await expect(target, "Approve advances the lifecycle. Reject and Request-changes branch to other stages — see those variants on the canvas.").toBeVisible()
     await target.click()
@@ -38,7 +39,7 @@ test.describe("Manager reviews and approves", () => {
   })
 
   test("4. Approved", async ({ page }) => {
-    await page.goto("/p/expense-detail?d_role=manager&d_lifecycle=approved&d_density=comfortable&d_locale=en-US&ui=0")
+    await page.goto("/p/expense-detail?d_role=manager&d_lifecycle=approved&d_density=comfortable&d_locale=en-US&d_overlay=none&ui=0")
     const target = page.locator('[data-proto="LifecycleTimeline"]').first()
     await expect(target, "The timeline records the decision; the expense now waits for finance.").toBeVisible()
   })

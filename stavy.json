@@ -56,6 +56,22 @@
       ]
     },
     {
+      "id": "overlay",
+      "label": "Overlay",
+      "kind": "state",
+      "values": [
+        {
+          "id": "none",
+          "label": "No overlay"
+        },
+        {
+          "id": "reject-confirm",
+          "label": "Reject confirmation",
+          "description": "Destructive-action confirm dialog; portalled into the card's portalContainer (SPEC §3 overlay containment)"
+        }
+      ]
+    },
+    {
       "id": "lifecycle",
       "label": "Expense lifecycle",
       "kind": "lifecycle",
@@ -387,7 +403,7 @@
     {
       "id": "expense-detail",
       "label": "Expense detail",
-      "description": "A single expense across its whole lifecycle; actions depend on role × lifecycle. Also varies by density and locale (4 dimensions → the toolbar switches to a panel).",
+      "description": "A single expense across its whole lifecycle; actions depend on role × lifecycle. Also varies by density, locale, and overlay (5 dimensions → the toolbar switches to a panel). Reject walks through a confirm-dialog overlay state.",
       "template": "detail-page",
       "fidelity": "interactive",
       "dimensions": {
@@ -411,13 +427,18 @@
         "locale": [
           "en-US",
           "de-DE"
+        ],
+        "overlay": [
+          "none",
+          "reject-confirm"
         ]
       },
       "defaults": {
         "role": "employee",
         "lifecycle": "submitted",
         "density": "comfortable",
-        "locale": "en-US"
+        "locale": "en-US",
+        "overlay": "none"
       },
       "instances": [
         {
@@ -433,6 +454,14 @@
             "lifecycle": "submitted"
           },
           "note": "Approve / reject / request changes"
+        },
+        {
+          "dims": {
+            "role": "manager",
+            "lifecycle": "submitted",
+            "overlay": "reject-confirm"
+          },
+          "note": "Overlay state: the modal is portalled into portalContainer, so it stays inside this card instead of covering the canvas (SPEC §3)"
         },
         {
           "dims": {
@@ -479,6 +508,11 @@
           "target": "LifecycleTimeline",
           "title": "Timeline",
           "note": "Renders the audit trail up to the current lifecycle stage."
+        },
+        {
+          "target": "RejectConfirmModal",
+          "title": "Contained overlay",
+          "note": "The confirm dialog is a dimension value (overlay: reject-confirm), not component state, and portals into the viewer's portalContainer — on the canvas it fills its own card instead of covering everything (SPEC §3 overlay containment)."
         }
       ]
     },

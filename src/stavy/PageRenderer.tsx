@@ -1,9 +1,10 @@
 import { Suspense } from "react"
 import { PsSkeleton } from "./chrome"
 import { pageComponents } from "./registry"
+import { PortalContainerProvider } from "./portal"
 import type { PageProps } from "./types"
 
-export function PageRenderer({ pageId, dims, nav }: { pageId: string } & PageProps) {
+export function PageRenderer({ pageId, dims, nav, portalContainer }: { pageId: string } & PageProps) {
   const Comp = pageComponents[pageId]
   if (!Comp) {
     return (
@@ -13,8 +14,10 @@ export function PageRenderer({ pageId, dims, nav }: { pageId: string } & PagePro
     )
   }
   return (
-    <Suspense fallback={<div className="p-8"><PsSkeleton style={{ height: 256, width: "100%" }} /></div>}>
-      <Comp dims={dims} nav={nav} />
-    </Suspense>
+    <PortalContainerProvider value={portalContainer ?? null}>
+      <Suspense fallback={<div className="p-8"><PsSkeleton style={{ height: 256, width: "100%" }} /></div>}>
+        <Comp dims={dims} nav={nav} portalContainer={portalContainer} />
+      </Suspense>
+    </PortalContainerProvider>
   )
 }

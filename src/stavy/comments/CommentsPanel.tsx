@@ -7,7 +7,7 @@ import { useComments, shareUrl, toMarkdown, decodePayload, describeAnchor, timeA
 import { manifest } from "../manifest"
 
 /** The list of all comments in the workspace, with share / import actions. */
-export function CommentsPanel({ onClose, onAdd }: { onClose: () => void; onAdd?: () => void }) {
+export function CommentsPanel({ onClose, onAdd, wireframe }: { onClose: () => void; onAdd?: () => void; wireframe?: boolean }) {
   const { comments, importMany, clearAll, author, setAuthor } = useComments()
   const navigate = useNavigate()
   const [filter, setFilter] = useState<"open" | "resolved" | "all">("open")
@@ -72,7 +72,7 @@ export function CommentsPanel({ onClose, onAdd }: { onClose: () => void; onAdd?:
               <button
                 key={c.id}
                 className="w-full text-left px-4 py-2.5 flex gap-2.5 cursor-pointer ps-crow"
-                onClick={() => navigate(pageUrl(c.page, c.dims, { c: c.id }))}
+                onClick={() => navigate(pageUrl(c.page, c.dims, { c: c.id, ...(wireframe ? { w: "1" } : {}) }))}
                 title="Open on the page"
               >
                 <span className="ps-cbubble" style={{ position: "static", transform: "none", flexShrink: 0 }} data-resolved={c.resolved ? "true" : undefined}>
