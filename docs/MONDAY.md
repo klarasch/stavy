@@ -66,8 +66,9 @@ What this does — **copies files in, nothing else**:
 | `.claude/skills/stavy/SKILL.md`, `SPEC.md`, `docs/STAVY-ADOPTION.md` | what Claude reads |
 | `src/vite-env.d.ts` | type declarations the viewer needs |
 
-**Keep the terminal output** — it prints the six wiring steps with your
-paths, and you'll paste it to Claude. Then:
+The wiring steps it prints are also saved to `docs/STAVY-WIRING.md` in the
+mock repo, so losing the terminal output doesn't matter — and re-running init
+is always safe (it overwrites `src/stavy/`, never your manifest or wiring). Then:
 
 ```bash
 git status --short
@@ -88,7 +89,7 @@ it picks up `.claude/skills/stavy`). Paste, filling in the two blanks:
 Stavy was just installed in this repo with
 `node ../stavy/scripts/init.mjs . --route /canvas`. Here is what it printed:
 
-<PASTE THE WHOLE INIT OUTPUT>
+<PASTE THE INIT OUTPUT — or say: read docs/STAVY-WIRING.md>
 
 Do exactly steps 1–4 from that output:
 - install react-router-dom IF this repo doesn't already have it (it's the only

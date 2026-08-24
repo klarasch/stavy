@@ -176,6 +176,28 @@ hosted backend — the anchor model and UI stay the same.
   Claude as "page URL + target id"; export comments as `.json`/`.md` and hand
   them to Claude as a task list — it returns a resolution file you import.
 
+## B5. Maintenance: home is upstream, work is a consumer
+
+The viewer is developed only in the reference repo (where npm works); adopting
+repos never edit `src/stavy/`. The loop:
+
+1. **Change at home** → regenerate what's committed-but-generated
+   (`node scripts/vendor-icons.mjs` if icons changed, `npm run build:css`
+   always — CI fails the push if either is stale) → commit, push.
+2. **Update at work**: `git pull` in the Stavy clone, then re-run the same
+   init command in the adopting repo — it overwrites `src/stavy/` and
+   `src/stavy.css`, leaves `stavy.json`, pages and wiring alone:
+   ```bash
+   node ../stavy/scripts/init.mjs . --route /canvas
+   ```
+   Review `git diff src/stavy`, run `npm run validate`, commit.
+3. `src/stavy/VERSION` (written by init) records which Stavy commit an
+   adopting repo is on — compare it to the reference repo when something
+   behaves differently at work. A `-dirty` suffix means the clone had
+   uncommitted changes at install time.
+4. A bug found at work is reproduced and fixed at home, never patched in the
+   adopting repo — a work-local fix is overwritten by the next re-init.
+
 ## C. CI/CD
 
 One workflow, three jobs. Example for GitHub Actions (adapt to GitLab/Bitbucket 1:1):
