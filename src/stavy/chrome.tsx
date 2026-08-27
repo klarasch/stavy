@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react"
 import { createPortal } from "react-dom"
+import { stavyLayer, StavyLayer } from "./toplayer"
 import { Sun, Moon, SunMoon, ChevronDown, Check, Eye, EyeOff, Keyboard } from "./icons"
 import { cn } from "./cn"
 
@@ -181,7 +182,7 @@ export function Tip({ label, keys, below, children }: { label: string; keys?: st
   return (
     <span ref={ref} className="inline-flex" onMouseEnter={show} onMouseLeave={hide} onMouseDown={hide}>
       {children}
-      {pos && createPortal(<TipBubble x={pos.x} y={pos.y} below={pos.below} label={label} keys={keys} />, document.body)}
+      {pos && createPortal(<TipBubble x={pos.x} y={pos.y} below={pos.below} label={label} keys={keys} />, stavyLayer())}
     </span>
   )
 }
@@ -279,6 +280,7 @@ export function ShortcutsSheet({ items }: { items: Array<[string, string]> }) {
   const { help, setHelp } = useChrome()
   if (!help) return null
   return (
+    <StavyLayer>
     <div className="ps-sheet" onClick={() => setHelp(false)}>
       <div className="ps ps-glass-strong rounded-2xl p-5 w-[420px]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-4">
@@ -300,6 +302,7 @@ export function ShortcutsSheet({ items }: { items: Array<[string, string]> }) {
         </div>
       </div>
     </div>
+    </StavyLayer>
   )
 }
 

@@ -391,7 +391,7 @@ export function Inspector({
         )}
       </div>
       {createPortal(
-      <div className="ps ps-glass-strong fixed right-4 top-4 w-[360px] rounded-2xl z-50 overflow-hidden">
+      <div className="ps ps-glass-strong fixed right-4 top-4 w-[360px] rounded-2xl overflow-hidden" style={{ zIndex: "var(--ps-z-chrome)" }}>
         <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--ps-border)" }}>
           <Crosshair className="size-4" style={{ color: "var(--ps-muted)" }} />
           <span className="text-[13px] font-semibold">Inspect</span>

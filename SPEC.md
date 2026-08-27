@@ -396,6 +396,30 @@ A conforming viewer SHOULD provide:
 - **Distinct chrome**: viewer UI must be visually separate from the prototype
   (the reference viewer uses floating dark chrome) so tool and product are never
   confused in a demo.
+- **Chrome robustness**: the chrome runs inside an arbitrary host app and must
+  not depend on anything the host provides — or lose to anything the host does.
+  Three rules, all learned the hard way:
+  1. *Self-resetting styles.* Never rely on the host's CSS reset: a raw
+     `<button>` renders as a native system control in a host without a
+     preflight. The reference viewer ships a zero-specificity (`:where()`)
+     button reset scoped to its own chrome and explicitly excluding rendered
+     page content, whose kit styling must never be touched.
+  2. *One top-layer portal root.* All floating chrome (tooltips, tour cards,
+     sheets) portals into a single fixed element appended last to `<body>`
+     with a z-index near int-max (`--ps-z-top`); fixed panels sit one notch
+     below (`--ps-z-chrome`). Enterprise apps run headers and modals at
+     z 1000–9999 — the viewer must win without per-surface z-index wars.
+     Internal layering then stays a private matter between chrome elements.
+     (Hosts using the native top layer — `<dialog>`, `popover` — still paint
+     above any z-index; the upgrade path is the `popover` attribute on the
+     portal root.) Page overlays are exempt: they stay card-contained per
+     the overlay-containment rule above.
+  3. *Viewport-space positioning.* Anything anchored to page content but
+     rendered as chrome (tour cards, tooltips) positions in viewport
+     coordinates from `getBoundingClientRect()` with measured size,
+     flip-and-clamp against the viewport, and scroll tracking — host pages
+     have nested `overflow: hidden` scrollers, and anything positioned inside
+     them will eventually clip.
 - **Wireframe mode** (optional): a fidelity toggle that renders prototype
   content lo-fi without touching the code.
 - **Inspector**: dev mode, on pages *and* on the canvas thumbnails. For the

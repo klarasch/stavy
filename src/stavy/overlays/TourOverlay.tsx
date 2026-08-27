@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react"
 import { useNavigate } from "react-router-dom"
 import { ArrowLeft, ArrowRight, X, Check } from "../icons"
 import { findProtoTarget } from "../proto"
 import { getPage, pageUrl, resolveDims } from "../manifest"
 import { PsButton, Chip, useHotkeys } from "../chrome"
+import { StavyLayer } from "../toplayer"
 import type { Scenario } from "../types"
 
 interface Rect {
@@ -11,6 +12,22 @@ interface Rect {
   left: number
   width: number
   height: number
+}
+
+/**
+ * The target is tracked in two coordinate spaces at once: the halo lives in
+ * the page wrapper (it highlights content, so it must scroll and clip with
+ * it), while the step card renders in the Stavy top layer with viewport
+ * coordinates — host pages have nested `overflow: hidden` scrollers, and a
+ * card positioned inside them clips whenever the target sits near an edge.
+ */
+interface Measured {
+  vp: Rect
+  local: Rect
+}
+
+function sameRect(a: Rect, b: Rect) {
+  return a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height
 }
 
 function stepUrl(scenario: Scenario, idx: number, carry?: Record<string, string>): string {
@@ -36,7 +53,7 @@ export function TourOverlay({
 }) {
   const navigate = useNavigate()
   const step = scenario.steps[stepIdx]
-  const [rect, setRect] = useState<Rect | null>(null)
+  const [rect, setRect] = useState<Measured | null>(null)
   const isLast = stepIdx === scenario.steps.length - 1
 
   useEffect(() => {
@@ -44,30 +61,52 @@ export function TourOverlay({
     if (!step?.target) return
     let tries = 0
     let timer: ReturnType<typeof setTimeout>
+    let raf: number | null = null
     let scrolled = false
     const measure = () => {
       const el = findProtoTarget(wrapper, step.target!)
-      if (el) {
-        if (!scrolled) {
-          scrolled = true
-          el.scrollIntoView({ block: "center", behavior: "smooth" })
-        }
-        const w = wrapper.getBoundingClientRect()
-        const r = el.getBoundingClientRect()
-        setRect({
+      if (!el) return false
+      if (!scrolled) {
+        scrolled = true
+        el.scrollIntoView({ block: "center", behavior: "smooth" })
+      }
+      const w = wrapper.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
+      const next: Measured = {
+        vp: { top: r.top, left: r.left, width: r.width, height: r.height },
+        local: {
           top: r.top - w.top + wrapper.scrollTop,
           left: r.left - w.left + wrapper.scrollLeft,
           width: r.width,
           height: r.height,
-        })
+        },
       }
-      if (tries++ < 30) timer = setTimeout(measure, el ? 400 : 120)
+      setRect((prev) => (prev && sameRect(prev.vp, next.vp) && sameRect(prev.local, next.local) ? prev : next))
+      return true
     }
-    measure()
-    window.addEventListener("resize", measure)
+    // Retry loop handles late-mounting targets and layout settling…
+    const retry = () => {
+      const found = measure()
+      if (tries++ < 30) timer = setTimeout(retry, found ? 400 : 120)
+    }
+    // …while scroll/resize track continuously (capture catches nested
+    // scrollers), rAF-throttled. The card is viewport-positioned, so it must
+    // follow every scroll of the page, not just the settle loop.
+    const schedule = () => {
+      if (raf == null)
+        raf = requestAnimationFrame(() => {
+          raf = null
+          measure()
+        })
+    }
+    retry()
+    window.addEventListener("resize", schedule)
+    window.addEventListener("scroll", schedule, { capture: true, passive: true })
     return () => {
       clearTimeout(timer)
-      window.removeEventListener("resize", measure)
+      if (raf != null) cancelAnimationFrame(raf)
+      window.removeEventListener("resize", schedule)
+      window.removeEventListener("scroll", schedule, true)
     }
   }, [step, wrapper, stepIdx])
 
@@ -91,13 +130,32 @@ export function TourOverlay({
     ArrowLeft: () => stepIdx > 0 && navigate(stepUrl(scenario, stepIdx - 1, carry)),
   })
 
+  // Real card height for flip/clamp — the old hardcoded estimate mispositioned
+  // long step notes. Runs every render; setState bails when unchanged.
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [cardH, setCardH] = useState(200)
+  useLayoutEffect(() => {
+    const h = cardRef.current?.offsetHeight
+    if (h) setCardH(h)
+  })
+
   if (!step) return null
 
   const pad = 6
-  const CARD_ESTIMATE = 200
-  const flipAbove =
-    rect !== null &&
-    rect.top + rect.height + 16 + CARD_ESTIMATE > wrapper.scrollTop + wrapper.clientHeight - 90
+  const GAP = 16
+  const MARGIN = 16
+  const CARD_W = 320 // w-80
+  let cardStyle: CSSProperties
+  if (rect) {
+    const below = rect.vp.top + rect.vp.height + GAP
+    const fitsBelow = below + cardH + MARGIN <= window.innerHeight
+    cardStyle = {
+      top: fitsBelow ? below : Math.max(MARGIN, rect.vp.top - GAP - cardH),
+      left: Math.max(MARGIN, Math.min(rect.vp.left, window.innerWidth - CARD_W - MARGIN)),
+    }
+  } else {
+    cardStyle = { bottom: 96, left: "50%", transform: "translateX(-50%)" }
+  }
 
   return (
     <div className="absolute inset-0 pointer-events-none z-40" data-ps-ui>
@@ -105,24 +163,18 @@ export function TourOverlay({
         <div
           className="ps-halo transition-all duration-300"
           style={{
-            top: rect.top - pad,
-            left: rect.left - pad,
-            width: rect.width + pad * 2,
-            height: rect.height + pad * 2,
+            top: rect.local.top - pad,
+            left: rect.local.left - pad,
+            width: rect.local.width + pad * 2,
+            height: rect.local.height + pad * 2,
           }}
         />
       )}
+      <StavyLayer>
       <div
-        className="ps ps-glass-strong absolute pointer-events-auto w-80 rounded-2xl p-4"
-        style={
-          rect
-            ? {
-                top: flipAbove ? rect.top - 16 : rect.top + rect.height + 16,
-                transform: flipAbove ? "translateY(-100%)" : undefined,
-                left: Math.max(16, Math.min(rect.left, wrapper.clientWidth - 340)),
-              }
-            : { bottom: 96, left: "50%", transform: "translateX(-50%)" }
-        }
+        ref={cardRef}
+        className="ps ps-glass-strong fixed w-80 rounded-2xl p-4"
+        style={cardStyle}
       >
         <div className="flex items-center gap-2 mb-2.5">
           <Chip sm accent>{scenario.label}</Chip>
@@ -159,6 +211,7 @@ export function TourOverlay({
           )}
         </div>
       </div>
+      </StavyLayer>
     </div>
   )
 }
