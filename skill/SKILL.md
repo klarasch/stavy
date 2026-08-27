@@ -161,6 +161,52 @@ Two rules beyond the container:
   `<App>` / `ConfigProvider` `getContainer`); otherwise treat that state as
   `fidelity: static`.
 
+The reference viewer polices both rules in dev: a chrome warning (bottom-left,
+plus `console.warn` `[stavy] …`) names the page whose overlay landed at
+`document.body`, and another appears while a scroll lock holds `<body>`.
+Treat these as failing checks — fix the page, don't dismiss them.
+
+## State — every canvas card is an independent instance
+
+A page module renders as a pure function of `(dims, nav)`, and the canvas
+mounts *many instances of it at once* — one per pinned variant. Kit and store
+defaults assume one app instance per document; the canvas breaks that
+assumption the same way it breaks body portals. The rules:
+
+- **No module-level stores.** A store created at module scope is shared by
+  every card of that page: click something in one variant and three other
+  variants mutate. Instantiate per mount instead — Zustand: `createStore` /
+  `create` *inside* the component (or a context provider per instance), never
+  at top level; Redux: `configureStore` in a provider component, one per
+  instance, never an imported singleton; React Query: `new QueryClient()` per
+  mount, not a shared module export. Jotai atoms are definitions, not
+  instances — fine at module level; the *default store* is the shared thing
+  (use `<Provider>` per page if anything writes atoms).
+  `npm run validate` flags top-level `create(`/`configureStore(`/
+  `new QueryClient(` in page sources as warnings; suppress a deliberate
+  shared store with `// @proto-shared-store` on the declaration line (or the
+  line above).
+- **Data derives from dims, never from the network.** Resolve fixtures from
+  `dims`; don't fetch, and don't mock with service workers or global fetch
+  intercepts — those are document-wide singletons too, and they make the
+  canvas nondeterministic. Interactive-fidelity state is local
+  (`useState`/`useReducer`), seeded from the fixture.
+- **No import-time side effects.** Page modules are imported once and shared
+  by every card: nothing at module top level may touch `document`/`window`,
+  inject global CSS, set `body` classes, start timers, or init analytics.
+  Effects belong in the component and must clean up on unmount.
+- **The viewer owns the URL.** All viewer state is URL state, so a page that
+  reads or writes `location` (or mounts its own router) fights the viewer.
+  Navigation goes through the `nav` prop only.
+- **Deterministic fixtures.** No `Date.now()`, `new Date()` without arguments,
+  or `Math.random()` in fixtures or render paths — snapshots and scenario
+  tests diff. Fixed dates, seeded ids.
+
+If the product's real code paths depend on a singleton store you can't
+untangle, wrap the singleton in a factory in the workspace rather than
+importing the instance — same move as extending a modal wrapper to forward a
+container.
+
 ## Setting up a new workspace
 
 When asked to install Stavy in a repo (any framework, any UI kit):

@@ -7,7 +7,7 @@
 //
 // Exit code 1 on errors; warnings never fail the run.
 import { readFileSync, existsSync, statSync } from "node:fs"
-import { resolve, dirname } from "node:path"
+import { resolve, dirname, relative } from "node:path"
 
 const argv = process.argv.slice(2)
 const flags = { refs: [], coverage: false }
@@ -86,7 +86,7 @@ function collectSources(entry, depth = 2, seen = new Set()) {
   }
   return seen
 }
-function sourcesFor(page) {
+function sourceFilesFor(page) {
   const t = templateIndex.get(page.template)
   const organismSources = (t?.organisms ?? [])
     .map((id) => pageIndex.get(id))
@@ -94,7 +94,10 @@ function sourcesFor(page) {
   const entries = [t?.source, page.module ?? `src/demo/pages/${page.id}.tsx`, ...organismSources].filter(Boolean)
   const files = new Set()
   for (const e of entries) collectSources(e, 2, files)
-  return [...files].map(readSource).join("\n")
+  return files
+}
+function sourcesFor(page) {
+  return [...sourceFilesFor(page)].map(readSource).join("\n")
 }
 // A target counts as present when its id appears as a string literal in the
 // resolved sources (`proto("Id")`, `data-proto="Id"`, a lookup table entry),
@@ -126,6 +129,40 @@ for (const page of m.pages) {
   const src = sourcesFor(page)
   for (const a of page.annotations ?? []) {
     if (src && !hasTarget(src, a.target)) err(`${w} annotation target "${a.target}" not found in source`)
+  }
+}
+
+// ---- module-level singleton stores in page sources
+// Every canvas card mounts an independent instance of a page module. A store
+// created at module scope (Zustand `create(...)`, a Redux `configureStore(...)`
+// exported from the module, `new QueryClient()` at the top) is shared by every
+// card of that page — interacting with one variant mutates the others. Flag
+// `// @proto-shared-store` on the line (or the line above) to suppress a
+// false positive.
+const STORE_PATTERNS = [
+  { lib: /zustand/, call: /\b(create|createStore)\s*\(/, what: "zustand store" },
+  { lib: /redux/, call: /\b(configureStore|createStore)\s*\(/, what: "redux store" },
+  { lib: /(@tanstack\/)?react-query/, call: /\bnew\s+QueryClient\s*\(/, what: "QueryClient" },
+]
+function importsMatching(src, lib) {
+  for (const m of src.matchAll(/from\s+["']([^"']+)["']/g)) if (lib.test(m[1])) return true
+  return false
+}
+for (const page of m.pages) {
+  const w = `page "${page.id}"`
+  for (const abs of sourceFilesFor(page)) {
+    const text = readSource(abs)
+    if (!text) continue
+    const lines = text.split("\n")
+    const rel = relative(root, abs)
+    for (const pat of STORE_PATTERNS) {
+      if (!importsMatching(text, pat.lib)) continue
+      lines.forEach((line, i) => {
+        if (!/^(export\s+)?(const|let|var)\s+/.test(line) || !pat.call.test(line)) return
+        if (/@proto-shared-store/.test(line) || /@proto-shared-store/.test(lines[i - 1] ?? "")) return
+        warn(`${w}: ${rel}:${i + 1}: module-level store (${pat.what}) — every canvas card shares it; create the store inside the component (factory/provider per instance)`)
+      })
+    }
   }
 }
 

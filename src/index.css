@@ -331,6 +331,21 @@
 .ps-eye:hover { opacity: 1; transform: translateY(-1px); color: var(--ps-fg); }
 .ps-eye[data-hidden="true"] { opacity: .35; }
 .ps-eye svg { width: 15px; height: 15px; }
+/* ---- adoption diagnostics (dev only): escaped portals, scroll locks ---- */
+.ps-diags {
+  position: fixed; left: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 8px;
+  width: min(380px, calc(100vw - 28px));
+}
+.ps-diag {
+  display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border-radius: 14px;
+  font-size: 12px; line-height: 1.45; color: var(--ps-fg);
+}
+.ps-diag-icon { width: 15px; height: 15px; flex: none; margin-top: 1px; color: var(--ps-pin); }
+.ps-diag-title { font-weight: 600; font-size: 12.5px; margin-bottom: 2px; }
+.ps-diag-detail { color: var(--ps-muted); }
+.ps-diag-fix { color: var(--ps-fg); }
+.ps-diag-close { flex: none; margin-top: 1px; color: var(--ps-faint); cursor: pointer; }
+.ps-diag-close:hover { color: var(--ps-fg); }
 /* ---- zoom-constant labels on the canvas (scaled by 1/zoom, capped) ---- */
 .ps-zl { display: inline-block; transform: scale(var(--ps-inv, 1)); transform-origin: left bottom; white-space: nowrap; }
 .ps-zl-right { transform-origin: right center; }

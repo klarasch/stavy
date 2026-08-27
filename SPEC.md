@@ -420,6 +420,14 @@ A conforming viewer SHOULD provide:
      flip-and-clamp against the viewport, and scroll tracking — host pages
      have nested `overflow: hidden` scrollers, and anything positioned inside
      them will eventually clip.
+- **Adoption diagnostics** (dev builds): the two containment failures that
+  break silently — a page overlay portalled to `document.body` instead of the
+  provided container, and a kit scroll lock grabbing `<body>` (it blocks
+  canvas panning even from a correctly contained modal) — SHOULD surface as
+  named viewer warnings with the fix, attributed to the offending page where
+  the framework allows (the reference viewer walks React fibers back through
+  the portal). Detection only: a viewer MUST NOT move the escaped node into
+  the card or revert the lock — both fight the framework that owns them.
 - **Wireframe mode** (optional): a fidelity toggle that renders prototype
   content lo-fi without touching the code.
 - **Inspector**: dev mode, on pages *and* on the canvas thumbnails. For the

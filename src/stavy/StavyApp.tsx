@@ -3,6 +3,7 @@ import { CanvasPage } from "./canvas/CanvasPage"
 import { PageView } from "./PageView"
 import { ChromeProvider, EyeToggle } from "./chrome"
 import { CommentsProvider } from "./comments/store"
+import { StavyDiagnostics } from "./diagnostics"
 
 /**
  * The whole viewer as one element, mountable inside any react-router app.
@@ -24,6 +25,7 @@ export function StavyApp() {
           <Route path="p/:pageId" element={<PageView />} />
         </Routes>
         <EyeToggle />
+        {import.meta.env.DEV && <StavyDiagnostics />}
       </CommentsProvider>
     </ChromeProvider>
   )
