@@ -185,8 +185,15 @@
   font: inherit; color: inherit; text-align: inherit; cursor: pointer;
 }
 /* Portal root for floating Stavy chrome (tooltips, tour cards, sheets).
-   Appended last to <body>; children re-enable pointer events themselves. */
-.ps-toplayer { position: fixed; inset: 0; z-index: var(--ps-z-top); pointer-events: none; }
+   Appended last to <body>; children re-enable pointer events themselves.
+   Promoted into the native top layer via popover="manual" (see toplayer.tsx),
+   so every UA [popover] default (fit-content size, auto margins, border,
+   padding, Canvas background, overflow) is explicitly neutralized here. */
+.ps-toplayer {
+  position: fixed; inset: 0; z-index: var(--ps-z-top); pointer-events: none;
+  width: auto; height: auto; margin: 0; border: 0; padding: 0;
+  background: transparent; color: inherit; overflow: visible;
+}
 .ps-toplayer > * { pointer-events: auto; }
 .ps-glass {
   background: var(--ps-glass);

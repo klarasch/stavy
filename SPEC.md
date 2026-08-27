@@ -348,7 +348,10 @@ A conforming viewer SHOULD provide:
     and eager mounting does not scale past toy workspaces — and MAY evict a
     card back to a placeholder after it has been far off-screen for a while
     (the reference viewer uses distance + dwell hysteresis so panning back
-    and forth never thrashes, and holds eviction during inspect mode);
+    and forth never thrashes, holds eviction during inspect mode, and also
+    caps simultaneously live cards at a hard budget — over it, the farthest
+    off-screen card evicts immediately — so a broad pan over an
+    enterprise-sized canvas can never accumulate unbounded DOM);
   - off-screen and not-yet-mounted cards render as placeholders, and at zoom
     levels where a page is illegible anyway (below ~15%) a placeholder MAY
     stand in even on screen. Where pre-rendered snapshots exist (the

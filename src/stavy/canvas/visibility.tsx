@@ -55,6 +55,16 @@ const EVICT_PX = 1200
 const EVICT_MS = 15_000
 /** Idle heartbeat so eviction still happens when nobody pans. */
 const SWEEP_MS = 5_000
+/**
+ * Hard ceiling on simultaneously live cards, whatever the canvas size —
+ * enterprise pages run 1k+ DOM nodes each, and dwell-based eviction alone
+ * still lets a broad pan or a mid-zoom overview accumulate dozens of live
+ * pages. Over budget, off-screen cards evict immediately, farthest first.
+ * Self-policing: each live card reports its distance into a shared registry
+ * on every check and unmounts itself when it is the farthest one out.
+ */
+const LIVE_BUDGET = 24
+const liveRegistry = new Map<Element, number>()
 
 /**
  * True while the element is near the viewport at a legible zoom. Mounts
@@ -92,15 +102,39 @@ export function useLiveWhenVisible(ref: React.RefObject<HTMLElement | null>): bo
         if (t.k >= MIN_LIVE_K && within(NEAR_PX)) setLive(true)
         return
       }
-      // Live: evict after a continuous EVICT_MS beyond EVICT_PX. Inspect mode
-      // holds everything, and the card under the pointer is never evicted.
-      if (within(EVICT_PX) || inspecting || el.matches(":hover")) {
+      const hover = el.matches(":hover")
+      // Budget: distance beyond the viewport edge (0 = on screen), reported
+      // every check; when over budget the farthest off-screen card evicts
+      // itself immediately — no dwell, bounded memory beats smooth pan-back.
+      const dist = Math.max(
+        0,
+        left - vp.clientWidth,
+        -(left + w),
+        top - vp.clientHeight,
+        -(top + h)
+      )
+      liveRegistry.set(el, dist)
+      if (liveRegistry.size > LIVE_BUDGET && dist > 0 && !inspecting && !hover) {
+        let farthest: Element | null = null
+        let max = 0
+        for (const [e, d] of liveRegistry) if (d > max) { max = d; farthest = e }
+        if (farthest === el) {
+          liveRegistry.delete(el)
+          setLive(false)
+          return
+        }
+      }
+      // Dwell: evict after a continuous EVICT_MS beyond EVICT_PX — or below
+      // the legibility zoom floor, where the placeholder stands in anyway.
+      // Inspect mode holds everything; the hovered card is never evicted.
+      if ((within(EVICT_PX) && t.k >= MIN_LIVE_K) || inspecting || hover) {
         farSince = null
         return
       }
       farSince ??= Date.now()
       if (Date.now() - farSince >= EVICT_MS) {
         farSince = null
+        liveRegistry.delete(el)
         setLive(false)
       }
     }
@@ -120,6 +154,7 @@ export function useLiveWhenVisible(ref: React.RefObject<HTMLElement | null>): bo
       clearInterval(sweep)
       window.removeEventListener("resize", schedule)
       if (raf != null) cancelAnimationFrame(raf)
+      if (ref.current) liveRegistry.delete(ref.current)
     }
   }, [ctx, live, inspecting, ref])
   return live

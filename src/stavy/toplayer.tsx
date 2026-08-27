@@ -10,8 +10,14 @@ import type { ReactNode } from "react"
  * deliberately contained inside card frames (see portal.tsx).
  *
  * Hosts that put their own UI in the native top layer (<dialog>, popover)
- * still paint above any z-index; if that ever bites, the upgrade path is
- * rendering this root with the `popover` attribute and showPopover().
+ * paint above any z-index — no number wins against it. So the root promotes
+ * itself into the native top layer via `popover="manual"` + showPopover()
+ * (manual = no light-dismiss, no auto-closing); the z-index stays as the
+ * fallback for browsers without the Popover API, and if showPopover throws,
+ * the attribute is removed again (a non-open [popover] is display:none per
+ * the UA sheet). Remaining limitation: a host <dialog> opened *after* the
+ * layer sits above it in the top-layer stack until it closes; fixed chrome
+ * outside this layer (dock, panels) still loses to any native top layer.
  */
 let layer: HTMLDivElement | null = null
 
@@ -21,6 +27,14 @@ export function stavyLayer(): HTMLElement {
     layer.className = "ps-toplayer"
     layer.setAttribute("data-ps-ui", "")
     document.body.appendChild(layer)
+    if ("showPopover" in layer) {
+      layer.setAttribute("popover", "manual")
+      try {
+        layer.showPopover()
+      } catch {
+        layer.removeAttribute("popover")
+      }
+    }
   }
   return layer
 }
