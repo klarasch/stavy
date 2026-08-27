@@ -88,6 +88,13 @@ and you only climb when a scenario step *requires* it:
 | 0 | `static` | Screens rendered from fixtures. No handlers except what the template ships. | — (default for every new page) |
 | 1 | `navigable` | `nav()` calls between pages / dimension values (row → detail, CTA → flow). | A scenario step targets an element whose purpose is to go somewhere. |
 | 2 | `interactive` | Local state beyond navigation: form inputs that affect the screen, toggles, optimistic list changes, in-page state machines. | A scenario step cannot be *demonstrated* without it (e.g. "filter narrows the table"). |
+
+Fidelity describes the *opened page*. Canvas cards are static previews at
+every rung — thumbnails are inert, clicking a card opens the page in that
+state, and the viewer may unmount and re-render a card at any time. Never
+build behaviour that only works on the canvas, and never rely on a card
+keeping state. (Run `npm run snapshot` when pinned states change: the PNGs
+in `public/snapshots/` double as the canvas's placeholder thumbnails.)
 | ✗ | — | Real data fetching, persistence, auth, validation libraries, business logic. | Never. Mock it, and say so in an annotation. |
 
 Rules of thumb:

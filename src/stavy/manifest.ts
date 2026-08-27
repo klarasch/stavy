@@ -79,6 +79,20 @@ export function dimsFromParams(page: PageDef, sp: URLSearchParams): Record<strin
   return resolveDims(page, overrides)
 }
 
+/**
+ * URL of the instance's pre-rendered snapshot (scripts/snapshot.mjs writes
+ * `public/snapshots/<page>__<dim=value>__….png`, dims in declaration order).
+ * Purely optional raster fallback: cards try it as their placeholder and fall
+ * back to a label when the file doesn't exist (404s are expected and cheap).
+ */
+export function snapshotUrl(page: PageDef, dims: Record<string, string>): string {
+  const full = resolveDims(page, dims)
+  const name = `${page.id}__${Object.keys(page.dimensions)
+    .map((d) => `${d}=${full[d]}`)
+    .join("__")}.png`
+  return `${import.meta.env.BASE_URL}snapshots/${name}`
+}
+
 /** Stable key identifying a page instance (page + full dimension assignment). */
 export function instanceKey(pageId: string, dims: Record<string, string>): string {
   const q = Object.entries(dims)

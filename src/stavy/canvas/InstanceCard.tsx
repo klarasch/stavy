@@ -2,7 +2,7 @@ import { memo, useContext, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { PageRenderer } from "../PageRenderer"
 import { CanvasInspectContext, useLiveWhenVisible } from "./visibility"
-import { getPage, pageUrl, valueLabel, instanceKey } from "../manifest"
+import { getPage, pageUrl, valueLabel, instanceKey, snapshotUrl } from "../manifest"
 import { findProtoTarget } from "../proto"
 import type { AnnotationDef } from "../types"
 import { cn } from "../cn"
@@ -60,6 +60,9 @@ export const InstanceCard = memo(function InstanceCard({
   const [portalHost, setPortalHost] = useState<HTMLDivElement | null>(null)
   const [pins, setPins] = useState<PinPos[]>([])
   const [open, setOpen] = useState<string | null>(null)
+  const [snapErr, setSnapErr] = useState(false)
+  const pageDef = getPage(pageId)
+  const snapshot = pageDef ? snapshotUrl(pageDef, dims) : null
   const w = Math.round(FW * scale)
   const h = Math.round(FH * scale)
   const url = href ?? pageUrl(pageId, dims, wireframe ? { w: "1" } : undefined)
@@ -124,11 +127,26 @@ export const InstanceCard = memo(function InstanceCard({
               {portalHost && <PageRenderer pageId={pageId} dims={dims} nav={() => {}} portalContainer={portalHost} />}
             </div>
           ) : (
-            <div
-              className="w-full h-full flex items-center justify-center text-[11px] font-medium"
-              style={{ color: "var(--ps-faint)" }}
-            >
-              {getPage(pageId)?.label ?? pageId}
+            /* Placeholder: the pre-rendered snapshot when one exists (raster
+               far view — canvas cards are static previews by design), else
+               the page label. The label sits underneath so a missing or
+               still-loading image degrades to today's skeleton look. */
+            <div className="relative w-full h-full">
+              <div
+                className="w-full h-full flex items-center justify-center text-[11px] font-medium"
+                style={{ color: "var(--ps-faint)" }}
+              >
+                {getPage(pageId)?.label ?? pageId}
+              </div>
+              {snapshot && !snapErr && (
+                <img
+                  src={snapshot}
+                  alt=""
+                  draggable={false}
+                  className="absolute inset-0 w-full h-full object-cover object-top select-none"
+                  onError={() => setSnapErr(true)}
+                />
+              )}
             </div>
           )}
         </div>

@@ -65,7 +65,10 @@ work. Steps marked **(skill)** are what Claude does for you when the
    page chunks are absent from `dist-<slice>/assets`. With the dev server
    running and Playwright's browser installed (`npx playwright install
    chromium`), `npm run snapshot -- --slice <id>` writes a PNG per pinned
-   instance to `snapshots/`.
+   instance to `public/snapshots/` — CI can diff them, and the canvas uses
+   them as raster placeholders for cards that aren't mounted (zoomed far out,
+   not yet visited, or evicted). Without them the canvas still works; cards
+   just show label placeholders instead of thumbnails.
 
 What to look for while testing: does the canvas read as a coverage map of
 your product? Can a colleague play a scenario without help? Does Inspect show
@@ -260,8 +263,9 @@ Notes:
   link the **canvas** of each slice — that's the review surface.
 - Visual diffs of every pinned state: run `vite preview` in the job, then
   `node scripts/snapshot.mjs --url http://localhost:4173` and diff
-  `snapshots/` against the base branch (upload as artifact, or use a visual
-  diff service). The viewer hides its chrome with `?ui=0`, which the script sets.
+  `public/snapshots/` against the base branch (upload as artifact, or use a
+  visual diff service). Snapshotting before `vite build` also bakes the PNGs
+  into the deploy, so the published canvas gets instant thumbnails. The viewer hides its chrome with `?ui=0`, which the script sets.
 - The requirements check is built in: `node scripts/validate.mjs --refs
   docs/PRD-118.md` fails if a scenario cites a ref that isn't in the document,
   and warns for documented sections no scenario demonstrates — the manifest as

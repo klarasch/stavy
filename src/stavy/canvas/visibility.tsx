@@ -2,13 +2,22 @@ import { createContext, useContext, useEffect, useState } from "react"
 import type { Transform } from "./PanZoom"
 
 /**
- * Lazy canvas mounting (SPEC §3). Instance cards render real product pages,
- * and real product pages are heavy — grids, charts, context providers. An
- * adoption trial measured 32k DOM nodes and a 16 s settle with every card
- * mounted eagerly, 87% of them off-screen; gating on the viewport cut that
- * to 4.6k nodes and ~3 s. So cards stay placeholders until they come near
- * the viewport, and stick once mounted — panning back and forth never
- * re-runs a page's effects or loses its state.
+ * Lazy canvas mounting + eviction (SPEC §3). Instance cards render real
+ * product pages, and real product pages are heavy — grids, charts, context
+ * providers. An adoption trial measured 32k DOM nodes and a 16 s settle with
+ * every card mounted eagerly, 87% of them off-screen; gating on the viewport
+ * cut that to 4.6k nodes and ~3 s. So cards stay placeholders until they come
+ * near the viewport — and since canvas cards are by decision *static previews*
+ * (interaction happens in the opened page, never on the canvas), a mounted
+ * card holds no state worth keeping and can be evicted back to a placeholder
+ * once it has been far off-screen for a while. Long sessions over big
+ * canvases then stop accumulating every card ever visited.
+ *
+ * Hysteresis keeps panning smooth: cards mount within NEAR_PX of the
+ * viewport but evict only after sitting beyond EVICT_PX for EVICT_MS
+ * continuously, so rocking back and forth over an area never thrashes.
+ * Eviction pauses while inspect mode is on (the inspector reads mounted
+ * DOM) and skips the card currently under the pointer.
  *
  * Visibility is computed arithmetically from PanZoom's transform, NOT with
  * IntersectionObserver: PanZoom writes the transform straight to the DOM
@@ -40,17 +49,26 @@ export const CanvasInspectContext = createContext(false)
 const NEAR_PX = 400
 /** Below this zoom a live page is illegible anyway; cards keep placeholders. */
 const MIN_LIVE_K = 0.15
+/** A live card farther than this from the viewport is an eviction candidate. */
+const EVICT_PX = 1200
+/** …but only after staying that far out for this long (pan-back never thrashes). */
+const EVICT_MS = 15_000
+/** Idle heartbeat so eviction still happens when nobody pans. */
+const SWEEP_MS = 5_000
 
 /**
- * True once the element has come near the viewport at a legible zoom; sticky
- * thereafter. Outside a canvas (no provider) it is true immediately.
+ * True while the element is near the viewport at a legible zoom. Mounts
+ * eagerly (NEAR_PX), evicts lazily (EVICT_PX + EVICT_MS dwell). Outside a
+ * canvas (no provider) it is true immediately and stays true.
  */
 export function useLiveWhenVisible(ref: React.RefObject<HTMLElement | null>): boolean {
   const ctx = useContext(CanvasViewportContext)
+  const inspecting = useContext(CanvasInspectContext)
   const [live, setLive] = useState(!ctx)
   useEffect(() => {
-    if (!ctx || live) return
+    if (!ctx) return
     let raf: number | null = null
+    let farSince: number | null = null
     const check = () => {
       raf = null
       const el = ref.current
@@ -58,7 +76,6 @@ export function useLiveWhenVisible(ref: React.RefObject<HTMLElement | null>): bo
       const vp = ctx.viewportEl()
       if (!el || !root || !vp) return
       const t = ctx.get()
-      if (t.k < MIN_LIVE_K) return
       // Card rect in canvas coordinates: measure against the content root and
       // divide out whatever transform the DOM currently carries (it may lag
       // `t` by a frame on first load), then re-apply `t` arithmetically.
@@ -69,13 +86,23 @@ export function useLiveWhenVisible(ref: React.RefObject<HTMLElement | null>): bo
       const top = t.y + ((er.top - rr.top) / domK) * t.k
       const w = (er.width / domK) * t.k
       const h = (er.height / domK) * t.k
-      if (
-        left < vp.clientWidth + NEAR_PX &&
-        left + w > -NEAR_PX &&
-        top < vp.clientHeight + NEAR_PX &&
-        top + h > -NEAR_PX
-      )
-        setLive(true)
+      const within = (m: number) =>
+        left < vp.clientWidth + m && left + w > -m && top < vp.clientHeight + m && top + h > -m
+      if (!live) {
+        if (t.k >= MIN_LIVE_K && within(NEAR_PX)) setLive(true)
+        return
+      }
+      // Live: evict after a continuous EVICT_MS beyond EVICT_PX. Inspect mode
+      // holds everything, and the card under the pointer is never evicted.
+      if (within(EVICT_PX) || inspecting || el.matches(":hover")) {
+        farSince = null
+        return
+      }
+      farSince ??= Date.now()
+      if (Date.now() - farSince >= EVICT_MS) {
+        farSince = null
+        setLive(false)
+      }
     }
     const schedule = () => {
       if (raf == null) raf = requestAnimationFrame(check)
@@ -86,12 +113,14 @@ export function useLiveWhenVisible(ref: React.RefObject<HTMLElement | null>): bo
     // transform), so there is nothing to wait a frame for.
     check()
     const unsub = ctx.subscribe(schedule)
+    const sweep = setInterval(schedule, SWEEP_MS)
     window.addEventListener("resize", schedule)
     return () => {
       unsub()
+      clearInterval(sweep)
       window.removeEventListener("resize", schedule)
       if (raf != null) cancelAnimationFrame(raf)
     }
-  }, [ctx, live, ref])
+  }, [ctx, live, inspecting, ref])
   return live
 }

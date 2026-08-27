@@ -337,14 +337,27 @@ A conforming viewer SHOULD provide:
 - **Canvas**: pan/zoom overview showing every page's `instances` live, grouped
   by page, plus scenario lanes — note every scenario *step* is an instance card
   too, so step count multiplies canvas cost; anything clickable zooms into the
-  interactive page. "Live" constrains what a card is (the real page module, not
-  a screenshot), **not** when it mounts: a conforming viewer SHOULD mount cards
-  lazily — when they come near the viewport, sticky once mounted so panning
-  never re-runs a page's effects or loses its state — because instances are
-  real product pages (grids, charts, providers) and eager mounting does not
-  scale past toy workspaces. Off-screen cards render as placeholders, and at
-  zoom levels where a page is illegible anyway (below ~15%) a placeholder MAY
-  stand in even on screen. Compute visibility from the pan/zoom transform
+  interactive page. **Canvas cards are static previews by definition**: the
+  card renders the real page module in the pinned state, but interaction —
+  clicking, typing, advancing dimensions — happens only in the opened page
+  (the canvas renders thumbnails `inert`; clicking a card opens the page with
+  that state). A card therefore never holds state worth keeping, which is
+  what makes the canvas scalable:
+  - a conforming viewer SHOULD mount cards lazily (when they come near the
+    viewport) — instances are real product pages (grids, charts, providers)
+    and eager mounting does not scale past toy workspaces — and MAY evict a
+    card back to a placeholder after it has been far off-screen for a while
+    (the reference viewer uses distance + dwell hysteresis so panning back
+    and forth never thrashes, and holds eviction during inspect mode);
+  - off-screen and not-yet-mounted cards render as placeholders, and at zoom
+    levels where a page is illegible anyway (below ~15%) a placeholder MAY
+    stand in even on screen. Where pre-rendered snapshots exist (the
+    reference snapshot script writes one PNG per pinned instance), the
+    placeholder SHOULD be that raster — Figma's model: image when far, live
+    page when near — so the zoomed-out overview costs nothing regardless of
+    how heavy pages are. Missing snapshots degrade to a label placeholder;
+    they are an enhancement, never a requirement.
+  Compute visibility from the pan/zoom transform
   arithmetically, not with IntersectionObserver: a viewer that writes its
   transform to the DOM outside the framework (the reference viewer does, for
   gesture performance) can be observed before the initial transform settles,

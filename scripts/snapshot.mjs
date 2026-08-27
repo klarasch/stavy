@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-// Snapshot every pinned page instance as a PNG — for visual diffs in CI.
+// Snapshot every pinned page instance as a PNG — for visual diffs in CI, and
+// as the canvas's raster placeholders: the default --out is public/snapshots
+// so Vite serves them, and cards use them as far-view/placeholder images
+// (missing files just fall back to the label placeholder).
 //
-//   node scripts/snapshot.mjs [--url http://localhost:5173] [--out snapshots] [--slice <id>]
+//   node scripts/snapshot.mjs [--url http://localhost:5173] [--out public/snapshots] [--slice <id>]
 //
 // Requires `playwright` and a Chromium (`npx playwright install chromium`), and a
-// running dev/preview server at --url. Files: snapshots/<page>__<dim=value>__….png
+// running dev/preview server at --url. Files: <out>/<page>__<dim=value>__….png
 import { readFileSync, mkdirSync } from "node:fs"
 import { resolve } from "node:path"
 import { chromium } from "playwright"
@@ -15,7 +18,7 @@ const opt = (name, def) => {
   return i >= 0 ? args[i + 1] : def
 }
 const url = opt("--url", "http://localhost:5173").replace(/\/$/, "")
-const out = resolve(opt("--out", "snapshots"))
+const out = resolve(opt("--out", "public/snapshots"))
 const sliceId = opt("--slice", null)
 const m = JSON.parse(readFileSync(resolve("stavy.json"), "utf8"))
 const slice = sliceId ? m.prototypes.find((p) => p.id === sliceId) : null
