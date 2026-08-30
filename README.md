@@ -74,6 +74,78 @@ Stavy fixes that with one manifest file and a viewer:
   bundled Claude skill (`skill/SKILL.md`) scaffolds workspaces, registers
   templates, and keeps the manifest true while vibe-coding.
 
+## Three ways into this repo
+
+This repo is the standard, its reference viewer, and a demo product exercising
+both. Pick the door that matches what you're here for.
+
+### (a) The standard
+
+The manifest format and binding contract that any viewer implements —
+this is what makes a Stavy workspace portable across UI kits and even
+frameworks.
+
+- [`SPEC.md`](SPEC.md) — the spec itself: manifest format + binding contract
+- [`spec/stavy.schema.json`](spec/stavy.schema.json) — the JSON Schema behind
+  it, enforced by `npm run check` and giving editors autocompletion
+
+**Status:** v0.1, draft. Dimensions are deliberately generic — open an issue
+with the axes your product needs before assuming the schema doesn't fit.
+
+### (b) The reference viewer
+
+`src/stavy/` — canvas, page view, tours, annotations, inspector — is
+self-contained (its own `--ps-*` tokens, zero imports from the host kit), so
+it drops into a UI-kit-agnostic host codebase unchanged.
+
+To adopt it on an existing prototype repo:
+
+```bash
+node scripts/init.mjs ../that-repo --route /canvas
+```
+
+This copies `src/stavy/` unchanged plus a starter `stavy.json`. You then mount
+one route (`<Route path="/canvas/*" element={<StavyApp />} />`) and implement
+the two-hook binding contract (page modules + `data-proto` targets — plus a
+one-file `data-component` wrapper layer if your kit doesn't stamp component
+names), and let the skill do the bookkeeping. See `SPEC.md` §2 and the skill's
+"Setting up a new workspace" section.
+
+- [`docs/ADOPTION.md`](docs/ADOPTION.md) — the full hands-on guide: trial repo
+  on another design system, rolling onto an existing mock repo, CI/CD, and the
+  "home is upstream" maintenance model (adopting repos never edit `src/stavy/`
+  — a fix goes into this repo and is picked up on the next `init` re-run)
+- [`docs/MONDAY.md`](docs/MONDAY.md) — first trial on a branch of an existing
+  mock, step by step
+- [`scripts/init.mjs`](scripts/init.mjs) — the installer above
+- A cold Sonnet agent did exactly this on MUI in under two hours; its friction
+  report drove the current wording of both documents (a trial repo,
+  `../stavy-mui-trial/`-style, has the `FRICTION.md`)
+
+### (c) The demo — Orbit
+
+`src/demo/` is **Orbit**, an expenses & approvals app (employee / manager /
+finance) built on `src/ui/`, a vendored shadcn/ui kit — used to exercise the
+standard and the viewer end to end.
+
+```bash
+npm install
+npm run dev          # full workspace on http://localhost:5173
+```
+
+Sliced demo builds:
+
+```bash
+PROTO=submit-flow npm run build:proto     # only the employee submission demo
+PROTO=approval-flow npm run build:proto   # only the manager/finance demo
+```
+
+**First run:** pre-rendered canvas snapshots aren't committed to this repo.
+Generate them with `npm run snapshot` (needs the dev server running, plus
+Playwright's Chromium installed once via `npx playwright install chromium`).
+Without them the canvas still works — cards fall back to live-rendered pages
+or label placeholders instead of thumbnails.
+
 ## This repo
 
 | Path | What it is |
@@ -90,38 +162,10 @@ Stavy fixes that with one manifest file and a viewer:
 | `scripts/init.mjs` | `node scripts/init.mjs ../other-repo` — installs the viewer + skill + CSS into any Vite/React repo |
 | `scripts/snapshot.mjs` | `npm run snapshot` — Playwright PNG of every pinned instance (for visual diffs) |
 | `docs/PRD-118.md` | Mock PRD the `refs` check runs against |
-| `../protoscope-mui-trial/` | Transferability trial on MUI, built cold from SPEC + skill; see its `FRICTION.md` |
+| `../stavy-mui-trial/` (a trial repo) | Transferability trial on MUI, built cold from SPEC + skill; see its `FRICTION.md` |
 | `src/stavy/` | Reference viewer (canvas, page view, tours, annotations, inspector) |
 | `src/demo/` | Demo product **Orbit** — expenses & approvals (employee / manager / finance) |
 | `src/ui/` | Vendored shadcn/ui components (the "public UI kit" of the demo) |
-
-## Run it
-
-```bash
-npm install
-npm run dev          # full workspace on http://localhost:5173
-```
-
-Sliced demo builds:
-
-```bash
-PROTO=submit-flow npm run build:proto     # only the employee submission demo
-PROTO=approval-flow npm run build:proto   # only the manager/finance demo
-```
-
-## Use it at work
-
-The manifest and skill are UI-kit-agnostic, and the viewer is self-contained
-(its own `--ps-*` tokens, zero imports from the host kit). To adopt on an
-existing prototype repo: `node scripts/init.mjs ../that-repo --route /canvas`
-(copies `src/stavy/` unchanged + a starter `stavy.json`), mount one route
-(`<Route path="/canvas/*" element={<StavyApp />} />`), then implement the two-hook binding contract (page modules +
-`data-proto` targets — plus a one-file `data-component` wrapper layer if your
-kit doesn't stamp component names), and let the skill do the bookkeeping.
-See `SPEC.md` §2 and the skill's "Setting up a new workspace" section. A cold
-Sonnet agent did exactly this on MUI in under two hours; its friction report
-drove the current wording of both documents.
-First trial on a branch of an existing mock, step by step: `docs/MONDAY.md`.
 
 ## Status
 

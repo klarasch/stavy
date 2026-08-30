@@ -46,7 +46,7 @@ export function dashboardFixture(role: string) {
       queue: expenses.filter((e) => ["submitted", "in-review"].includes(e.status)),
       activity: [
         { text: "Sam Chen submitted Nimbus Cloud renewal ($240)", when: "2h ago" },
-        { text: "You approved SkyRail travel for Klara ($132.50)", when: "1d ago" },
+        { text: "You approved SkyRail travel for Morgan ($132.50)", when: "1d ago" },
         { text: "Alex Rivera's team lunch moved to in-review", when: "1d ago" },
         { text: "Policy update: lodging cap raised to $350/night", when: "3d ago" },
       ],
@@ -100,11 +100,11 @@ export interface TimelineEvent {
 }
 
 export function timelineFor(lifecycle: string): TimelineEvent[] {
-  const events: TimelineEvent[] = [{ label: "Created as draft", who: "Klara S.", when: "Aug 17, 09:12", tone: "neutral" }]
+  const events: TimelineEvent[] = [{ label: "Created as draft", who: "Morgan L.", when: "Aug 17, 09:12", tone: "neutral" }]
   const order = ["draft", "submitted", "in-review", "approved", "rejected", "reimbursed"]
   const idx = order.indexOf(lifecycle)
   if (idx >= 1 && lifecycle !== "draft")
-    events.push({ label: "Submitted for approval", who: "Klara S.", when: "Aug 18, 14:03", tone: "neutral" })
+    events.push({ label: "Submitted for approval", who: "Morgan L.", when: "Aug 18, 14:03", tone: "neutral" })
   if (lifecycle === "in-review")
     events.push({ label: "Changes requested — receipt unreadable", who: "M. Novak (manager)", when: "Aug 19, 10:40", tone: "neutral" })
   if (lifecycle === "rejected")

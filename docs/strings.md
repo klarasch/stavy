@@ -13,7 +13,7 @@
 | `status.approved` | Approved | Genehmigt |
 | `status.rejected` | Rejected | Abgelehnt |
 | `status.reimbursed` | Reimbursed | Erstattet |
-| `dashboard.greeting` | Good morning, Klara | Guten Morgen, Klara |
+| `dashboard.greeting` | Good morning, Morgan | Guten Morgen, Morgan |
 | `dashboard.sub.employee` | Here's where your expenses stand. | So stehen deine Ausgaben. |
 | `dashboard.sub.manager` | Your team's spend at a glance. | Die Ausgaben deines Teams auf einen Blick. |
 | `dashboard.sub.finance` | Reimbursement pipeline overview. | Überblick über die Erstattungen. |

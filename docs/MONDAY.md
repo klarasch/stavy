@@ -16,7 +16,7 @@ Push the reference repo so the work clone has the current viewer, the
 `init` script and this file:
 
 ```bash
-cd ~/Code/prototyping/protoscope && git push
+cd ~/Code/prototyping/stavy && git push
 ```
 
 (If `git status` shows uncommitted work, commit it first.)

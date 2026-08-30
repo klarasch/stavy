@@ -4,11 +4,21 @@ import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "node:url"
 import { readFileSync, writeFileSync } from "node:fs"
 import { createRequire } from "node:module"
+import Ajv2020 from "ajv/dist/2020.js"
+import addFormats from "ajv-formats"
+
+// Same ajv setup as scripts/validate.mjs, so the dev annotation endpoint
+// accepts exactly what `npm run validate` would accept.
+const MAX_ANNOTATION_BODY_BYTES = 1_000_000
 
 // Stavy slice plugin: when PROTO=<prototype-id> is set, the build only
 // includes the pages declared in that prototype slice of stavy.json.
 function stavySlice(): Plugin {
   const manifestPath = fileURLToPath(new URL("./stavy.json", import.meta.url))
+  const schemaPath = fileURLToPath(new URL("./spec/stavy.schema.json", import.meta.url))
+  const ajv = new Ajv2020({ allErrors: true, strict: false })
+  addFormats(ajv)
+  const validateManifest = ajv.compile(JSON.parse(readFileSync(schemaPath, "utf8")))
   const virtualId = "virtual:proto-pages"
   const resolvedId = "\0" + virtualId
   const stringsId = "virtual:proto-strings"
@@ -45,8 +55,22 @@ function stavySlice(): Plugin {
           return res.end()
         }
         let body = ""
-        req.on("data", (c) => (body += c))
+        let size = 0
+        let tooLarge = false
+        req.on("data", (c) => {
+          if (tooLarge) return
+          size += c.length
+          if (size > MAX_ANNOTATION_BODY_BYTES) {
+            tooLarge = true
+            res.statusCode = 413
+            res.end("payload too large")
+            req.destroy()
+            return
+          }
+          body += c
+        })
         req.on("end", () => {
+          if (tooLarge) return
           try {
             const { page: pageId, target, title, note } = JSON.parse(body)
             const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
@@ -56,6 +80,12 @@ function stavySlice(): Plugin {
             const existing = page.annotations.find((a: { target: string }) => a.target === target)
             if (existing) Object.assign(existing, { title, note: note ?? "" })
             else page.annotations.push({ target, title, note: note ?? "" })
+            if (!validateManifest(manifest)) {
+              res.statusCode = 400
+              res.setHeader("content-type", "application/json")
+              res.end(JSON.stringify({ ok: false, errors: validateManifest.errors }))
+              return
+            }
             writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n")
             res.setHeader("content-type", "application/json")
             res.end(JSON.stringify({ ok: true, count: page.annotations.length }))
