@@ -12,6 +12,17 @@ export interface Dimension {
   label: string
   /** Free-form classification: "state" | "role" | "lifecycle" | "process" | anything */
   kind?: string
+  /**
+   * Who owns the choice (SPEC §1.1).
+   * "page" (default) — a local axis of one screen: flip it per page, it resets
+   * when you open another one (flow step, data state, overlay).
+   * "workspace" — one value for the whole workspace, chosen once in the viewer
+   * chrome and carried across every navigation (release phase, role, locale).
+   * A page that does not declare a workspace axis is unaffected by it; a page
+   * that declares it is hidden from the canvas when the active value is not in
+   * its list. The dimension's FIRST value is the workspace default.
+   */
+  scope?: "page" | "workspace"
   values: DimensionValue[]
 }
 

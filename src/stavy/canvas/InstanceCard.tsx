@@ -1,4 +1,4 @@
-import { memo, useContext, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useContext, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { PageRenderer } from "../PageRenderer"
 import { CanvasInspectContext, useLiveWhenVisible } from "./visibility"
@@ -61,6 +61,12 @@ export const InstanceCard = memo(function InstanceCard({
   const [pins, setPins] = useState<PinPos[]>([])
   const [open, setOpen] = useState<string | null>(null)
   const [snapErr, setSnapErr] = useState(false)
+  // Stable identity — see AnatomyCard: an inline callback ref re-attaches on
+  // every re-render and would loop through setState.
+  const setContent = useCallback((el: HTMLDivElement | null) => {
+    contentRef.current = el
+    setPortalHost((prev) => (prev === el ? prev : el))
+  }, [])
   const pageDef = getPage(pageId)
   const snapshot = pageDef ? snapshotUrl(pageDef, dims) : null
   const w = Math.round(FW * scale)
@@ -116,10 +122,7 @@ export const InstanceCard = memo(function InstanceCard({
         >
           {live ? (
             <div
-              ref={(el) => {
-                contentRef.current = el
-                setPortalHost(el)
-              }}
+              ref={setContent}
               inert={!inspecting}
               className="ps-proto-content relative pointer-events-none select-none origin-top-left"
               style={{ width: FW, height: FH, transform: `scale(${scale})` }}

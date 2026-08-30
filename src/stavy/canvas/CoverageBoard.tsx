@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom"
 import { CheckCircle2, CircleDashed, Play } from "../icons"
-import { manifest, getPage } from "../manifest"
+import { manifest, getPage, scenarioInWorkspace } from "../manifest"
 import { stepUrl } from "../overlays/TourOverlay"
 import { Chip } from "../chrome"
 
@@ -10,15 +10,18 @@ import { Chip } from "../chrome"
  * an explicit gap. Data comes from the manifest only; the PRD document itself is
  * cross-checked by `npm run check --refs`.
  */
-export function CoverageBoard({ wireframe }: { wireframe?: boolean }) {
+export function CoverageBoard({ wireframe, linkExtra, wdims }: { wireframe?: boolean; linkExtra?: Record<string, string>; wdims?: Record<string, string> }) {
   const navigate = useNavigate()
-  const carry = wireframe ? { w: "1" } : undefined
+  const carry = { ...linkExtra, ...(wireframe ? { w: "1" } : {}) }
   const reqs = manifest.requirements ?? []
   if (!reqs.length) return null
+  // Coverage is read against the active workspace assignment: a scenario that
+  // belongs to another phase/role does not demonstrate anything here.
+  const scenarios = wdims ? manifest.scenarios.filter((sc) => scenarioInWorkspace(sc, wdims)) : manifest.scenarios
   const byRef = new Map<string, typeof manifest.scenarios>()
-  for (const sc of manifest.scenarios) for (const r of sc.refs ?? []) byRef.set(r, [...(byRef.get(r) ?? []), sc])
+  for (const sc of scenarios) for (const r of sc.refs ?? []) byRef.set(r, [...(byRef.get(r) ?? []), sc])
   const covered = reqs.filter((r) => (byRef.get(r.id)?.length ?? 0) > 0).length
-  const uncited = manifest.scenarios.filter((s) => !(s.refs ?? []).some((r) => reqs.some((q) => q.id === r)))
+  const uncited = scenarios.filter((s) => !(s.refs ?? []).some((r) => reqs.some((q) => q.id === r)))
 
   return (
     <div className="ps ps-board" data-ps-ui style={{ width: 760 }}>

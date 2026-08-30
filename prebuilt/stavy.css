@@ -758,6 +758,12 @@
       fill: color-mix(in oklab, var(--color-violet-600) 20%, transparent);
     }
   }
+  .object-cover {
+    object-fit: cover;
+  }
+  .object-top {
+    object-position: top;
+  }
   .p-1 {
     padding: var(--spacing);
   }
@@ -1280,6 +1286,8 @@
   }
 }
 :root {
+  --ps-z-chrome: 2147483500;
+  --ps-z-top: 2147483600;
   --ps-fg: #18181b;
   --ps-muted: #6b6b76;
   --ps-faint: #a1a1aa;
@@ -1390,6 +1398,38 @@
   font-size: 12.5px;
   -webkit-font-smoothing: antialiased;
 }
+:where(.ps, .ps *, [data-ps-ui], [data-ps-ui] *):where(:not(.ps-proto-content, .ps-proto-content *)) {
+  box-sizing: border-box;
+}
+:where(.ps button, [data-ps-ui] button):where(:not(.ps-proto-content *)) {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+.ps-toplayer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ps-z-top);
+  pointer-events: none;
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+}
+.ps-toplayer > * {
+  pointer-events: auto;
+}
 .ps-glass {
   background: var(--ps-glass);
   backdrop-filter: blur(24px) saturate(170%);
@@ -1494,6 +1534,17 @@
 .ps-chip-k {
   color: var(--ps-muted);
   font-weight: 400;
+}
+.ps-chip-warn {
+  color: var(--ps-pin);
+  border-color: var(--ps-pin);
+  @supports (color: color-mix(in lab, red, red)) {
+    border-color: color-mix(in srgb, var(--ps-pin) 45%, transparent);
+  }
+  background: var(--ps-pin);
+  @supports (color: color-mix(in lab, red, red)) {
+    background: color-mix(in srgb, var(--ps-pin) 12%, transparent);
+  }
 }
 .ps-kbd {
   display: inline-block;
@@ -1711,7 +1762,7 @@
   position: fixed;
   right: 14px;
   bottom: 14px;
-  z-index: 60;
+  z-index: var(--ps-z-chrome);
   width: 32px;
   height: 32px;
   border-radius: 999px;
@@ -1739,6 +1790,52 @@
 .ps-eye svg {
   width: 15px;
   height: 15px;
+}
+.ps-diags {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(380px, calc(100vw - 28px));
+}
+.ps-diag {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ps-fg);
+}
+.ps-diag-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  margin-top: 1px;
+  color: var(--ps-pin);
+}
+.ps-diag-title {
+  font-weight: 600;
+  font-size: 12.5px;
+  margin-bottom: 2px;
+}
+.ps-diag-detail {
+  color: var(--ps-muted);
+}
+.ps-diag-fix {
+  color: var(--ps-fg);
+}
+.ps-diag-close {
+  flex: none;
+  margin-top: 1px;
+  color: var(--ps-faint);
+  cursor: pointer;
+}
+.ps-diag-close:hover {
+  color: var(--ps-fg);
 }
 .ps-zl {
   display: inline-block;
@@ -1902,7 +1999,7 @@
 }
 .ps-dock {
   position: fixed;
-  z-index: 50;
+  z-index: var(--ps-z-chrome);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1965,7 +2062,7 @@
 }
 .ps-dock-target {
   position: fixed;
-  z-index: 49;
+  z-index: calc(var(--ps-z-chrome) - 1);
   border: 1.5px dashed var(--ps-focus);
   border-radius: 16px;
   background: var(--ps-focus-soft);

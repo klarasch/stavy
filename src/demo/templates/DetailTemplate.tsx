@@ -56,7 +56,7 @@ export function DetailTemplate({ dims, nav }: PageProps) {
             <CardContent>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
                 {[
-                  [t("detail.field.submittedBy"), "Klara Scholleová"],
+                  [t("detail.field.submittedBy"), "Morgan Lee"],
                   [t("detail.field.date"), `${e.date}, 2026`],
                   [t("detail.field.category"), e.category],
                   [t("detail.field.costCenter"), e.costCenter],

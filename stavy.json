@@ -144,6 +144,7 @@
       "id": "locale",
       "label": "Locale",
       "kind": "locale",
+      "scope": "workspace",
       "values": [
         {
           "id": "en-US",
@@ -437,7 +438,6 @@
         "role": "employee",
         "lifecycle": "submitted",
         "density": "comfortable",
-        "locale": "en-US",
         "overlay": "none"
       },
       "instances": [

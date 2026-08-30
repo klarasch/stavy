@@ -15,6 +15,8 @@
     "changelog": "node scripts/changelog.mjs",
     "handoff": "node scripts/handoff.mjs",
     "gen:tests": "node scripts/gen-tests.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:scenarios": "node scripts/gen-tests.mjs && playwright test",
     "strings": "node scripts/strings.mjs",
     "build:css": "node scripts/build-css.mjs"
@@ -48,6 +50,7 @@
     "playwright": "^1.62.1",
     "tailwindcss": "^4.1.8",
     "typescript": "~5.8.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^4.1.11"
   }
 }
