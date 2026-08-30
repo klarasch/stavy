@@ -57,6 +57,39 @@ process progress, feature flags, locales, breakpoints are all just dimensions.
 `kind` is advisory metadata for viewers (e.g. grouping or iconography); it never
 changes semantics.
 
+**Scope.** `scope` says *who owns the choice*, and it does change semantics:
+
+```jsonc
+{ "id": "phase", "label": "Release phase", "kind": "release", "scope": "workspace",
+  "values": [{ "id": "p1", "label": "Phase I" }, { "id": "p2", "label": "Phase II" }] }
+```
+
+- `"page"` (default) — a local axis of one screen: flip it while the page is
+  open, and it resets to the page's default when another page opens. Flow step,
+  data state, overlay, density.
+- `"workspace"` — one value for the *whole workspace*: chosen once in the viewer
+  chrome, carried across every navigation and back to the canvas. Release phase,
+  role, locale — the axes that answer "which world am I looking at" rather than
+  "where in this screen am I".
+
+A workspace-scoped axis follows three rules:
+
+1. **A page that does not declare the axis is unaffected by it.** Absence means
+   "the same in every value" — which is itself information, and it keeps
+   unchanged screens on the canvas in every world.
+2. **A page that declares the axis and excludes the active value is out of
+   scope**: the viewer drops it from the canvas (and its scenarios with it).
+   Declaring a single value (`"phase": ["p2"]`) is how a screen says "new in
+   Phase II"; the coverage matrix then shows the other value as a gap.
+3. **The dimension's first value is the workspace default**, and it wins over a
+   page's own `defaults` entry for that axis — a workspace choice cannot mean
+   different things on different pages. Order the values accordingly.
+
+This is what makes a phased prototype legible: engineers browse all of Phase I
+without re-picking it screen by screen, while flow step and data state stay
+local toggles. Shipping *only* Phase I is a different job — that is a
+`prototypes[]` slice (§1.9).
+
 ### 1.2 Templates
 
 The registry of **reusable page templates**. Components come from the host's UI
@@ -247,6 +280,12 @@ A conforming build tool, given a prototype id, MUST exclude non-listed pages
 from the bundle and SHOULD filter the canvas to the slice. (Reference
 implementation: the `stavy-slice` Vite plugin + `PROTO=<id> vite build`.)
 
+A slice and a workspace-scoped dimension (§1.1) answer different questions and
+compose: the dimension is how you *browse* two worlds on one canvas, the slice
+is how you *hand one over* — a build that only contains it, with no toggle to
+get wrong in a demo. A phased prototype typically has both: a `phase` axis and
+a `phase-1` slice listing the pages that ship first.
+
 ---
 
 ## 2. The binding contract
@@ -389,7 +428,13 @@ A conforming viewer SHOULD provide:
   the component tree (confirm helpers, global toasts) are outside this
   contract; such states degrade to `fidelity: static` unless the kit's global
   config can point them at the container.
-- **Dimension switcher**: flip any dimension of the open page at runtime. Pages
+- **Workspace dimensions**: axes declared `scope: "workspace"` (§1.1) are
+  chosen in the chrome, not in the page switcher, and the choice survives every
+  navigation (it lives in the URL like all viewer state, so a link still
+  reproduces exactly what the sender saw). The canvas hides pages and scenarios
+  that are out of scope and says how many, and a page reached by a direct link
+  into a value it does not support is marked rather than silently re-dimensioned.
+- **Dimension switcher**: flip any page-scoped dimension of the open page at runtime. Pages
   may carry many axes (ten is realistic); beyond a handful the switcher MUST
   degrade to a panel rather than overflow (reference: inline pills up to 3
   axes, then a panel with segmented controls and a "changed from default" count).

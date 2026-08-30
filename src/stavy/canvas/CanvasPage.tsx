@@ -4,7 +4,11 @@ import {
   ArrowRight, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle,
 } from "../icons"
 import { cn } from "../cn"
-import { manifest, activeSlice, getPage, resolveDims, pageUrl, valueLabel, dimensionLabel } from "../manifest"
+import {
+  manifest, activeSlice, getPage, resolveDims, pageUrl, valueLabel, dimensionLabel,
+  isWorkspaceDim, workspaceDimensions, workspaceDimsFromParams, workspaceCarry, workspaceKey,
+  workspaceOverridesFor, pageInWorkspace, scenarioInWorkspace,
+} from "../manifest"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "./PanZoom"
 import { CanvasInspectContext, CanvasViewportContext, type CanvasViewport } from "./visibility"
 import { InstanceCard, VIEWPORT_W } from "./InstanceCard"
@@ -16,7 +20,7 @@ import { CoverageBoard } from "./CoverageBoard"
 import { Inspector, type InspectContext } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
 import { useComments } from "../comments/store"
-import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, useChrome, useHotkeys, cycleTheme } from "../chrome"
+import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "../chrome"
 import type { PageDef } from "../types"
 
 const INITIAL: Transform = { x: 300, y: 110, k: 0.55 }
@@ -69,16 +73,33 @@ function Area({
 /* dimensions, declared-but-unpinned cells shown as dashed placeholders */
 /* ------------------------------------------------------------------ */
 
-const PageGroup = memo(function PageGroup({ page, showNotes, wireframe }: { page: PageDef; showNotes: boolean; wireframe: boolean }) {
+const PageGroup = memo(function PageGroup({
+  page, showNotes, wireframe, wdims, linkExtra,
+}: {
+  page: PageDef
+  showNotes: boolean
+  wireframe: boolean
+  /** Active workspace assignment (SPEC §1.1) */
+  wdims: Record<string, string>
+  /** Query params every link out of the canvas must carry */
+  linkExtra: Record<string, string>
+}) {
   const navigate = useNavigate()
   const template = manifest.templates.find((tp) => tp.id === page.template)
   const scale = cardScale(page)
   const w = Math.round((page.frame?.width ?? VIEWPORT_W) * scale)
   const h = Math.round((page.frame?.height ?? 832) * scale)
 
+  const wOver = useMemo(() => workspaceOverridesFor(page, wdims), [page, wdims])
+
   const layout = useMemo(() => {
-    const instances = (page.instances ?? [{ dims: {} }]).map((i) => ({ ...i, full: resolveDims(page, i.dims) }))
-    const dimIds = Object.keys(page.dimensions)
+    // Instances pinned to another value of a workspace axis belong to another
+    // world; the rest are rendered at the active value.
+    const instances = (page.instances ?? [{ dims: {} }])
+      .filter((i) => Object.entries(wOver).every(([d, v]) => !i.dims[d] || i.dims[d] === v))
+      .map((i) => ({ ...i, full: resolveDims(page, { ...i.dims, ...wOver }) }))
+    // A workspace axis is fixed here, so it never becomes a matrix axis.
+    const dimIds = Object.keys(page.dimensions).filter((d) => !isWorkspaceDim(d))
     const varying = dimIds
       .filter((d) => new Set(instances.map((i) => i.full[d])).size > 1)
       .sort((a, b) => page.dimensions[b].length - page.dimensions[a].length)
@@ -92,7 +113,7 @@ const PageGroup = memo(function PageGroup({ page, showNotes, wireframe }: { page
       groups.get(key)!.push(inst)
     }
     return { instances, colDim, rowDim, extraVarying, groups }
-  }, [page])
+  }, [page, wOver])
 
   const { colDim, rowDim, extraVarying, groups } = layout
   const cols = colDim ? page.dimensions[colDim] : [null]
@@ -112,7 +133,7 @@ const PageGroup = memo(function PageGroup({ page, showNotes, wireframe }: { page
               </Chip>
             )}
             <span className="flex items-center gap-1">
-              {Object.entries(page.dimensions).map(([d, vs]) => (
+              {Object.entries(page.dimensions).filter(([d]) => !isWorkspaceDim(d)).map(([d, vs]) => (
                 <span key={d} className="ps-chip ps-chip-sm font-normal">
                   <span className="ps-chip-k">{dimensionLabel(d)}</span> {vs.length}
                 </span>
@@ -179,7 +200,9 @@ const PageGroup = memo(function PageGroup({ page, showNotes, wireframe }: { page
                     hideChips={hideChips}
                     showNotes={showNotes}
                     wireframe={wireframe}
-                    onOpen={(dims) => navigate(pageUrl(page.id, dims, wireframe ? { w: "1" } : undefined))}
+                    wOver={wOver}
+                    linkExtra={linkExtra}
+                    onOpen={(dims) => navigate(pageUrl(page.id, dims, linkExtra))}
                   />
                 ))}
               </div>
@@ -192,7 +215,7 @@ const PageGroup = memo(function PageGroup({ page, showNotes, wireframe }: { page
               <span className="ps-zl"><span className="ps-chip ps-chip-sm">Anatomy</span></span>
               what each part of the screen does
             </div>
-            <AnatomyCard page={page} scale={page.kind === "component" ? Math.min(0.8, 420 / (page.frame?.width ?? VIEWPORT_W)) : 0.3} />
+            <AnatomyCard page={page} overrides={wOver} scale={page.kind === "component" ? Math.min(0.8, 420 / (page.frame?.width ?? VIEWPORT_W)) : 0.3} />
           </div>
         )}
       </div>
@@ -201,7 +224,7 @@ const PageGroup = memo(function PageGroup({ page, showNotes, wireframe }: { page
 })
 
 function RowFragment({
-  page, r, cols, colDim, rowDim, groupDims, find, w, h, scale, hideChips, showNotes, wireframe, onOpen,
+  page, r, cols, colDim, rowDim, groupDims, find, w, h, scale, hideChips, showNotes, wireframe, wOver, linkExtra, onOpen,
 }: {
   page: PageDef
   r: string | null
@@ -216,6 +239,8 @@ function RowFragment({
   hideChips: boolean
   showNotes: boolean
   wireframe: boolean
+  wOver: Record<string, string>
+  linkExtra: Record<string, string>
   onOpen: (dims: Record<string, string>) => void
 }) {
   return (
@@ -242,6 +267,7 @@ function RowFragment({
               annotations={page.annotations}
               showPins={showNotes}
               wireframe={wireframe}
+              href={pageUrl(page.id, inst.full, linkExtra)}
             />
           )
         }
@@ -249,6 +275,7 @@ function RowFragment({
           ...groupDims,
           ...(colDim ? { [colDim]: c! } : {}),
           ...(rowDim ? { [rowDim]: r! } : {}),
+          ...wOver,
         })
         return (
           <button
@@ -298,6 +325,11 @@ export function CanvasPage() {
 
   const { theme, setTheme, setHidden } = useChrome()
   const { open: openComments } = useComments()
+  const wKey = workspaceKey(sp)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const wdims = useMemo(() => workspaceDimsFromParams(sp), [wKey])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const wCarry = useMemo(() => workspaceCarry(sp), [wKey])
   const showNotes = sp.get("notes") === "1"
   const wireframe = sp.get("w") === "1"
   const inspect = sp.get("i") === "1"
@@ -368,8 +400,27 @@ export function CanvasPage() {
     return { page, template: manifest.templates.find((tp) => tp.id === page.template), dims: resolveDims(page, dims) }
   }, [])
 
-  const pages = manifest.pages.filter((p) => p.kind !== "component")
-  const components = manifest.pages.filter((p) => p.kind === "component")
+  const linkExtra = useMemo(
+    () => ({ ...wCarry, ...(wireframe ? { w: "1" } : {}) }),
+    [wCarry, wireframe]
+  )
+
+  // Pages that declare a workspace axis and exclude its active value are not
+  // part of this world; pages that don't declare it are unaffected (SPEC §1.1).
+  const inScope = manifest.pages.filter((p) => pageInWorkspace(p, wdims))
+  const outOfScopeCount = manifest.pages.length - inScope.length
+  const pages = inScope.filter((p) => p.kind !== "component")
+  const components = inScope.filter((p) => p.kind === "component")
+  const scenarios = manifest.scenarios.filter((sc) => scenarioInWorkspace(sc, wdims))
+
+  const setWorkspaceDim = (dimId: string, value: string) => {
+    const dim = workspaceDimensions.find((d) => d.id === dimId)
+    if (!dim) return
+    const next = new URLSearchParams(sp)
+    if (dim.values[0].id === value) next.delete(`d_${dimId}`)
+    else next.set(`d_${dimId}`, value)
+    setSp(next, { replace: true })
+  }
 
   return (
     <CanvasViewportContext.Provider value={canvasViewport}>
@@ -386,7 +437,7 @@ export function CanvasPage() {
               <div className="flex flex-wrap items-start gap-10">
                 {(manifest.requirements?.length ?? 0) > 0 && (
                   <div data-toc="board:coverage">
-                    <CoverageBoard wireframe={wireframe} />
+                    <CoverageBoard wireframe={wireframe} linkExtra={wCarry} wdims={wdims} />
                   </div>
                 )}
                 {(manifest.boards ?? []).map((b) => (
@@ -399,9 +450,9 @@ export function CanvasPage() {
           )}
 
           {/* ---- Scenarios: one wide area, lanes stacked ---- */}
-          <Area title="Scenarios" kind={`${manifest.scenarios.length} walkthroughs`} icon={<BookOpen />} tocId="area:scenarios" className="self-start">
+          <Area title="Scenarios" kind={`${scenarios.length} walkthrough${scenarios.length === 1 ? "" : "s"}`} icon={<BookOpen />} tocId="area:scenarios" className="self-start">
             <div className="flex flex-col gap-8">
-              {manifest.scenarios.map((sc) => (
+              {scenarios.map((sc) => (
                 <div key={sc.id} data-toc={`scenario:${sc.id}`}>
                   <span className="ps-zl">
                     <div className="flex items-center gap-2 mb-1">
@@ -417,7 +468,7 @@ export function CanvasPage() {
                     {sc.steps.map((st, i) => {
                       const page = getPage(st.page)
                       if (!page) return null
-                      const dims = resolveDims(page, st.dims)
+                      const dims = resolveDims(page, { ...st.dims, ...workspaceOverridesFor(page, wdims) })
                       return (
                         <div key={i} className="flex items-start gap-3">
                           {i > 0 && <ArrowRight className="size-4 mt-14 shrink-0" style={{ color: "var(--ps-faint)" }} />}
@@ -437,7 +488,7 @@ export function CanvasPage() {
                               scale={page.kind === "component" ? cardScale(page) * 0.7 : 0.14}
                               frame={page.frame}
                               scope="scenarios"
-                              href={pageUrl(st.page, dims, { tour: sc.id, ts: String(i), ...(wireframe ? { w: "1" } : {}) })}
+                              href={pageUrl(st.page, dims, { tour: sc.id, ts: String(i), ...linkExtra })}
                             />
                           </div>
                         </div>
@@ -453,7 +504,7 @@ export function CanvasPage() {
           <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
             {pages.map((page) => (
               <Area key={page.id} title={page.label} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
-                <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} />
+                <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} />
               </Area>
             ))}
           </div>
@@ -463,7 +514,7 @@ export function CanvasPage() {
             <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
               {components.map((page) => (
                 <Area key={page.id} title={page.label} kind="component" icon={<Boxes />} tocId={`page:${page.id}`}>
-                  <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} />
+                  <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} />
                 </Area>
               ))}
             </div>
@@ -488,9 +539,26 @@ export function CanvasPage() {
             <Chip sm accent={!!activeSlice}>
               {activeSlice ? (<><span className="ps-chip-k">slice</span>{activeSlice.label}</>) : "full workspace"}
             </Chip>
+            {workspaceDimensions.length > 0 && (
+              <>
+                <PsDivider />
+                <WorkspaceDims value={wdims} onChange={setWorkspaceDim} direction="down" />
+                {outOfScopeCount > 0 && (
+                  <Chip
+                    sm
+                    className="ps-chip-warn"
+                    title={`${outOfScopeCount} registered screen(s) are not part of ${workspaceDimensions
+                      .map((d) => `${d.label} = ${valueLabel(d.id, wdims[d.id])}`)
+                      .join(", ")}. Switch above to see them.`}
+                  >
+                    {outOfScopeCount} not in scope
+                  </Chip>
+                )}
+              </>
+            )}
           </div>
           <MockNotice className="absolute top-[58px] left-6 z-20" />
-          <CanvasToc className="absolute top-[84px] left-4 z-20" onJump={jumpTo} />
+          <CanvasToc className="absolute top-[84px] left-4 z-20" onJump={jumpTo} wdims={wdims} />
 
           <div className="ps ps-glass absolute top-4 right-4 z-20 rounded-2xl px-1.5 py-1 flex items-center gap-0.5">
             <PsButton active={showNotes} tip="Annotation pins and pointing notes" keys={["N"]} tipBelow onClick={() => setFlag("notes", !showNotes)}>

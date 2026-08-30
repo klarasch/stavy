@@ -13,7 +13,11 @@ its rules win over this file on any conflict).
 
 - **Dimensions** are generic named axes (data state, role, lifecycle stage,
   process step, locale…). Never hardcode axis semantics; add a dimension when a
-  page varies along a new axis.
+  page varies along a new axis. Each axis declares a `scope`: `page` (default)
+  for axes that live inside one screen, `workspace` for axes that decide which
+  world the whole prototype is in — release phase, role, locale. See
+  "Workspace axes" below; getting this wrong is the most common modelling
+  mistake.
 - **Templates** are registered page-level compositions built from the host UI
   kit. New pages start from a template; if none fits, create and register one.
 - **Pages** declare which dimensions they support, defaults, curated canvas
@@ -49,8 +53,9 @@ The manifest is the single source of truth and must never drift from the code:
    least `component`, plus anything an engineer would want in inspection
    (props, advancesTo, mock notes).
 4. Page ids are kebab-case and must match the page module filename.
-5. Every page keeps `defaults` covering all its dimensions; instances/steps may
-   be partial (defaults fill the rest).
+5. Every page keeps `defaults` covering all its **page-scoped** dimensions;
+   instances/steps may be partial (defaults fill the rest). Never set a default
+   for a workspace-scoped axis — the workspace choice wins over it.
 6. Every page carries a `fidelity` rung (see the ladder below) that matches
    what its code actually does. Canvas `notes` must reference an existing page
    (and, if given, an instance that is pinned and a `target` that exists).
@@ -322,6 +327,28 @@ dimensions/instances, and list it in the owning template's `organisms`. Ids
 that are computed rather than literal get a `// @proto-targets …` comment so
 `npm run validate` can see them. Do not
 register design-system atoms (buttons, inputs) — those live in the DS catalog.
+
+**Workspace axes** (`scope: "workspace"`): use one when the question is *which
+world am I looking at* rather than *where in this screen am I*. The test: if a
+reviewer would be annoyed to re-pick it on every screen, it is workspace-scoped.
+Release phase ("Phase I" vs "Phase II" once more features land), role, and
+locale usually are; flow step, data state, overlay and density never are.
+
+How to model a phased prototype — the canonical case:
+
+- One `phase` dimension, `scope: "workspace"`, values in shipping order (the
+  first value is the default world).
+- A screen that is **the same in both phases declares nothing** — absence means
+  unchanged, and it keeps showing in every phase.
+- A screen that **gains features** declares `"phase": ["p1", "p2"]` and pins an
+  instance per phase, so the canvas row reads as the before/after.
+- A screen that is **new later** declares `"phase": ["p2"]` only. It drops off
+  the canvas in Phase I, and the coverage matrix shows the gap.
+- Scenarios that differ per phase are separate scenarios (`…-p1`, `…-p2`) with
+  the phase pinned in every step; a scenario may never straddle two values.
+- Do **not** model phases as forked pages (`dashboard-p2`), branches, or repos —
+  all three hide the delta the canvas exists to show. Add a `prototypes[]` slice
+  (`phase-1`) when someone needs a build containing only that phase.
 
 **Many dimensions**: ten axes on one page is normal. Keep each axis small,
 pin instances for the combinations reviewers must see (the canvas lays pinned

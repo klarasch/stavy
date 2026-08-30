@@ -34,6 +34,7 @@
           "id": { "$ref": "#/$defs/id" },
           "label": { "type": "string" },
           "kind": { "type": "string", "description": "Advisory tag: state | role | lifecycle | process | locale | preference | anything" },
+          "scope": { "enum": ["page", "workspace"], "default": "page", "description": "\"page\" (default): a local axis, reset when another page opens. \"workspace\": one value for the whole workspace, chosen in the viewer chrome and carried across navigation; a page that declares it and excludes the active value drops off the canvas. The first value is the workspace default." },
           "values": {
             "type": "array",
             "minItems": 1,

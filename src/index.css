@@ -233,6 +233,8 @@
 .ps-chip-sm { height: 17px; padding: 0 6px; font-size: 10px; }
 .ps-chip-accent { background: var(--ps-accent-soft); color: var(--ps-accent); border-color: transparent; }
 .ps-chip-k { color: var(--ps-muted); font-weight: 400; }
+/* Out-of-scope marker: this screen is not part of the active workspace dimension value. */
+.ps-chip-warn { color: var(--ps-pin); border-color: color-mix(in srgb, var(--ps-pin) 45%, transparent); background: color-mix(in srgb, var(--ps-pin) 12%, transparent); }
 .ps-kbd {
   display: inline-block; min-width: 17px; padding: 1px 5px; border-radius: 5px;
   background: var(--ps-kbd-bg); border: 1px solid var(--ps-kbd-border); box-shadow: 0 1px 0 var(--ps-kbd-border);

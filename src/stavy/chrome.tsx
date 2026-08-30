@@ -10,8 +10,9 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 import { stavyLayer, StavyLayer } from "./toplayer"
-import { Sun, Moon, SunMoon, ChevronDown, Check, Eye, EyeOff, Keyboard } from "./icons"
+import { Sun, Moon, SunMoon, ChevronDown, Check, Eye, EyeOff, Keyboard, Globe } from "./icons"
 import { cn } from "./cn"
+import { workspaceDimensions } from "./manifest"
 
 /* ------------------------------------------------------------------ */
 /* Chrome state: theme (independent from the prototype) + hide/show UI */
@@ -431,5 +432,43 @@ export function PsSelect({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Workspace-scoped dimensions (SPEC §1.1): axes chosen once for the whole
+ * workspace — release phase, role, locale — rather than per page. Rendered in
+ * the chrome on both the canvas and the page view so the choice reads as
+ * "which world am I in", not "what does this screen do".
+ */
+export function WorkspaceDims({
+  value,
+  onChange,
+  direction = "up",
+}: {
+  value: Record<string, string>
+  onChange: (dimId: string, valueId: string) => void
+  direction?: "up" | "down"
+}) {
+  if (workspaceDimensions.length === 0) return null
+  return (
+    <>
+      {workspaceDimensions.map((d) => (
+        <PsSelect
+          key={d.id}
+          direction={direction}
+          title={`${d.label} — applies to the whole workspace and follows you across pages`}
+          prefix={
+            <span className="inline-flex items-center gap-1">
+              <Globe className="size-3" />
+              {d.label}
+            </span>
+          }
+          value={value[d.id] ?? d.values[0].id}
+          options={d.values.map((v) => ({ value: v.id, label: v.label }))}
+          onChange={(v) => onChange(d.id, v)}
+        />
+      ))}
+    </>
   )
 }

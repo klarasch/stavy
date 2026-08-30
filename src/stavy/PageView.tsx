@@ -12,12 +12,18 @@ import {
   pageUrl,
   dimensionLabel,
   valueLabel,
+  isWorkspaceDim,
+  workspaceDimensions,
+  workspaceDimsFromParams,
+  workspaceKey,
+  workspaceCarry,
+  pageInWorkspace,
 } from "./manifest"
 import { PageRenderer } from "./PageRenderer"
 import { TourOverlay, stepUrl } from "./overlays/TourOverlay"
 import { AnnotationOverlay } from "./overlays/AnnotationOverlay"
 import { Inspector } from "./overlays/Inspector"
-import { PsButton, PsDivider, PsSelect, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, useChrome, useHotkeys, cycleTheme } from "./chrome"
+import { PsButton, PsDivider, PsSelect, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "./chrome"
 import type { ToolbarAnchor } from "./types"
 import { CommentLayer } from "./comments/CommentLayer"
 import { CommentsPanel } from "./comments/CommentsPanel"
@@ -47,6 +53,11 @@ export function PageView() {
 
   const page = getPage(pageId)
   const dims = useMemo(() => (page ? dimsFromParams(page, sp) : {}), [page, sp])
+  const wKey = workspaceKey(sp)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const wdims = useMemo(() => workspaceDimsFromParams(sp), [wKey])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const wCarry = useMemo(() => workspaceCarry(sp), [wKey])
   const wireOn = sp.get("w") === "1"
 
   if (!page) {
@@ -56,7 +67,7 @@ export function PageView() {
           Page <code className="ps-mono">{pageId}</code> is not registered in this workspace
           {__PROTO_SLICE__ ? ` (slice: ${__PROTO_SLICE__})` : ""}.
         </p>
-        <PsButton onClick={() => navigate(canvasUrl(wireOn ? { w: "1" } : undefined))}>
+        <PsButton onClick={() => navigate(canvasUrl({ ...wCarry, ...(wireOn ? { w: "1" } : {}) }))}>
           <Layers /> Back to canvas
         </PsButton>
       </div>
@@ -84,7 +95,7 @@ export function PageView() {
   }
 
   // Viewer mode flags to keep alive across every in-viewer navigation (SPEC.md §3).
-  const carry: Record<string, string> = {}
+  const carry: Record<string, string> = { ...wCarry }
   if (annotMode) carry.a = annotMode
   if (inspectOn) carry.i = "1"
   if (wireOn) carry.w = "1"
@@ -123,7 +134,30 @@ export function PageView() {
     window.addEventListener("pointerup", up)
   }
 
-  const dimEntries = Object.entries(page.dimensions)
+  // Workspace axes are chosen in the chrome, not in the page switcher (SPEC §1.1).
+  const dimEntries = Object.entries(page.dimensions).filter(([d]) => !isWorkspaceDim(d))
+  const inScope = pageInWorkspace(page, wdims)
+  const outOfScope = Object.entries(wdims).find(([d, v]) => d in page.dimensions && !page.dimensions[d].includes(v))
+
+  /**
+   * Switching a workspace axis changes the whole workspace, so it is a URL
+   * change like any other — except when this page does not exist in the new
+   * world, where staying put would show a screen that isn't there. Then the
+   * canvas is the honest destination.
+   */
+  const setWorkspaceDim = (dimId: string, value: string) => {
+    const dim = workspaceDimensions.find((d) => d.id === dimId)
+    if (!dim) return
+    const isDefault = dim.values[0].id === value
+    if (dimId in page.dimensions && !page.dimensions[dimId].includes(value)) {
+      const next = { ...wCarry }
+      if (isDefault) delete next[`d_${dimId}`]
+      else next[`d_${dimId}`] = value
+      navigate(canvasUrl({ ...next, ...(wireOn ? { w: "1" } : {}) }))
+      return
+    }
+    setParam(`d_${dimId}`, isDefault ? null : value)
+  }
   const defaultOf = (d: string) => page.defaults?.[d] ?? page.dimensions[d][0]
   const changed = dimEntries.filter(([d]) => dims[d] !== defaultOf(d))
   const inlineDims = dimEntries.length <= 3
@@ -139,7 +173,7 @@ export function PageView() {
     w: () => setParam("w", wireOn ? null : "1"),
     m: () => setPlacing((p) => !p),
     d: () => setDimPanel((o) => !o),
-    c: () => navigate(canvasUrl(wireOn ? { w: "1" } : undefined)),
+    c: () => navigate(canvasUrl({ ...wCarry, ...(wireOn ? { w: "1" } : {}) })),
     t: () => setTheme(cycleTheme(theme)),
     Escape: () => {
       if (placing) setPlacing(false)
@@ -242,12 +276,27 @@ export function PageView() {
               {isBar ? <PictureInPicture2 /> : <PanelBottom />}
             </PsButton>
             {/* Where am I */}
-            <PsButton tip="Back to canvas" keys={["C"]} onClick={() => navigate(canvasUrl(wireOn ? { w: "1" } : undefined))}>
+            <PsButton tip="Back to canvas" keys={["C"]} onClick={() => navigate(canvasUrl({ ...wCarry, ...(wireOn ? { w: "1" } : {}) }))}>
               <ChevronLeft />
               <Layers style={{ color: "var(--ps-accent)" }} />
             </PsButton>
             <span className="font-semibold text-[13px] px-1.5 whitespace-nowrap">{page.label}</span>
             <Chip sm mono>{template?.id}</Chip>
+            {workspaceDimensions.length > 0 && (
+              <>
+                <PsDivider />
+                <WorkspaceDims value={wdims} onChange={setWorkspaceDim} />
+                {!inScope && outOfScope && (
+                  <Chip
+                    sm
+                    className="ps-chip-warn"
+                    title={`This screen is not part of ${dimensionLabel(outOfScope[0])} = ${valueLabel(outOfScope[0], outOfScope[1])} — it declares only ${page.dimensions[outOfScope[0]].map((v) => valueLabel(outOfScope[0], v)).join(", ")}. You reached it by a direct link.`}
+                  >
+                    not in {valueLabel(outOfScope[0], outOfScope[1])}
+                  </Chip>
+                )}
+              </>
+            )}
             <PsDivider />
 
             {/* Dimensions: inline pills up to 3 axes, a panel beyond that */}

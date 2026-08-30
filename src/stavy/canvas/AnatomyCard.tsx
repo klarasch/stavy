@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useRef, useState } from "react"
 import { PageRenderer } from "../PageRenderer"
 import { resolveDims } from "../manifest"
 import { findProtoTarget } from "../proto"
@@ -22,9 +22,18 @@ interface Callout {
  * and engineers alike. (Which components implement a part is the inspector's
  * job, not this card's.)
  */
-export const AnatomyCard = memo(function AnatomyCard({ page, scale = 0.3 }: { page: PageDef; scale?: number }) {
+export const AnatomyCard = memo(function AnatomyCard({
+  page,
+  scale = 0.3,
+  overrides,
+}: {
+  page: PageDef
+  scale?: number
+  /** Dimension values to force (the active workspace assignment, SPEC §1.1) */
+  overrides?: Record<string, string>
+}) {
   const annotations = page.annotations ?? []
-  const dims = resolveDims(page, page.instances?.[0]?.dims)
+  const dims = resolveDims(page, { ...page.instances?.[0]?.dims, ...overrides })
   const FW = page.frame?.width ?? VIEWPORT_W
   const FH = page.frame?.height ?? VIEWPORT_H
   const w = Math.round(FW * scale)
@@ -34,6 +43,15 @@ export const AnatomyCard = memo(function AnatomyCard({ page, scale = 0.3 }: { pa
   const live = useLiveWhenVisible(frameRef)
   const [portalHost, setPortalHost] = useState<HTMLDivElement | null>(null)
   const [callouts, setCallouts] = useState<Callout[]>([])
+
+  // Stable identity: React re-attaches a callback ref whose identity changed,
+  // so an inline one turns any re-render into detach(null) → attach(el) → state
+  // change → re-render — an unbounded loop the moment this card stops being
+  // memo-stable.
+  const setContent = useCallback((el: HTMLDivElement | null) => {
+    contentRef.current = el
+    setPortalHost((prev) => (prev === el ? prev : el))
+  }, [])
 
   useEffect(() => {
     if (!annotations.length) return
@@ -74,10 +92,7 @@ export const AnatomyCard = memo(function AnatomyCard({ page, scale = 0.3 }: { pa
       <div ref={frameRef} className="ps-card-frame relative rounded-lg bg-white overflow-hidden shrink-0" style={{ width: w, height: h }}>
         {live && (
           <div
-            ref={(el) => {
-              contentRef.current = el
-              setPortalHost(el)
-            }}
+            ref={setContent}
             inert
             className="relative pointer-events-none select-none origin-top-left"
             style={{ width: FW, height: FH, transform: `scale(${scale})` }}
