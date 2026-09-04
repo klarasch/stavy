@@ -9,7 +9,7 @@ Bespoke organism: the role-aware queue card from the dashboard.
 | UI-kit components | Card, Badge, Skeleton |
 | frame | 720 × 420 |
 | fidelity | navigable |
-| module | `src/demo/components/work-queue.tsx` |
+| module | `src/demo/pages/work-queue.tsx` |
 
 ## Dimensions
 

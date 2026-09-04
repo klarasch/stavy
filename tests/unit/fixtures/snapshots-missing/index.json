@@ -1,0 +1,4 @@
+{
+ "simple-page?role=user": { "file": "simple-page__role=user.png", "width": 1280, "height": 832, "targets": {}, "missing": ["SubmitButton"] },
+ "organism-page?": { "file": "organism-page__.png", "width": 400, "height": 300, "targets": {} }
+}

@@ -3,9 +3,9 @@ import { createPortal } from "react-dom"
 import { X, Crosshair, Copy, Check, ExternalLink } from "../icons"
 import { Chip, Kbd, Keys } from "../chrome"
 import type { PageDef, TemplateDef } from "../types"
-import { valueLabel, dimensionLabel } from "../manifest"
+import { valueLabel, dimensionLabel, appUrl, manifest, appBase, ownTargetId } from "../manifest"
 import { adapter, frameToJsx, type CompFrame } from "../inspect-adapter"
-import { strings as copyCatalog } from "virtual:proto-strings"
+import { hostRect, withWireframeLifted } from "../frame"
 
 /* ================================================================== */
 /* Selection model                                                     */
@@ -32,6 +32,13 @@ export interface InspectContext {
   dims: Record<string, string>
 }
 
+/** What the host resolved under the pointer: an element inside a prototype frame, and which instance that frame shows. */
+export interface FrameHit {
+  el: Element
+  iframe: HTMLIFrameElement
+  ctx: InspectContext
+}
+
 function elementLabel(el: Element) {
   const cls = Array.from(el.classList)
     .filter((c) => !c.includes("[") && !c.includes(":"))
@@ -40,11 +47,12 @@ function elementLabel(el: Element) {
   return `<${el.tagName.toLowerCase()}${cls ? "." + cls : ""}>`
 }
 
-function levelsFor(target: Element, wrapper: HTMLElement): Level[] {
+function levelsFor(target: Element): Level[] {
   const levels: Level[] = [{ el: target, kind: "exact", protoId: null, meta: null, label: elementLabel(target) }]
+  const stop = target.ownerDocument.body
   let cur: Element | null = target
-  while (cur && cur !== wrapper) {
-    const id = cur.getAttribute("data-proto")
+  while (cur && cur !== stop) {
+    const id = ownTargetId(cur)
     if (id) {
       let meta: Record<string, unknown> | null = null
       try {
@@ -59,28 +67,26 @@ function levelsFor(target: Element, wrapper: HTMLElement): Level[] {
   return levels
 }
 
-function rectOf(el: Element, wrapper: HTMLElement, k: number): Rect {
-  const w = wrapper.getBoundingClientRect()
-  const r = el.getBoundingClientRect()
-  return {
-    top: (r.top - w.top) / k + wrapper.scrollTop,
-    left: (r.left - w.left) / k + wrapper.scrollLeft,
-    width: r.width / k,
-    height: r.height / k,
-  }
-}
-
 /* ---- copy provenance: which catalog key produced this element's text ---- */
+/* The catalog is optional: `manifest.strings` is a URL the prototype serves. */
 let copyIndex: Map<string, { key: string; locale: string }> | null = null
+let copyLoading: Promise<void> | null = null
+function loadCopyCatalog(onReady: () => void) {
+  if (copyIndex || !manifest.strings) return
+  copyLoading ??= fetch(manifest.strings.startsWith("/") ? `${appBase}${manifest.strings}` : manifest.strings)
+    .then((r) => (r.ok ? r.json() : {}))
+    .catch(() => ({}))
+    .then((catalog: Record<string, Record<string, string>>) => {
+      copyIndex = new Map()
+      for (const [locale, table] of Object.entries(catalog)) for (const [key, text] of Object.entries(table)) {
+        const t = String(text).replace(/\s+/g, " ").trim()
+        if (t && !copyIndex.has(t)) copyIndex.set(t, { key, locale })
+      }
+      onReady()
+    })
+}
 function copyKeyFor(el: Element): { key: string; locale: string } | null {
-  if (!copyIndex) {
-    copyIndex = new Map()
-    for (const [locale, table] of Object.entries(copyCatalog)) for (const [key, text] of Object.entries(table)) {
-      const t = String(text).replace(/\s+/g, " ").trim()
-      if (t && !copyIndex.has(t)) copyIndex.set(t, { key, locale })
-    }
-  }
-  if (copyIndex.size === 0) return null
+  if (!copyIndex || copyIndex.size === 0) return null
   // Own text first (direct text nodes), then the whole subtree for small elements.
   const own = Array.from(el.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent ?? "").join("").replace(/\s+/g, " ").trim()
   const all = (el.textContent ?? "").replace(/\s+/g, " ").trim()
@@ -112,9 +118,10 @@ function classifyClass(c: string): ClassKind {
   return "other"
 }
 
-function colorSource(el: Element, wrapper: HTMLElement, prefix: "text" | "bg" | "border"): { cls: string; from: Element | null } | null {
+function colorSource(el: Element, prefix: "text" | "bg" | "border"): { cls: string; from: Element | null } | null {
+  const stop = el.ownerDocument.body
   let cur: Element | null = el
-  while (cur && cur !== wrapper) {
+  while (cur && cur !== stop) {
     const cls = adapter.colorClass(cur.getAttribute("class") ?? "", prefix)
     if (cls) return { cls, from: cur === el ? null : cur }
     if (prefix !== "text") break // background/border don't inherit
@@ -197,26 +204,26 @@ interface StyleRow {
   note?: string
 }
 
-/** Read computed style with the wireframe filter temporarily lifted, so values describe the design, not the filter. */
+/** Read computed style (from the frame's own window) with the wireframe stylesheet temporarily lifted, so values describe the design, not the filter. */
 function computedWithoutWireframe(el: Element): { cs: CSSStyleDeclaration; wireframed: boolean } {
-  const wf = el.closest(".proto-wireframe")
-  if (!wf) return { cs: getComputedStyle(el), wireframed: false }
-  wf.classList.remove("proto-wireframe")
-  const snapshot = getComputedStyle(el)
-  // Copy the few properties we read before restoring the class (the declaration is live).
-  const keys = ["fontSize", "lineHeight", "fontFamily", "fontWeight", "letterSpacing", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
-    "marginTop", "marginRight", "marginBottom", "marginLeft", "gap", "borderTopLeftRadius", "borderTopWidth", "borderTopStyle", "width", "height",
-    "color", "backgroundColor", "borderTopColor"] as const
-  const copy: Record<string, string> = {}
-  for (const k of keys) copy[k] = snapshot[k as keyof CSSStyleDeclaration] as string
-  for (const k of ["padding-top", "padding-right", "padding-bottom", "padding-left", "margin-top", "margin-right", "margin-bottom", "margin-left"])
-    copy[k] = snapshot.getPropertyValue(k)
-  wf.classList.add("proto-wireframe")
-  const cs = { ...copy, getPropertyValue: (k: string) => copy[k] ?? "" } as unknown as CSSStyleDeclaration
-  return { cs, wireframed: true }
+  const doc = el.ownerDocument
+  const win = doc.defaultView ?? window
+  const { value, lifted } = withWireframeLifted(doc, () => {
+    const snapshot = win.getComputedStyle(el)
+    // Copy the few properties we read before the stylesheet comes back (the declaration is live).
+    const keys = ["fontSize", "lineHeight", "fontFamily", "fontWeight", "letterSpacing", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+      "marginTop", "marginRight", "marginBottom", "marginLeft", "gap", "borderTopLeftRadius", "borderTopWidth", "borderTopStyle", "width", "height",
+      "color", "backgroundColor", "borderTopColor"] as const
+    const copy: Record<string, string> = {}
+    for (const k of keys) copy[k] = snapshot[k as keyof CSSStyleDeclaration] as string
+    for (const k of ["padding-top", "padding-right", "padding-bottom", "padding-left", "margin-top", "margin-right", "margin-bottom", "margin-left"])
+      copy[k] = snapshot.getPropertyValue(k)
+    return { ...copy, getPropertyValue: (k: string) => copy[k] ?? "" } as unknown as CSSStyleDeclaration
+  })
+  return { cs: value, wireframed: lifted }
 }
 
-function stylesFor(el: Element, wrapper: HTMLElement) {
+function stylesFor(el: Element) {
   const { cs, wireframed } = computedWithoutWireframe(el)
   const size = px(cs.fontSize)
   const lh = cs.lineHeight === "normal" ? "normal" : `${px(cs.lineHeight)}px`
@@ -244,7 +251,7 @@ function stylesFor(el: Element, wrapper: HTMLElement) {
   const add = (k: string, raw: string, prefix: "text" | "bg" | "border") => {
     const parsed = cssColorToHex(raw)
     if (!parsed) return
-    const src = colorSource(el, wrapper, prefix)
+    const src = colorSource(el, prefix)
     const row: StyleRow = { k, v: parsed.alpha < 1 ? `${parsed.hex} ${Math.round(parsed.alpha * 100)}%` : parsed.hex, swatch: raw }
     if (src) {
       const v = src.cls.replace(/^[a-z-]+:/, "").replace(/^(text|bg|border)-/, "").replace(/\/\d+$/, "")
@@ -278,44 +285,57 @@ function CopyButton({ text, label = "copy" }: { text: string; label?: string }) 
   )
 }
 
+interface Picked {
+  levels: Level[]
+  iframe: HTMLIFrameElement
+  ctx: InspectContext
+}
+
+/**
+ * Dev-mode inspection of the prototype *through* its frame. The host (player
+ * or canvas) owns the pointer surface — a shield over the frame — and resolves
+ * each pointer event to an element inside a frame via `hit`. The inspector
+ * never touches the prototype's code: component names come from React fibers
+ * on the frame's DOM nodes, styles from the frame's own window.
+ */
 export function Inspector({
-  wrapper,
-  context,
-  scale,
-  within,
+  host,
+  hit,
   onClose,
+  onPinChange,
 }: {
-  wrapper: HTMLElement
-  /** Resolve which page/dims an element belongs to (constant on a page, per-card on the canvas) */
-  context: (el: Element) => InspectContext | null
-  /** Current zoom of the wrapper's content (1 on a page; canvas zoom on the canvas) */
-  scale?: () => number
-  /** Only inspect elements inside this selector (e.g. thumbnails on the canvas) */
-  within?: string
+  /** Element that receives pointer events for inspection (a shield over the frame, or the canvas viewport) */
+  host: HTMLElement
+  /** Resolve a pointer event to an element inside a prototype frame; null when nothing inspectable is under it */
+  hit: (e: MouseEvent) => FrameHit | null
   onClose: () => void
+  /** The host may keep a frame alive while a selection is pinned to it */
+  onPinChange?: (pinnedIframe: HTMLIFrameElement | null) => void
 }) {
-  const [hoverLevels, setHoverLevels] = useState<Level[] | null>(null)
-  const [pinnedLevels, setPinnedLevels] = useState<Level[] | null>(null)
+  const [hover, setHover] = useState<Picked | null>(null)
+  const [pinned, setPinned] = useState<Picked | null>(null)
   const [levelIdx, setLevelIdx] = useState<number | null>(null)
   const [compIdx, setCompIdx] = useState(0)
   const [alt, setAlt] = useState(false)
+  const [, bump] = useState(0)
+
+  useEffect(() => loadCopyCatalog(() => bump((n) => n + 1)), [])
+  useEffect(() => onPinChange?.(pinned?.iframe ?? null), [pinned, onPinChange])
 
   useEffect(() => {
-    // Viewer UI (pins, notes, tour cards, comment bubbles, area titles…) is never a subject of inspection.
-    const eligible = (t: EventTarget | null): t is Element =>
-      t instanceof Element && wrapper.contains(t) && !t.closest("[data-ps-ui]") && (!within || !!t.closest(within))
-    const onMove = (e: MouseEvent) => {
-      if (!eligible(e.target)) {
-        setHoverLevels(null)
-        return
-      }
-      setHoverLevels(levelsFor(e.target, wrapper))
+    const pick = (e: MouseEvent): Picked | null => {
+      // Viewer UI (pins, notes, tour cards, comment bubbles, area titles…) is never a subject of inspection.
+      if (e.target instanceof Element && e.target.closest("[data-ps-ui]")) return null
+      const h = hit(e)
+      return h ? { levels: levelsFor(h.el), iframe: h.iframe, ctx: h.ctx } : null
     }
+    const onMove = (e: MouseEvent) => setHover(pick(e))
     const onClick = (e: MouseEvent) => {
-      if (!eligible(e.target)) return
+      const p = pick(e)
+      if (!p) return
       e.preventDefault()
       e.stopPropagation()
-      setPinnedLevels(levelsFor(e.target, wrapper))
+      setPinned(p)
       setLevelIdx(null)
       setCompIdx(0)
     }
@@ -323,32 +343,32 @@ export function Inspector({
       setAlt(e.altKey)
       if (e.key === "Escape") onClose()
     }
-    wrapper.addEventListener("mousemove", onMove)
-    wrapper.addEventListener("click", onClick, { capture: true })
+    host.addEventListener("mousemove", onMove)
+    host.addEventListener("click", onClick, { capture: true })
     window.addEventListener("keydown", onKey)
     window.addEventListener("keyup", onKey)
     return () => {
-      wrapper.removeEventListener("mousemove", onMove)
-      wrapper.removeEventListener("click", onClick, { capture: true })
+      host.removeEventListener("mousemove", onMove)
+      host.removeEventListener("click", onClick, { capture: true })
       window.removeEventListener("keydown", onKey)
       window.removeEventListener("keyup", onKey)
     }
-  }, [wrapper, onClose, within])
+  }, [host, hit, onClose])
 
-  const levels = pinnedLevels ?? hoverLevels
+  const picked = pinned ?? hover
+  const levels = picked?.levels ?? null
   // Default: the exact element (what an engineer clicked). ⌥ jumps to the nearest semantic ancestor.
   const defaultIdx = levels ? (alt ? Math.max(0, levels.findIndex((l) => l.kind === "proto")) : 0) : 0
   const idx = levelIdx ?? defaultIdx
   const focus = levels?.[Math.min(idx, (levels?.length ?? 1) - 1)] ?? null
-  const k = scale?.() ?? 1
-  const stack = useMemo<CompFrame[]>(() => (focus ? adapter.componentStack(focus.el, "PageRenderer") : []), [focus])
+  const stack = useMemo<CompFrame[]>(() => (focus ? adapter.componentStack(focus.el, "") : []), [focus])
   const comp = stack[Math.min(compIdx, Math.max(0, stack.length - 1))]
   // Choosing a parent component re-targets everything (outline, element, styles) to that
   // component's own root node — not the node that was clicked.
   const subject: Element | null = compIdx > 0 && comp?.host ? comp.host : (focus?.el ?? null)
-  const rect = subject ? rectOf(subject, wrapper, k) : null
-  const ctx = focus ? context(focus.el) : null
-  const styles = useMemo(() => (subject ? stylesFor(subject, wrapper) : null), [subject, wrapper])
+  const rect: Rect | null = subject && picked && subject.isConnected ? hostRect(subject, picked.iframe) : null
+  const ctx = picked?.ctx ?? null
+  const styles = useMemo(() => (subject ? stylesFor(subject) : null), [subject])
   const classes = subject ? Array.from(subject.classList) : []
   const copyKey = subject ? copyKeyFor(subject) : null
   const attrs = subject
@@ -382,21 +402,24 @@ export function Inspector({
 
   return (
     <>
-      <div className="absolute inset-0 pointer-events-none z-30">
-        {rect && (
-          <div
-            className="absolute rounded-md transition-all duration-75"
-            style={{ ...rect, outline: `${1.5 / k}px dashed var(--ps-focus)`, outlineOffset: 2 / k, background: "var(--ps-focus-soft)", opacity: 0.9 }}
-          />
-        )}
-      </div>
+      {createPortal(
+        <div className="ps-fixed-layer" data-ps-ui>
+          {rect && (
+            <div
+              className="absolute rounded-md transition-all duration-75"
+              style={{ ...rect, outline: "1.5px dashed var(--ps-focus)", outlineOffset: 2, background: "var(--ps-focus-soft)", opacity: 0.9 }}
+            />
+          )}
+        </div>,
+        document.body
+      )}
       {createPortal(
       <div className="ps ps-glass-strong fixed right-4 top-4 w-[360px] rounded-2xl overflow-hidden" style={{ zIndex: "var(--ps-z-chrome)" }}>
         <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--ps-border)" }}>
           <Crosshair className="size-4" style={{ color: "var(--ps-muted)" }} />
           <span className="text-[13px] font-semibold">Inspect</span>
           <span className="text-[11px]" style={{ color: "var(--ps-muted)" }}>
-            {pinnedLevels ? "pinned" : "hover, click to pin"}
+            {pinned ? "pinned" : "hover, click to pin"}
           </span>
           <button className="ml-auto cursor-pointer" style={{ color: "var(--ps-faint)" }} onClick={onClose} title="Close (Esc)">
             <X className="size-4" />
@@ -537,13 +560,15 @@ export function Inspector({
                   <div className="text-[11px] mt-0.5 flex flex-col gap-0.5" style={{ color: "var(--ps-muted)" }}>
                     <span>template <code className="ps-mono">{ctx.template.id}</code></span>
                     <span className="flex items-center gap-1.5 flex-wrap">
-                      <span className="ps-mono">{ctx.template.source}</span>
-                      {typeof __PROTO_ROOT__ === "string" && __PROTO_ROOT__ && (
+                      {ctx.template.source && <span className="ps-mono">{ctx.template.source}</span>}
+                      {typeof __STAVY_ROOT__ === "string" && __STAVY_ROOT__ && (
                         <>
-                          <a className="ps-copy" href={`vscode://file/${__PROTO_ROOT__}/${ctx.template.source}`} title="Open the template in VS Code">
-                            <ExternalLink className="size-3" /> template
-                          </a>
-                          <a className="ps-copy" href={`vscode://file/${__PROTO_ROOT__}/stavy.json`} title="Open the manifest in VS Code">
+                          {ctx.template.source && (
+                            <a className="ps-copy" href={`vscode://file/${__STAVY_ROOT__}/${ctx.template.source}`} title="Open the template in VS Code">
+                              <ExternalLink className="size-3" /> source
+                            </a>
+                          )}
+                          <a className="ps-copy" href={`vscode://file/${__STAVY_ROOT__}/stavy.json`} title="Open the manifest in VS Code">
                             <ExternalLink className="size-3" /> manifest
                           </a>
                         </>
@@ -558,6 +583,11 @@ export function Inspector({
                     ))}
                   </div>
                 )}
+              </Section>
+              <Section title="Prototype URL" right={<CopyButton text={appUrl(ctx.page, ctx.dims)} label="copy" />}>
+                <a className="ps-mono text-[11.5px] break-all" style={{ color: "var(--ps-focus)" }} href={appUrl(ctx.page, ctx.dims)} target="_blank" rel="noreferrer">
+                  {appUrl(ctx.page, ctx.dims)}
+                </a>
               </Section>
               <Section title="Active dimensions">
                 <div className="flex flex-col gap-0.5">

@@ -4,45 +4,126 @@
   "title": "Stavy manifest",
   "description": "A framework-agnostic description of a prototype workspace: dimensions, templates, pages, scenarios, prototypes (slices), notes, boards. See SPEC.md.",
   "type": "object",
-  "required": ["version", "product", "dimensions", "templates", "pages", "scenarios", "prototypes"],
+  "required": [
+    "version",
+    "product",
+    "dimensions",
+    "pages",
+    "scenarios"
+  ],
   "additionalProperties": false,
   "properties": {
-    "$schema": { "type": "string" },
-    "version": { "type": "string", "pattern": "^0\\.1" },
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^0\\.1"
+    },
     "product": {
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "additionalProperties": false,
-      "properties": { "name": { "type": "string", "minLength": 1 }, "description": { "type": "string" } }
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        }
+      }
     },
-    "strings": { "type": "string", "description": "Path to the copy catalog JSON (locale → key → text)" },
+    "strings": {
+      "type": "string",
+      "description": "Path to the copy catalog JSON (locale → key → text)"
+    },
     "viewer": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "toolbar": { "enum": ["bottom", "top", "bottom-left", "bottom-right", "top-left", "top-right", "bar-bottom", "bar-top"] },
-        "base": { "type": "string", "pattern": "^(/[^/?#]+)*$", "description": "Path prefix the viewer is mounted under in the host app, e.g. \"/canvas\". Default: root." }
+        "toolbar": {
+          "enum": [
+            "bottom",
+            "top",
+            "bottom-left",
+            "bottom-right",
+            "top-left",
+            "top-right",
+            "bar-bottom",
+            "bar-top"
+          ]
+        },
+        "base": {
+          "type": "string",
+          "pattern": "^(/[^/?#]+)*$",
+          "description": "Path prefix the viewer is mounted under in the host app, e.g. \"/canvas\". Default: root."
+        },
+        "app": {
+          "type": "string",
+          "description": "Where the prototype app is served, as an origin or path prefix (e.g. \"http://localhost:5173\" or \"/app\"). Default: the viewer's own origin at its parent path. Must be same-origin for inspect, tours and pins."
+        },
+        "targetAttrs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Attributes a bare target id is looked up in, in order. Default [\"data-proto\",\"data-testid\"]. Any target that is not a bare id is used as a CSS selector as-is."
+        }
       }
     },
     "dimensions": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "label", "values"],
+        "required": [
+          "id",
+          "label",
+          "values"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "$ref": "#/$defs/id" },
-          "label": { "type": "string" },
-          "kind": { "type": "string", "description": "Advisory tag: state | role | lifecycle | process | locale | preference | anything" },
-          "scope": { "enum": ["page", "workspace"], "default": "page", "description": "\"page\" (default): a local axis, reset when another page opens. \"workspace\": one value for the whole workspace, chosen in the viewer chrome and carried across navigation; a page that declares it and excludes the active value drops off the canvas. The first value is the workspace default." },
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Advisory tag: state | role | lifecycle | process | locale | preference | anything"
+          },
+          "scope": {
+            "enum": [
+              "page",
+              "workspace"
+            ],
+            "default": "page",
+            "description": "\"page\" (default): a local axis, reset when another page opens. \"workspace\": one value for the whole workspace, chosen in the viewer chrome and carried across navigation; a page that declares it and excludes the active value drops off the canvas. The first value is the workspace default."
+          },
           "values": {
             "type": "array",
             "minItems": 1,
             "items": {
               "type": "object",
-              "required": ["id", "label"],
+              "required": [
+                "id",
+                "label"
+              ],
               "additionalProperties": false,
-              "properties": { "id": { "$ref": "#/$defs/valueId" }, "label": { "type": "string" }, "description": { "type": "string" } }
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/valueId"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
             }
           }
         }
@@ -52,15 +133,38 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "label", "source"],
+        "required": [
+          "id",
+          "label"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "$ref": "#/$defs/id" },
-          "label": { "type": "string" },
-          "description": { "type": "string" },
-          "source": { "type": "string", "description": "Path of the template implementation" },
-          "uiKit": { "type": "array", "items": { "type": "string" } },
-          "organisms": { "type": "array", "items": { "$ref": "#/$defs/id" }, "description": "Registered components (kind: component) this template composes" }
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "Path of the template implementation"
+          },
+          "uiKit": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "organisms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            },
+            "description": "Registered components (kind: component) this template composes"
+          }
         }
       }
     },
@@ -68,40 +172,108 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "label", "template", "dimensions"],
+        "required": [
+          "id",
+          "label",
+          "url",
+          "dimensions"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "$ref": "#/$defs/id" },
-          "label": { "type": "string" },
-          "description": { "type": "string" },
-          "kind": { "enum": ["page", "component"] },
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "page",
+              "component"
+            ]
+          },
           "frame": {
             "type": "object",
-            "required": ["width", "height"],
+            "required": [
+              "width",
+              "height"
+            ],
             "additionalProperties": false,
-            "properties": { "width": { "type": "integer", "minimum": 1 }, "height": { "type": "integer", "minimum": 1 } }
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
           },
-          "module": { "type": "string", "description": "Module path relative to the workspace root" },
-          "template": { "$ref": "#/$defs/id" },
-          "fidelity": { "enum": ["static", "navigable", "interactive"] },
-          "dimensions": { "$ref": "#/$defs/dimensionMap" },
-          "defaults": { "$ref": "#/$defs/dims" },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Where the prototype renders this page: a path with {dim} placeholders, e.g. \"/expenses/exp-1?role={role}&state={state}\". Every dimension the page declares must appear as a placeholder — that is the whole binding contract."
+          },
+          "template": {
+            "$ref": "#/$defs/id",
+            "description": "Optional grouping label (a registered template id) — informational, the viewer renders the page's url"
+          },
+          "fidelity": {
+            "enum": [
+              "static",
+              "navigable",
+              "interactive"
+            ]
+          },
+          "dimensions": {
+            "$ref": "#/$defs/dimensionMap"
+          },
+          "defaults": {
+            "$ref": "#/$defs/dims"
+          },
           "instances": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["dims"],
+              "required": [
+                "dims"
+              ],
               "additionalProperties": false,
-              "properties": { "dims": { "$ref": "#/$defs/dims" }, "note": { "type": "string" } }
+              "properties": {
+                "dims": {
+                  "$ref": "#/$defs/dims"
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
             }
           },
           "annotations": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["target", "title", "note"],
+              "required": [
+                "target",
+                "title",
+                "note"
+              ],
               "additionalProperties": false,
-              "properties": { "target": { "$ref": "#/$defs/target" }, "title": { "type": "string" }, "note": { "type": "string" } }
+              "properties": {
+                "target": {
+                  "$ref": "#/$defs/target"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
             }
           }
         }
@@ -111,27 +283,58 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "label", "steps"],
+        "required": [
+          "id",
+          "label",
+          "steps"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "$ref": "#/$defs/id" },
-          "label": { "type": "string" },
-          "persona": { "type": "string" },
-          "description": { "type": "string" },
-          "refs": { "type": "array", "items": { "type": "string" }, "description": "Requirement references (PRD sections, tickets)" },
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "type": "string"
+          },
+          "persona": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Requirement references (PRD sections, tickets)"
+          },
           "steps": {
             "type": "array",
             "minItems": 1,
             "items": {
               "type": "object",
-              "required": ["page", "title"],
+              "required": [
+                "page",
+                "title"
+              ],
               "additionalProperties": false,
               "properties": {
-                "page": { "$ref": "#/$defs/id" },
-                "dims": { "$ref": "#/$defs/dims" },
-                "target": { "$ref": "#/$defs/target" },
-                "title": { "type": "string" },
-                "note": { "type": "string" }
+                "page": {
+                  "$ref": "#/$defs/id"
+                },
+                "dims": {
+                  "$ref": "#/$defs/dims"
+                },
+                "target": {
+                  "$ref": "#/$defs/target"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -143,14 +346,35 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "label", "pages", "scenarios"],
+        "required": [
+          "id",
+          "label",
+          "pages",
+          "scenarios"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "$ref": "#/$defs/id" },
-          "label": { "type": "string" },
-          "description": { "type": "string" },
-          "pages": { "type": "array", "items": { "$ref": "#/$defs/id" } },
-          "scenarios": { "type": "array", "items": { "$ref": "#/$defs/id" } }
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/id"
+            }
+          }
         }
       }
     },
@@ -158,16 +382,48 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "text", "page"],
+        "required": [
+          "id",
+          "text",
+          "page"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "$ref": "#/$defs/id" },
-          "text": { "type": "string" },
-          "page": { "$ref": "#/$defs/id" },
-          "dims": { "$ref": "#/$defs/dims" },
-          "target": { "$ref": "#/$defs/target" },
-          "placement": { "enum": ["top", "right", "bottom", "left"] },
-          "offset": { "type": "object", "additionalProperties": false, "properties": { "x": { "type": "number" }, "y": { "type": "number" } } }
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "text": {
+            "type": "string"
+          },
+          "page": {
+            "$ref": "#/$defs/id"
+          },
+          "dims": {
+            "$ref": "#/$defs/dims"
+          },
+          "target": {
+            "$ref": "#/$defs/target"
+          },
+          "placement": {
+            "enum": [
+              "top",
+              "right",
+              "bottom",
+              "left"
+            ]
+          },
+          "offset": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            }
+          }
         }
       }
     },
@@ -175,13 +431,25 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "title"],
+        "required": [
+          "id",
+          "title"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "type": "string", "minLength": 1 },
-          "title": { "type": "string" },
-          "source": { "type": "string" },
-          "priority": { "type": "string" }
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          }
         }
       }
     },
@@ -189,24 +457,71 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "title", "kind", "source"],
+        "required": [
+          "id",
+          "title",
+          "kind",
+          "source"
+        ],
         "additionalProperties": false,
         "properties": {
-          "id": { "$ref": "#/$defs/id" },
-          "title": { "type": "string" },
-          "description": { "type": "string" },
-          "kind": { "enum": ["mermaid", "image", "text"] },
-          "source": { "type": "string" },
-          "width": { "type": "integer", "minimum": 100 }
+          "id": {
+            "$ref": "#/$defs/id"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "mermaid",
+              "image",
+              "text"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 100
+          }
         }
       }
     }
   },
   "$defs": {
-    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "description": "kebab-case identifier" },
-    "valueId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$" },
-    "target": { "type": "string", "pattern": "^[A-Z][A-Za-z0-9]*(:[A-Za-z0-9_.-]+)?$", "description": "data-proto id: PascalCase, optionally Name:key" },
-    "dims": { "type": "object", "additionalProperties": { "$ref": "#/$defs/valueId" } },
-    "dimensionMap": { "type": "object", "additionalProperties": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/valueId" } } }
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "kebab-case identifier"
+    },
+    "valueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A semantic target: a bare id (letters, digits, _ : . -) resolved through viewer.targetAttrs, or any CSS selector."
+    },
+    "dims": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/valueId"
+      }
+    },
+    "dimensionMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "$ref": "#/$defs/valueId"
+        }
+      }
+    }
   }
 }

@@ -1,8 +1,8 @@
 import { Zap } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/ui/avatar"
-import { proto } from "@/stavy/proto"
+import { proto } from "@/demo/lib/proto"
 import { cn } from "@/lib/utils"
-import type { PageProps } from "@/stavy/types"
+import type { PageProps } from "@/demo/app/types"
 import { makeT } from "../strings"
 
 const roleInitials: Record<string, string> = { employee: "KS", manager: "MN", finance: "FT" }

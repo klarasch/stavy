@@ -6,12 +6,12 @@ import { test, expect } from "@playwright/test"
 // synchronously whenever `live` flips, the overlap cascaded inside one commit
 // ("Maximum update depth exceeded") instead of merely flickering.
 //
-// Jumping to a page area is what makes this reachable: it fits an area at a
-// legible zoom with dozens of cards (instances + anatomy) live at once, so the
-// registry goes over LIVE_BUDGET with candidates sitting just off-screen.
+// Live mode (`live=1`) is what makes this reachable now: cards near the
+// viewport mount frozen frames of the prototype, so jumping to a crowded page
+// area puts the registry over LIVE_BUDGET with candidates just off-screen.
 // Zooming then re-runs the check on every frame.
 
-for (const url of ["/", "/?d_locale=de-DE"]) {
+for (const url of ["/stavy/?live=1", "/stavy/?live=1&d_locale=de-DE"]) {
   test(`canvas survives zooming a crowded area (${url})`, async ({ page }) => {
     const errors: string[] = []
     page.on("pageerror", (e) => errors.push(e.message))
@@ -21,9 +21,9 @@ for (const url of ["/", "/?d_locale=de-DE"]) {
     await expect(page.locator("[data-canvas-root]")).toBeVisible()
 
     await page.getByRole("button", { name: "Expense detail" }).click()
-    await page.waitForTimeout(1200)
+    await page.waitForTimeout(1500)
     // Guard the guard: if nothing mounted, the test proves nothing.
-    expect(await page.locator(".ps-anat-tag").count()).toBeGreaterThan(10)
+    expect(await page.locator("iframe.ps-card-live").count()).toBeGreaterThan(2)
 
     for (let i = 0; i < 4; i++) {
       await page.mouse.move(640, 400)

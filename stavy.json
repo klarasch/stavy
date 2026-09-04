@@ -8,7 +8,7 @@
   "viewer": {
     "toolbar": "bottom"
   },
-  "strings": "src/demo/strings.json",
+  "strings": "/src/demo/strings.json",
   "dimensions": [
     {
       "id": "role",
@@ -155,6 +155,23 @@
           "label": "Deutsch"
         }
       ]
+    },
+    {
+      "id": "expense",
+      "label": "Expense",
+      "kind": "entity",
+      "values": [
+        {
+          "id": "exp-2101",
+          "label": "DataConf 2026",
+          "description": "Submitted event ticket (employee's own)"
+        },
+        {
+          "id": "exp-2102",
+          "label": "SkyRail",
+          "description": "Approved travel, ready for finance"
+        }
+      ]
     }
   ],
   "templates": [
@@ -260,6 +277,7 @@
       "id": "dashboard",
       "label": "Dashboard",
       "description": "Landing page; content adapts to the viewer's role.",
+      "url": "/?role={role}&state={state}",
       "template": "dashboard-page",
       "fidelity": "navigable",
       "dimensions": {
@@ -335,6 +353,7 @@
       "id": "expenses",
       "label": "Expenses list",
       "description": "All expenses visible to the current role, with filters.",
+      "url": "/expenses?role={role}&state={state}",
       "template": "list-page",
       "fidelity": "navigable",
       "dimensions": {
@@ -405,9 +424,14 @@
       "id": "expense-detail",
       "label": "Expense detail",
       "description": "A single expense across its whole lifecycle; actions depend on role × lifecycle. Also varies by density, locale, and overlay (5 dimensions → the toolbar switches to a panel). Reject walks through a confirm-dialog overlay state.",
+      "url": "/expenses/{expense}?role={role}&lifecycle={lifecycle}&density={density}&locale={locale}&overlay={overlay}",
       "template": "detail-page",
       "fidelity": "interactive",
       "dimensions": {
+        "expense": [
+          "exp-2101",
+          "exp-2102"
+        ],
         "role": [
           "employee",
           "manager",
@@ -435,6 +459,7 @@
         ]
       },
       "defaults": {
+        "expense": "exp-2101",
         "role": "employee",
         "lifecycle": "submitted",
         "density": "comfortable",
@@ -520,6 +545,7 @@
       "id": "submit-expense",
       "label": "Submit expense",
       "description": "Multi-step submission flow; each step is a value of the 'step' process dimension.",
+      "url": "/submit?step={step}",
       "template": "form-flow-page",
       "fidelity": "interactive",
       "dimensions": {
@@ -577,7 +603,7 @@
         "width": 560,
         "height": 340
       },
-      "module": "src/demo/components/approval-actions.tsx",
+      "url": "/components/approval-actions?role={role}&lifecycle={lifecycle}",
       "description": "Bespoke organism: the decision panel, reviewable on its own.",
       "template": "approval-actions-organism",
       "fidelity": "navigable",
@@ -649,7 +675,7 @@
         "width": 720,
         "height": 160
       },
-      "module": "src/demo/components/flow-progress.tsx",
+      "url": "/components/flow-progress?step={step}",
       "description": "Bespoke organism: step header driven by the process dimension.",
       "template": "flow-progress-organism",
       "fidelity": "static",
@@ -702,7 +728,7 @@
         "width": 720,
         "height": 420
       },
-      "module": "src/demo/components/work-queue.tsx",
+      "url": "/components/work-queue?role={role}&state={state}",
       "description": "Bespoke organism: the role-aware queue card from the dashboard.",
       "template": "work-queue-organism",
       "fidelity": "navigable",
@@ -905,6 +931,7 @@
         {
           "page": "expense-detail",
           "dims": {
+            "expense": "exp-2102",
             "role": "finance",
             "lifecycle": "approved"
           },
@@ -915,6 +942,7 @@
         {
           "page": "expense-detail",
           "dims": {
+            "expense": "exp-2102",
             "role": "finance",
             "lifecycle": "reimbursed"
           },

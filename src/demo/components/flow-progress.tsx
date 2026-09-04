@@ -1,7 +1,12 @@
-import type { PageProps } from "@/stavy/types"
+// Harness route for the "flow-progress" component page: renders the organism
+// alone, reading its dims from the URL like every other Orbit route.
+import { useDims } from "../app/dims"
 import { FlowProgress } from "../organisms/FlowProgress"
 
-export default function FlowProgressComponent({ dims }: PageProps) {
+const DEFAULTS = { step: "details" }
+
+export default function FlowProgressComponent() {
+  const dims = useDims(DEFAULTS)
   return (
     <div className="min-h-full bg-muted/40 p-6">
       <div className="max-w-xl bg-background rounded-xl border p-5">

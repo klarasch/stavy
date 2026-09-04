@@ -1,9 +1,12 @@
 #!/usr/bin/env node
-// Stavy check — validates the manifest against the code (the SKILL.md
-// invariants), optionally checks scenario refs against requirement documents,
-// and prints a coverage summary.
+// Stavy check — validates the manifest (shape, cross-references, the URL
+// contract), reads the last scan's results (public/snapshots/index.json) to
+// report targets that were missing in the rendered prototype, optionally
+// checks scenario refs against requirement documents, and prints a coverage
+// summary. Whether targets *exist* is the scan's job (scripts/scan.mjs) —
+// the viewer never reads the prototype's source.
 //
-//   node scripts/validate.mjs [stavy.json] [--refs docs/PRD-118.md ...] [--coverage]
+//   node scripts/validate.mjs [stavy.json] [--refs docs/PRD-118.md ...] [--coverage] [--snapshots <dir>]
 //
 // Exit code 1 on errors; warnings never fail the run.
 import { readFileSync, existsSync, statSync } from "node:fs"
@@ -26,7 +29,7 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   try {
     const { default: Ajv } = await import("ajv/dist/2020.js")
     const { default: addFormats } = await import("ajv-formats")
-    const schemaPath = [resolve(root, "spec/stavy.schema.json"), resolve(import.meta.dirname, "../spec/stavy.schema.json")].find(existsSync)
+    const schemaPath = [resolve(root, "spec/stavy.schema.json"), resolve(import.meta.dirname, "stavy.schema.json"), resolve(import.meta.dirname, "../spec/stavy.schema.json")].find(existsSync)
     if (schemaPath) {
       const ajv = new Ajv({ allErrors: true, strict: false })
       addFormats(ajv)
@@ -42,7 +45,7 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   // page's own default never applies and a scenario cannot straddle two values.
   const workspaceDims = m.dimensions.filter((d) => d.scope === "workspace")
   const isWorkspaceDim = (id) => workspaceDims.some((d) => d.id === id)
-  const templateIndex = new Map(m.templates.map((t) => [t.id, t]))
+  const templateIndex = new Map((m.templates ?? []).map((t) => [t.id, t]))
   const pageIndex = new Map(m.pages.map((p) => [p.id, p]))
   const scenarioIndex = new Map(m.scenarios.map((s) => [s.id, s]))
 
@@ -55,67 +58,19 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     }
   }
 
-  // Source text for data-proto target lookup: the template, the page module, the
-  // template's declared organisms — and everything they import relatively (two
-  // levels deep), so targets living in an imported organism file are found.
-  const fileCache = new Map()
-  function readSource(abs) {
-    if (fileCache.has(abs)) return fileCache.get(abs)
-    const text = existsSync(abs) ? readFileSync(abs, "utf8") : ""
-    fileCache.set(abs, text)
-    return text
-  }
-  function resolveImport(fromFile, spec) {
-    const base = resolve(dirname(fromFile), spec)
-    // isFile guards directory-style imports (`./BillingSetup` resolving to a
-    // directory would EISDIR in readSource before `./BillingSetup/index.tsx` is tried)
-    for (const cand of [base, `${base}.tsx`, `${base}.ts`, `${base}.jsx`, `${base}.js`, `${base}/index.tsx`, `${base}/index.ts`])
-      if (existsSync(cand) && statSync(cand).isFile()) return cand
-    return null
-  }
-  function collectSources(entry, depth = 2, seen = new Set()) {
-    const abs = resolve(root, entry)
-    if (!existsSync(abs) || seen.has(abs)) return seen
-    seen.add(abs)
-    if (depth === 0) return seen
-    const text = readSource(abs)
-    for (const mm of text.matchAll(/from\s+["'](\.\.?\/[^"']+)["']/g)) {
-      const dep = resolveImport(abs, mm[1])
-      if (dep) collectSources(dep, depth - 1, seen)
-    }
-    return seen
-  }
-  function sourceFilesFor(page) {
-    const t = templateIndex.get(page.template)
-    const organismSources = (t?.organisms ?? [])
-      .map((id) => pageIndex.get(id))
-      .flatMap((c) => (c ? [templateIndex.get(c.template)?.source, c.module] : []))
-    const entries = [t?.source, page.module ?? `src/demo/pages/${page.id}.tsx`, ...organismSources].filter(Boolean)
-    const files = new Set()
-    for (const e of entries) collectSources(e, 2, files)
-    return files
-  }
-  function sourcesFor(page) {
-    return [...sourceFilesFor(page)].map(readSource).join("\n")
-  }
-  // A target counts as present when its id appears as a string literal in the
-  // resolved sources (`proto("Id")`, `data-proto="Id"`, a lookup table entry),
-  // as a dynamic prefix (proto(`Id:${…}`)), or is declared in a comment:
-  //   // @proto-targets ApproveButton RejectButton
-  function hasTarget(src, target) {
-    const base = target.split(":")[0]
-    const q = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    if (new RegExp(`["'\`]${q(target)}["'\`]`).test(src)) return true
-    if (new RegExp(`["'\`]${q(base)}:`).test(src)) return true
-    for (const mm of src.matchAll(/@proto-targets\s+([^\n*]+)/g)) if (mm[1].split(/[\s,]+/).includes(target) || mm[1].split(/[\s,]+/).includes(base)) return true
-    return false
-  }
-
   // ---- pages
   for (const page of m.pages) {
     const w = `page "${page.id}"`
-    if (!templateIndex.has(page.template)) err(`${w}: template "${page.template}" is not registered`)
+    if (page.template && !templateIndex.has(page.template)) err(`${w}: template "${page.template}" is not registered`)
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(page.id)) err(`${w}: id must be kebab-case`)
+    // ---- the URL contract: every declared dimension reaches the prototype through the url template
+    if (typeof page.url !== "string" || !page.url) err(`${w}: no url — where does the prototype render this page?`)
+    else {
+      if (!/^(\/|[a-z]+:\/\/)/i.test(page.url)) err(`${w}: url must start with "/" (or be absolute): "${page.url}"`)
+      const placeholders = [...page.url.matchAll(/\{([a-zA-Z0-9_-]+)\}/g)].map((mm) => mm[1])
+      for (const d of placeholders) if (!(d in page.dimensions)) err(`${w}: url placeholder {${d}} is not a dimension this page declares`)
+      for (const d of Object.keys(page.dimensions)) if (!placeholders.includes(d)) err(`${w}: dimension "${d}" does not appear in url "${page.url}" — the prototype cannot render that axis`)
+    }
     if (!page.fidelity) warn(`${w}: no fidelity rung declared (static | navigable | interactive)`)
     for (const [d, values] of Object.entries(page.dimensions)) {
       if (!dimIndex.has(d)) err(`${w}: unknown dimension "${d}"`)
@@ -130,44 +85,6 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     checkDims(`${w} defaults`, page, page.defaults)
     ;(page.instances ?? []).forEach((inst, i) => checkDims(`${w} instances[${i}]`, page, inst.dims))
     if (!page.instances?.length) warn(`${w}: no pinned instances — nothing will show on the canvas`)
-    const src = sourcesFor(page)
-    for (const a of page.annotations ?? []) {
-      if (src && !hasTarget(src, a.target)) err(`${w} annotation target "${a.target}" not found in source`)
-    }
-  }
-
-  // ---- module-level singleton stores in page sources
-  // Every canvas card mounts an independent instance of a page module. A store
-  // created at module scope (Zustand `create(...)`, a Redux `configureStore(...)`
-  // exported from the module, `new QueryClient()` at the top) is shared by every
-  // card of that page — interacting with one variant mutates the others. Flag
-  // `// @proto-shared-store` on the line (or the line above) to suppress a
-  // false positive.
-  const STORE_PATTERNS = [
-    { lib: /zustand/, call: /\b(create|createStore)\s*\(/, what: "zustand store" },
-    { lib: /redux/, call: /\b(configureStore|createStore)\s*\(/, what: "redux store" },
-    { lib: /(@tanstack\/)?react-query/, call: /\bnew\s+QueryClient\s*\(/, what: "QueryClient" },
-  ]
-  function importsMatching(src, lib) {
-    for (const mm of src.matchAll(/from\s+["']([^"']+)["']/g)) if (lib.test(mm[1])) return true
-    return false
-  }
-  for (const page of m.pages) {
-    const w = `page "${page.id}"`
-    for (const abs of sourceFilesFor(page)) {
-      const text = readSource(abs)
-      if (!text) continue
-      const lines = text.split("\n")
-      const rel = relative(root, abs)
-      for (const pat of STORE_PATTERNS) {
-        if (!importsMatching(text, pat.lib)) continue
-        lines.forEach((line, i) => {
-          if (!/^(export\s+)?(const|let|var)\s+/.test(line) || !pat.call.test(line)) return
-          if (/@proto-shared-store/.test(line) || /@proto-shared-store/.test(lines[i - 1] ?? "")) return
-          warn(`${w}: ${rel}:${i + 1}: module-level store (${pat.what}) — every canvas card shares it; create the store inside the component (factory/provider per instance)`)
-        })
-      }
-    }
   }
 
   // ---- scenarios
@@ -178,12 +95,8 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
       const page = pageIndex.get(st.page)
       if (!page) return err(`${w} step ${i + 1}: unknown page "${st.page}"`)
       checkDims(`${w} step ${i + 1}`, page, st.dims)
-      if (st.target) {
-        const src = sourcesFor(page)
-        if (src && !hasTarget(src, st.target)) err(`${w} step ${i + 1}: target "${st.target}" not found in source of "${page.id}"`)
-      }
-      const inSlice = m.prototypes.some((p) => p.scenarios.includes(sc.id) && p.pages.includes(st.page))
-      if (!inSlice) err(`${w} step ${i + 1}: page "${st.page}" is not in any prototype that includes this scenario`)
+      const inSlice = !m.prototypes?.length || m.prototypes.some((p) => p.scenarios.includes(sc.id) && p.pages.includes(st.page))
+      if (!inSlice) warn(`${w} step ${i + 1}: page "${st.page}" is not in any prototype that includes this scenario`)
     })
     // A scenario belongs to one world: if its steps pin two values of a
     // workspace axis, or a step's page excludes a value another step pins, the
@@ -213,7 +126,7 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   }
 
   // ---- templates
-  for (const t of m.templates) {
+  for (const t of m.templates ?? []) {
     for (const id of t.organisms ?? []) {
       const c = pageIndex.get(id)
       if (!c) err(`template "${t.id}": organism "${id}" is not a registered component`)
@@ -222,7 +135,7 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   }
 
   // ---- prototypes
-  for (const p of m.prototypes) {
+  for (const p of m.prototypes ?? []) {
     for (const id of p.pages) if (!pageIndex.has(id)) err(`prototype "${p.id}": unknown page "${id}"`)
     for (const id of p.scenarios) if (!scenarioIndex.has(id)) err(`prototype "${p.id}": unknown scenario "${id}"`)
   }
@@ -243,14 +156,31 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
       })
       if (!pinned) warn(`note "${n.id}": points at an instance that is not pinned on the canvas`)
     }
-    if (n.target) {
-      const src = sourcesFor(page)
-      if (src && !hasTarget(src, n.target)) err(`note "${n.id}": target "${n.target}" not found in source of "${page.id}"`)
-    }
   }
 
-  // ---- copy catalog
-  if (m.strings && !existsSync(resolve(root, m.strings))) err(`strings catalog "${m.strings}" not found`)
+  // ---- copy catalog: a URL the prototype serves (checked at runtime by the viewer)
+  if (m.strings && !/^(\/|[a-z]+:\/\/)/i.test(m.strings)) warn(`strings: "${m.strings}" should be a URL path the prototype serves (e.g. "/strings.json")`)
+
+  // ---- last scan: targets the rendered prototype did not have (scripts/scan.mjs)
+  const snapDir = flags.snapshots ?? resolve(root, root === process.cwd() ? "public/snapshots" : "snapshots")
+  const indexPath = resolve(snapDir, "index.json")
+  if (existsSync(indexPath)) {
+    const index = JSON.parse(readFileSync(indexPath, "utf8"))
+    let scanned = 0
+    for (const [key, entry] of Object.entries(index)) {
+      scanned++
+      for (const t of entry.missing ?? []) err(`scan: ${key}: target "${t}" was not found in the rendered prototype`)
+    }
+    const pinned = m.pages.flatMap((p) => (p.instances ?? [{ dims: {} }]).map((inst) => {
+      const dims = Object.fromEntries(Object.keys(p.dimensions).map((d) => [d, inst.dims[d] ?? p.defaults?.[d] ?? p.dimensions[d][0]]))
+      return `${p.id}?${Object.entries(dims).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join("&")}`
+    }))
+    const unscanned = pinned.filter((k) => !index[k])
+    if (unscanned.length) warn(`scan: ${unscanned.length} pinned instance(s) have no snapshot yet — run \`npm run scan\` (e.g. ${unscanned[0]})`)
+    console.log(`scan: ${scanned} state(s) in ${relative(root, indexPath)}`)
+  } else {
+    warn(`scan: no ${relative(root, indexPath)} yet — run \`npm run scan\` against the dev server to check targets and render the canvas`)
+  }
 
   // ---- boards
   const boardIds = new Set()
@@ -308,15 +238,16 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
 
 async function main() {
   const argv = process.argv.slice(2)
-  const flags = { refs: [], coverage: false }
+  const flags = { refs: [], coverage: false, snapshots: null }
   const positional = []
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--refs") {
       while (argv[i + 1] && !argv[i + 1].startsWith("--")) flags.refs.push(argv[++i])
     } else if (argv[i] === "--coverage") flags.coverage = true
+    else if (argv[i] === "--snapshots") flags.snapshots = resolve(argv[++i])
     else positional.push(argv[i])
   }
-  const manifestPath = resolve(positional[0] ?? "stavy.json")
+  const manifestPath = resolve(positional[0] ?? (existsSync("stavy.json") ? "stavy.json" : "public/stavy.json"))
   const root = dirname(manifestPath)
   const m = JSON.parse(readFileSync(manifestPath, "utf8"))
 
@@ -326,7 +257,7 @@ async function main() {
   for (const w of warnings) console.log(`  warn  ${w}`)
   for (const e of errors) console.log(`  ERROR ${e}`)
   console.log(
-    `\nstavy: ${m.pages.length} pages · ${m.templates.length} templates · ${m.scenarios.length} scenarios · ${m.prototypes.length} prototypes · ${(m.notes ?? []).length} notes — ${errors.length} error(s), ${warnings.length} warning(s)`
+    `\nstavy: ${m.pages.length} pages · ${m.scenarios.length} scenarios · ${(m.notes ?? []).length} notes — ${errors.length} error(s), ${warnings.length} warning(s)`
   )
   process.exit(errors.length ? 1 : 0)
 }

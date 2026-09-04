@@ -1,5 +1,6 @@
-// Stavy manifest types — the TypeScript mirror of SPEC.md (v0.1).
-// The manifest itself (stavy.json) is framework-agnostic JSON.
+// Stavy manifest types — the TypeScript mirror of SPEC.md (v0.2).
+// The manifest itself (stavy.json) is framework-agnostic JSON. The viewer is
+// an overlay: it never imports the prototype, it loads the prototype's URLs.
 
 export interface DimensionValue {
   id: string
@@ -26,12 +27,13 @@ export interface Dimension {
   values: DimensionValue[]
 }
 
+/** An optional grouping of pages by shape ("list", "detail", "dashboard"). Informational. */
 export interface TemplateDef {
   id: string
   label: string
   description?: string
-  /** Path to the template implementation in this workspace */
-  source: string
+  /** Path to the implementation in the prototype repo — the inspector links to it in dev */
+  source?: string
   /** UI-kit components the template is composed from */
   uiKit?: string[]
   /** Registered components (kind: "component") this template is composed from — its anatomy */
@@ -45,7 +47,7 @@ export interface InstanceDef {
 }
 
 export interface AnnotationDef {
-  /** data-proto target id the pin attaches to */
+  /** Target the pin attaches to (bare id or CSS selector, see `targetSelector`) */
   target: string
   title: string
   note: string
@@ -59,19 +61,25 @@ export interface PageDef {
   description?: string
   /**
    * "page" (default) — a full screen rendered at the workspace viewport.
-   * "component" — a bespoke organism (panel, widget) rendered in its own `frame`;
+   * "component" — an organism rendered by a harness route in its own `frame`;
    * same contract, same dimensions/instances/annotations, smaller canvas cards.
    */
   kind?: "page" | "component"
   /** Render size for components (defaults to the page viewport) */
   frame?: { width: number; height: number }
-  /** Module path relative to the workspace root (default: src/demo/pages/<id>.tsx) */
-  module?: string
-  template: string
+  /**
+   * THE binding contract: where the prototype renders this page, as a path
+   * with `{dim}` placeholders — "/expenses/exp-1?role={role}&state={state}".
+   * Every declared dimension must appear; the prototype reads them however it
+   * likes (search params, path segments) and renders that state.
+   */
+  url: string
+  /** Optional shape/grouping label (a registered template id) */
+  template?: string
   /**
    * How much behaviour this page carries (see SKILL.md "Fidelity ladder"):
-   * static = screens only · navigable = nav() between pages/dims only ·
-   * interactive = local state beyond navigation (only when a scenario needs it)
+   * static = screens only · navigable = links between states only ·
+   * interactive = real local behaviour (only when a scenario needs it)
    */
   fidelity?: Fidelity
   /** Dimension id -> value ids this page supports */
@@ -87,7 +95,7 @@ export interface ScenarioStep {
   page: string
   /** Dimension overrides for this step (defaults fill the rest) */
   dims?: Record<string, string>
-  /** data-proto id of the element to highlight; omit for an "observe" step */
+  /** Target to highlight; omit for an "observe" step */
   target?: string
   title: string
   note?: string
@@ -110,13 +118,14 @@ export interface CanvasNote {
   page: string
   /** Which pinned instance to point at (defaults fill the rest); falls back to the page's first instance */
   dims?: Record<string, string>
-  /** Optional data-proto id inside that instance to point at precisely */
+  /** Optional target inside that instance to point at precisely */
   target?: string
   placement?: "top" | "right" | "bottom" | "left"
   /** Manual nudge in canvas pixels */
   offset?: { x?: number; y?: number }
 }
 
+/** A named subset of the workspace — informational grouping for handoff docs. */
 export interface PrototypeSlice {
   id: string
   label: string
@@ -141,7 +150,6 @@ export interface BoardDef {
   width?: number
 }
 
-/** Floating anchors, or a full-width bar that shrinks the prototype viewport instead of covering it. */
 /**
  * A requirement the prototype must demonstrate (PRD section, ticket, acceptance
  * criterion). Scenarios cite them in `refs`; the coverage board shows which are
@@ -162,8 +170,16 @@ export type ToolbarAnchor = "bottom" | "top" | "bottom-left" | "bottom-right" | 
 export interface ViewerDefaults {
   /** Where the prototype-mode toolbar docks by default */
   toolbar?: ToolbarAnchor
-  /** Path prefix the viewer is mounted under in the host app, e.g. "/canvas". Default: "" (root). */
+  /** Path prefix the viewer is served under, e.g. "/stavy". Default: derived from the viewer's own location. */
   base?: string
+  /**
+   * Where the prototype app is served: an origin or a path prefix. Default: the
+   * viewer's origin at the parent of `base`. Must be same-origin for inspect,
+   * tours, pins and comments to reach into the frame.
+   */
+  app?: string
+  /** Attributes a bare target id is looked up in, in order. Default ["data-proto", "data-testid"]. */
+  targetAttrs?: string[]
 }
 
 export interface Manifest {
@@ -171,27 +187,44 @@ export interface Manifest {
   version: string
   product: { name: string; description?: string }
   viewer?: ViewerDefaults
-  /** Path to the copy catalog (JSON: locale → key → string). All user-visible copy lives there. */
+  /** URL of the copy catalog (JSON: locale → key → string), if the prototype exposes one. */
   strings?: string
   dimensions: Dimension[]
-  templates: TemplateDef[]
+  templates?: TemplateDef[]
   pages: PageDef[]
   scenarios: Scenario[]
-  prototypes: PrototypeSlice[]
+  prototypes?: PrototypeSlice[]
   notes?: CanvasNote[]
   boards?: BoardDef[]
   requirements?: RequirementDef[]
 }
 
-/** Props every page module receives from the viewer */
-export interface PageProps {
-  dims: Record<string, string>
-  nav: (pageId: string, dims?: Record<string, string>) => void
-  /**
-   * Positioned element to portal overlays (modals, drawers, toasts) into,
-   * so they land inside the canvas card / page frame instead of
-   * `document.body` (SPEC §3 "Overlay containment"). Pass it to the kit's
-   * container prop; also available anywhere via `useStavyPortalContainer()`.
-   */
-  portalContainer?: HTMLElement
+/* ------------------------------------------------------------------ */
+/* Snapshot index — written by scripts/scan.mjs, read by the canvas     */
+/* ------------------------------------------------------------------ */
+
+/** A measured target box, as fractions (0..1) of the page frame. */
+export interface TargetBox {
+  x: number
+  y: number
+  w: number
+  h: number
 }
+
+export interface SnapshotEntry {
+  /** PNG file name inside the snapshots folder */
+  file: string
+  width: number
+  height: number
+  /** Every target referenced for this instance that was found, with its box */
+  targets: Record<string, TargetBox>
+  /** Required targets (scenario steps, notes) that were not found in the rendered page — the contract broke */
+  missing?: string[]
+  /** Optional targets (annotations) not present on this state — no pin is drawn; not a failure */
+  absent?: string[]
+  /** ISO timestamp of the scan */
+  at?: string
+}
+
+/** instanceKey(page, dims) → entry */
+export type SnapshotIndex = Record<string, SnapshotEntry>

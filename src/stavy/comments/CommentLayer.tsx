@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Check, RotateCcw, Trash2, X, CornerDownRight } from "../icons"
 import { PsButton } from "../chrome"
+import { targetIdOf } from "../manifest"
+import { elementAt, hostRect, onFrameChange } from "../frame"
 import { useComments, dimsEqual, timeAgo, pathBetween, resolveAnchor, type Comment } from "./store"
 
 interface Placed {
@@ -15,12 +18,15 @@ function initials(name: string) {
 }
 
 /**
- * Comment bubbles on a page + the composer for placing new ones.
- * Anchors: a data-proto target when the click lands inside one (robust to
+ * Comment bubbles over the player frame + the composer for placing new ones.
+ * Anchors: a semantic target when the click lands inside one (robust to
  * redesigns), otherwise the page root; position is stored in % of the anchor.
+ * Everything is measured inside the prototype's document and drawn in a fixed
+ * host layer. While `placing`, a shield over the frame captures the click.
  */
 export function CommentLayer({
-  wrapper,
+  iframe,
+  doc,
   pageId,
   dims,
   placing,
@@ -28,7 +34,8 @@ export function CommentLayer({
   openId,
   onOpenChange,
 }: {
-  wrapper: HTMLElement
+  iframe: HTMLIFrameElement | null
+  doc: Document | null
   pageId: string
   dims: Record<string, string>
   placing: boolean
@@ -40,125 +47,119 @@ export function CommentLayer({
   const [placed, setPlaced] = useState<Placed[]>([])
   const [draft, setDraft] = useState<{ target?: string; path: number[]; x: number; y: number; left: number; top: number } | null>(null)
   const mine = comments.filter((c) => c.page === pageId && dimsEqual(c.dims, dims))
-  const root = wrapper.firstElementChild as HTMLElement | null
+  const root = doc?.body ?? null
 
   const measure = useCallback(() => {
-    if (!root) return
-    const w = wrapper.getBoundingClientRect()
+    if (!root || !iframe || !doc) return
     const out: Placed[] = []
     for (const c of mine) {
-      const anchor = resolveAnchor(c, wrapper, root)
-      const r = anchor.getBoundingClientRect()
-      out.push({
-        c,
-        left: r.left - w.left + wrapper.scrollLeft + (r.width * c.x) / 100,
-        top: r.top - w.top + wrapper.scrollTop + (r.height * c.y) / 100,
-      })
+      const anchor = resolveAnchor(c, doc, root)
+      const r = hostRect(anchor, iframe)
+      out.push({ c, left: r.left + (r.width * c.x) / 100, top: r.top + (r.height * c.y) / 100 })
     }
     setPlaced(out)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wrapper, root, comments, pageId, JSON.stringify(dims)])
+  }, [iframe, doc, root, comments, pageId, JSON.stringify(dims)])
 
   useEffect(() => {
     measure()
+    if (!iframe) return
     const timers = [200, 600, 1200].map((ms) => setTimeout(measure, ms))
     const ro = new ResizeObserver(measure)
     if (root) ro.observe(root)
-    window.addEventListener("resize", measure)
+    const off = onFrameChange(iframe, measure)
     return () => {
       timers.forEach(clearTimeout)
       ro.disconnect()
-      window.removeEventListener("resize", measure)
+      off()
     }
-  }, [measure, root])
+  }, [measure, root, iframe])
 
-  // Placement: capture the next click on the prototype.
-  useEffect(() => {
-    if (!placing || !root) return
-    const onClick = (e: MouseEvent) => {
-      if (!(e.target instanceof Element) || (e.target as Element).closest(".ps-cthread, .ps-ccomposer")) return
-      e.preventDefault()
-      e.stopPropagation()
-      const targetEl = e.target.closest<HTMLElement>("[data-proto]")
-      const base = targetEl ?? root
-      // Anchor to the exact element clicked (path under the semantic target), so the
-      // bubble stays glued through browser zoom, viewport changes and reflow.
-      const exact = e.target
-      const r = exact.getBoundingClientRect()
-      const w = wrapper.getBoundingClientRect()
-      setDraft({
-        target: targetEl?.getAttribute("data-proto") ?? undefined,
-        path: pathBetween(base, exact),
-        x: ((e.clientX - r.left) / r.width) * 100,
-        y: ((e.clientY - r.top) / r.height) * 100,
-        left: e.clientX - w.left + wrapper.scrollLeft,
-        top: e.clientY - w.top + wrapper.scrollTop,
-      })
-      onOpenChange(null)
-    }
-    wrapper.addEventListener("click", onClick, { capture: true })
-    return () => wrapper.removeEventListener("click", onClick, { capture: true })
-  }, [placing, wrapper, root, onOpenChange])
+  // Placement: the shield captures the next click and resolves it to an element in the frame.
+  const place = (e: React.MouseEvent) => {
+    if (!iframe || !root) return
+    const exact = elementAt(iframe, e.clientX, e.clientY)
+    if (!exact) return
+    const targetId = targetIdOf(exact)
+    const targetEl = targetId ? exact.closest(`[data-proto="${CSS.escape(targetId)}"], [data-testid="${CSS.escape(targetId)}"]`) : null
+    const base = targetEl ?? root
+    const r = hostRect(exact, iframe)
+    setDraft({
+      target: targetId ?? undefined,
+      path: pathBetween(base, exact),
+      x: ((e.clientX - r.left) / r.width) * 100,
+      y: ((e.clientY - r.top) / r.height) * 100,
+      left: e.clientX,
+      top: e.clientY,
+    })
+    onOpenChange(null)
+  }
 
   const open = placed.find((p) => p.c.id === openId) ?? null
+  const clampX = (x: number) => Math.min(x, window.innerWidth - 330)
 
   return (
-    <div className="absolute inset-0 pointer-events-none z-[35]" data-ps-ui>
-      {placing && <div className="absolute inset-0" style={{ cursor: "crosshair", pointerEvents: "none" }} />}
-      {placed.map((p) => (
-        <button
-          key={p.c.id}
-          className="ps-cbubble pointer-events-auto absolute -translate-x-1/2 -translate-y-full"
-          data-resolved={p.c.resolved ? "true" : undefined}
-          style={{ left: p.left, top: p.top }}
-          title={`${p.c.author || "anonymous"}: ${p.c.body.slice(0, 80)}`}
-          onClick={(e) => {
-            e.stopPropagation()
-            onOpenChange(openId === p.c.id ? null : p.c.id)
-          }}
-        >
-          {initials(p.c.author || "?")}
-          {p.c.replies.length > 0 && <span className="ps-cbubble-n">{p.c.replies.length + 1}</span>}
-        </button>
-      ))}
+    <>
+      {placing && !draft && <div className="ps-shield" data-mode="comment" data-ps-ui onClick={place} />}
+      {createPortal(
+        <div className="ps-fixed-layer" data-ps-ui>
+          {placed.map((p) => (
+            <button
+              key={p.c.id}
+              className="ps-cbubble absolute -translate-x-1/2 -translate-y-full"
+              data-resolved={p.c.resolved ? "true" : undefined}
+              style={{ left: p.left, top: p.top }}
+              title={`${p.c.author || "anonymous"}: ${p.c.body.slice(0, 80)}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpenChange(openId === p.c.id ? null : p.c.id)
+              }}
+            >
+              {initials(p.c.author || "?")}
+              {p.c.replies.length > 0 && <span className="ps-cbubble-n">{p.c.replies.length + 1}</span>}
+            </button>
+          ))}
 
-      {open && (
-        <Thread
-          c={open.c}
-          left={Math.min(open.left, wrapper.clientWidth - 330)}
-          top={open.top + 8}
-          author={author}
-          onClose={() => onOpenChange(null)}
-          onResolve={() => update(open.c.id, { resolved: !open.c.resolved })}
-          onDelete={() => {
-            remove(open.c.id)
-            onOpenChange(null)
-          }}
-          onReply={(body) => reply(open.c.id, body)}
-          onAuthor={setAuthor}
-        />
-      )}
+          {open && (
+            <Thread
+              c={open.c}
+              left={clampX(open.left)}
+              top={open.top + 8}
+              author={author}
+              onClose={() => onOpenChange(null)}
+              onResolve={() => update(open.c.id, { resolved: !open.c.resolved })}
+              onDelete={() => {
+                remove(open.c.id)
+                onOpenChange(null)
+              }}
+              onReply={(body) => reply(open.c.id, body)}
+              onAuthor={setAuthor}
+            />
+          )}
 
-      {draft && (
-        <Composer
-          left={Math.min(draft.left, wrapper.clientWidth - 330)}
-          top={draft.top + 8}
-          author={author}
-          target={draft.target}
-          pageId={pageId}
-          onAuthor={setAuthor}
-          onCancel={() => {
-            setDraft(null)
-            onPlaced()
-          }}
-          onPost={(body) => {
-            add({ page: pageId, dims, target: draft.target, path: draft.path, x: draft.x, y: draft.y, body, author })
-            setDraft(null)
-            onPlaced()
-          }}
-        />
+          {draft && (
+            <Composer
+              left={clampX(draft.left)}
+              top={draft.top + 8}
+              author={author}
+              target={draft.target}
+              pageId={pageId}
+              onAuthor={setAuthor}
+              onCancel={() => {
+                setDraft(null)
+                onPlaced()
+              }}
+              onPost={(body) => {
+                add({ page: pageId, dims, target: draft.target, path: draft.path, x: draft.x, y: draft.y, body, author })
+                setDraft(null)
+                onPlaced()
+              }}
+            />
+          )}
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
 
@@ -223,7 +224,7 @@ function Composer({
     onPost(v)
   }
   return (
-    <div className="ps ps-glass-strong ps-ccomposer pointer-events-auto absolute w-80 rounded-2xl p-3" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
+    <div className="ps ps-glass-strong ps-ccomposer absolute w-80 rounded-2xl p-3" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-2 mb-2">
         <span className="ps-cbubble" style={{ position: "static", transform: "none", ...(asAnnotation ? { background: "var(--ps-pin)", color: "var(--ps-pin-fg)" } : {}) }}>
           {asAnnotation ? "!" : initials(author || "?")}
@@ -284,7 +285,7 @@ function Thread({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
   return (
-    <div className="ps ps-glass-strong ps-cthread pointer-events-auto absolute w-80 rounded-2xl p-3" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
+    <div className="ps ps-glass-strong ps-cthread absolute w-80 rounded-2xl p-3" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center gap-2 mb-2">
         <span className="ps-cbubble" style={{ position: "static", transform: "none" }} data-resolved={c.resolved ? "true" : undefined}>
           {initials(c.author || "?")}

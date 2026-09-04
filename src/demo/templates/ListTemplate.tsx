@@ -6,8 +6,8 @@ import { Skeleton } from "@/ui/skeleton"
 import { Alert, AlertTitle, AlertDescription } from "@/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/ui/table"
-import { proto } from "@/stavy/proto"
-import type { PageProps } from "@/stavy/types"
+import { proto } from "@/demo/lib/proto"
+import type { PageProps } from "@/demo/app/types"
 import { AppFrame, StatusBadge, money } from "./AppFrame"
 import { expensesForRole } from "../fixtures"
 import { makeT } from "../strings"
@@ -97,7 +97,7 @@ export function ListTemplate({ dims, nav }: PageProps) {
                     <TableRow
                       key={e.id}
                       className="cursor-pointer"
-                      onClick={() => nav("expense-detail", { role, lifecycle: e.status })}
+                      onClick={() => nav("expense-detail", { id: e.id, role, lifecycle: e.status })}
                       {...proto(`ExpenseRow:${e.id}`, { component: "TableRow", expense: e.id, opensLifecycle: e.status })}
                     >
                       <TableCell className="pl-4 font-medium">{e.merchant}</TableCell>

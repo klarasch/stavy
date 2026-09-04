@@ -1,16 +1,12 @@
 import { createPortal } from "react-dom"
 import { Button } from "@/ui/button"
-import { proto } from "@/stavy/proto"
-import { useStavyPortalContainer } from "@/stavy/portal"
+import { proto } from "@/demo/lib/proto"
 
 /**
- * Organism: a destructive-action confirm dialog. The reference for overlay
- * containment (SPEC §3): it portals into the container the viewer provides,
- * so on the canvas the "modal open" state renders inside its instance card
- * instead of covering the whole canvas from document.body. Inside the card
- * `position: fixed` resolves against the card frame (a scaled ancestor is a
- * containing block), so the same markup fills the card on the canvas and the
- * window on the open page.
+ * Organism: a destructive-action confirm dialog. A normal modal, portalled to
+ * `document.body` like any other — containment (keeping it inside an
+ * instance's frame when Stavy snapshots this page) is the overlay viewer's
+ * job now, not this component's.
  */
 export function ConfirmModal({
   title,
@@ -27,13 +23,11 @@ export function ConfirmModal({
   onConfirm: () => void
   onCancel: () => void
 }) {
-  const container = useStavyPortalContainer()
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       {...proto("RejectConfirmModal", {
         component: "ConfirmModal (organism)",
-        portalledInto: "portalContainer (SPEC §3 overlay containment)",
       })}
     >
       <div className="absolute inset-0 bg-black/40" onClick={onCancel} />
@@ -50,6 +44,6 @@ export function ConfirmModal({
         </div>
       </div>
     </div>,
-    container ?? document.body
+    document.body
   )
 }

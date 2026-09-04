@@ -1,23 +1,24 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
-  ArrowRight, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle,
+  ArrowRight, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play,
 } from "../icons"
 import { cn } from "../cn"
 import {
-  manifest, activeSlice, getPage, resolveDims, pageUrl, valueLabel, dimensionLabel,
+  manifest, getPage, getTemplate, resolveDims, pageUrl, valueLabel, dimensionLabel,
   isWorkspaceDim, workspaceDimensions, workspaceDimsFromParams, workspaceCarry, workspaceKey,
   workspaceOverridesFor, pageInWorkspace, scenarioInWorkspace,
 } from "../manifest"
+import { elementAt } from "../frame"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "./PanZoom"
-import { CanvasInspectContext, CanvasViewportContext, type CanvasViewport } from "./visibility"
+import { CanvasInspectContext, CanvasViewportContext, type CanvasInspect, type CanvasViewport } from "./visibility"
 import { InstanceCard, VIEWPORT_W } from "./InstanceCard"
 import { CanvasNotes } from "./CanvasNotes"
 import { AnatomyCard } from "./AnatomyCard"
 import { CanvasToc } from "./CanvasToc"
 import { BoardCard } from "./BoardCard"
 import { CoverageBoard } from "./CoverageBoard"
-import { Inspector, type InspectContext } from "../overlays/Inspector"
+import { Inspector, type FrameHit } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
 import { useComments } from "../comments/store"
 import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "../chrome"
@@ -85,7 +86,7 @@ const PageGroup = memo(function PageGroup({
   linkExtra: Record<string, string>
 }) {
   const navigate = useNavigate()
-  const template = manifest.templates.find((tp) => tp.id === page.template)
+  const template = getTemplate(page.template)
   const scale = cardScale(page)
   const w = Math.round((page.frame?.width ?? VIEWPORT_W) * scale)
   const h = Math.round((page.frame?.height ?? 832) * scale)
@@ -125,7 +126,7 @@ const PageGroup = memo(function PageGroup({
       <div className="flex items-center gap-2 mb-1">
         <span className="ps-zl">
           <h3 className="flex items-center gap-2">
-            <Chip sm mono>{template?.label ?? page.template}</Chip>
+            {template && <Chip sm mono>{template.label}</Chip>}
             {page.fidelity && (
               <Chip sm title="Fidelity rung (see SKILL.md)">
                 <span className="size-1.5 rounded-full" style={{ background: fidelityTone[page.fidelity] }} />
@@ -333,7 +334,10 @@ export function CanvasPage() {
   const showNotes = sp.get("notes") === "1"
   const wireframe = sp.get("w") === "1"
   const inspect = sp.get("i") === "1"
+  const liveMode = sp.get("live") === "1"
   const commentsOpen = sp.get("comments") === "1"
+  const [hold, setHold] = useState<HTMLIFrameElement | null>(null)
+  const inspectCtx = useMemo<CanvasInspect>(() => ({ on: inspect, live: liveMode, hold }), [inspect, liveMode, hold])
 
   const setFlag = (k: string, on: boolean) => {
     const next = new URLSearchParams(sp)
@@ -375,6 +379,7 @@ export function CanvasPage() {
     n: () => setFlag("notes", !showNotes),
     w: () => setFlag("w", !wireframe),
     i: () => setFlag("i", !inspect),
+    l: () => setFlag("live", !liveMode),
     t: () => setTheme(cycleTheme(theme)),
     "0": () => pz.current?.set(INITIAL, true),
     "1": () => pz.current?.zoomBy(1 / (pz.current.get().k || 1), true),
@@ -389,15 +394,20 @@ export function CanvasPage() {
     },
   })
 
-  const inspectContext = useCallback((el: Element): InspectContext | null => {
-    const card = el.closest<HTMLElement>("[data-instance]")
-    if (!card) return null
+  // Inspect on the canvas: the pointer lands on a card's shield; resolve it to
+  // the element under it inside that card's (live) frame.
+  const hit = useCallback((e: MouseEvent): FrameHit | null => {
+    const card = (e.target as Element | null)?.closest<HTMLElement>("[data-instance]")
+    const iframe = card?.querySelector("iframe")
+    if (!card || !iframe) return null
+    const el = elementAt(iframe, e.clientX, e.clientY)
+    if (!el) return null
     const key = card.getAttribute("data-instance") ?? ""
     const [pageId, qs] = key.split("?")
     const page = getPage(pageId)
     if (!page) return null
     const dims = Object.fromEntries(new URLSearchParams(qs ?? ""))
-    return { page, template: manifest.templates.find((tp) => tp.id === page.template), dims: resolveDims(page, dims) }
+    return { el, iframe, ctx: { page, template: getTemplate(page.template), dims: resolveDims(page, dims) } }
   }, [])
 
   const linkExtra = useMemo(
@@ -424,7 +434,7 @@ export function CanvasPage() {
 
   return (
     <CanvasViewportContext.Provider value={canvasViewport}>
-    <CanvasInspectContext.Provider value={inspect}>
+    <CanvasInspectContext.Provider value={inspectCtx}>
     <div className="h-screen relative overflow-hidden">
       <PanZoom ref={pz} initial={initialT.current} onCommit={setT} onLive={onLive} contentRef={(el) => { contentElRef.current = el; if (el !== contentEl) setContentEl(el) }}>
         <div
@@ -524,8 +534,8 @@ export function CanvasPage() {
         {contentEl && showNotes && manifest.notes && manifest.notes.length > 0 && (
           <CanvasNotes notes={manifest.notes} root={contentEl} getScale={getScale} />
         )}
-        {contentEl && inspect && !hidden && (
-          <Inspector wrapper={contentEl} within=".ps-proto-content" context={inspectContext} scale={getScale} onClose={() => setFlag("i", false)} />
+        {contentEl?.parentElement && inspect && !hidden && (
+          <Inspector host={contentEl.parentElement} hit={hit} onClose={() => setFlag("i", false)} onPinChange={setHold} />
         )}
       </PanZoom>
 
@@ -536,9 +546,7 @@ export function CanvasPage() {
             <span className="font-semibold text-[13px]">Stavy</span>
             <span style={{ color: "var(--ps-faint)" }}>/</span>
             <span className="font-medium text-[13px]">{manifest.product.name}</span>
-            <Chip sm accent={!!activeSlice}>
-              {activeSlice ? (<><span className="ps-chip-k">slice</span>{activeSlice.label}</>) : "full workspace"}
-            </Chip>
+            <Chip sm>{manifest.pages.length} screens</Chip>
             {workspaceDimensions.length > 0 && (
               <>
                 <PsDivider />
@@ -567,8 +575,11 @@ export function CanvasPage() {
             <PsButton active={wireframe} tip="Wireframe rendering" keys={["W"]} tipBelow onClick={() => setFlag("w", !wireframe)}>
               <PencilRuler /> Wireframe
             </PsButton>
-            <PsButton active={inspect} tip="Inspect any thumbnail" keys={["I"]} tipBelow onClick={() => setFlag("i", !inspect)}>
+            <PsButton active={inspect} tip="Inspect: hover a card to read its live DOM" keys={["I"]} tipBelow onClick={() => setFlag("i", !inspect)}>
               <Crosshair /> Inspect
+            </PsButton>
+            <PsButton active={liveMode} tip="Live frames instead of snapshots for cards near the viewport (heavier; handy before the first scan)" keys={["L"]} tipBelow onClick={() => setFlag("live", !liveMode)}>
+              <Play /> Live
             </PsButton>
             <PsButton active={commentsOpen} tip="Comments" tipBelow onClick={() => setFlag("comments", !commentsOpen)} className="relative">
               <MessageCircle /> Comments
@@ -594,7 +605,7 @@ export function CanvasPage() {
           {commentsOpen && <CommentsPanel wireframe={wireframe} onClose={() => setFlag("comments", false)} />}
           <ShortcutsSheet
             items={[
-              ["Notes", "N"], ["Wireframe", "W"], ["Inspect", "I"], ["Theme", "T"],
+              ["Notes", "N"], ["Wireframe", "W"], ["Inspect", "I"], ["Live frames", "L"], ["Theme", "T"],
               ["Zoom in / out", "+ −"], ["100% / fit everything", "1 2"], ["Reset view", "0"], ["Fit an area", "double-click"],
               ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"],
             ]}

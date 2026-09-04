@@ -10,14 +10,19 @@ import {
   pageInWorkspace,
   scenarioInWorkspace,
 } from "../../src/stavy/manifest"
-import type { PageDef, Scenario } from "../../src/stavy/types"
+import { setManifest } from "../../src/stavy/manifest"
+import raw from "../../stavy.json"
+import type { Manifest, PageDef, Scenario } from "../../src/stavy/types"
+
+// The viewer loads the manifest at runtime; tests install the demo one directly.
+setManifest(raw as unknown as Manifest)
 
 /* The reference manifest declares exactly one workspace-scoped axis (locale),
    which the module-level helpers read. The pure predicates below are exercised
    against synthetic pages so they don't depend on the demo's page list. */
 
 const page = (dimensions: Record<string, string[]>): PageDef =>
-  ({ id: "p", label: "P", template: "t", dimensions }) as PageDef
+  ({ id: "p", label: "P", url: "/p", dimensions }) as PageDef
 
 describe("workspace dimensions: manifest wiring", () => {
   it("picks up the axes declared scope: workspace", () => {

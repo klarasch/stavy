@@ -1,15 +1,19 @@
-import { useMemo, useRef, useState } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { Layers, MessageSquare, Crosshair, Play, PencilRuler, ChevronLeft, SlidersHorizontal, RotateCcw, GripVertical, MessageCircle, MessageCirclePlus, PanelBottom, PictureInPicture2 } from "./icons"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate, useSearchParams } from "react-router-dom"
+import { Layers, MessageSquare, Crosshair, Play, PencilRuler, ChevronLeft, SlidersHorizontal, RotateCcw, GripVertical, MessageCircle, MessageCirclePlus, PanelBottom, PictureInPicture2, ExternalLink } from "./icons"
 import { cn } from "./cn"
 import {
   canvasUrl,
   manifest,
   getPage,
   getScenario,
+  getTemplate,
   dimsFromParams,
   resolveDims,
   pageUrl,
+  appUrl,
+  matchAppUrl,
+  dimsEqual,
   dimensionLabel,
   valueLabel,
   isWorkspaceDim,
@@ -19,15 +23,15 @@ import {
   workspaceCarry,
   pageInWorkspace,
 } from "./manifest"
-import { PageRenderer } from "./PageRenderer"
 import { TourOverlay, stepUrl } from "./overlays/TourOverlay"
 import { AnnotationOverlay } from "./overlays/AnnotationOverlay"
-import { Inspector } from "./overlays/Inspector"
+import { Inspector, type FrameHit } from "./overlays/Inspector"
 import { PsButton, PsDivider, PsSelect, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "./chrome"
 import type { ToolbarAnchor } from "./types"
 import { CommentLayer } from "./comments/CommentLayer"
 import { CommentsPanel } from "./comments/CommentsPanel"
 import { useComments } from "./comments/store"
+import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt } from "./frame"
 
 const ANCHORS: ToolbarAnchor[] = ["bottom", "top", "bottom-left", "bottom-right", "top-left", "top-right", "bar-bottom", "bar-top"]
 
@@ -38,17 +42,26 @@ function anchorFor(x: number, y: number): ToolbarAnchor {
   return (col === "center" ? row : `${row}-${col}`) as ToolbarAnchor
 }
 
+/**
+ * The player: one same-origin frame showing the prototype at a page +
+ * dimension assignment, with the viewer chrome floating over it. The
+ * prototype is fully interactive here (it is the real app); switching a
+ * dimension rewrites the frame URL. In-frame navigation that lands on a
+ * registered page is followed (the viewer URL updates); anything else is
+ * shown as drift with a reset.
+ */
 export function PageView() {
-  const { pageId = "" } = useParams()
   const [sp, setSp] = useSearchParams()
+  const pageId = sp.get("p") ?? ""
   const navigate = useNavigate()
   const { hidden, theme, setTheme, setHidden } = useChrome()
-  const wrapperRef = useRef<HTMLDivElement>(null)
-  const [, forceOverlays] = useState(0)
+  const [iframe, setIframe] = useState<HTMLIFrameElement | null>(null)
+  const [shield, setShield] = useState<HTMLDivElement | null>(null)
+  const doc = useFrameDocument(iframe)
   const [dimPanel, setDimPanel] = useState(false)
   const [drag, setDrag] = useState<{ dx: number; dy: number; target: ToolbarAnchor } | null>(null)
   const [placing, setPlacing] = useState(false)
-  const [protoHost, setProtoHost] = useState<HTMLDivElement | null>(null)
+  const [drift, setDrift] = useState<string | null>(null)
   const { countFor } = useComments()
 
   const page = getPage(pageId)
@@ -60,12 +73,81 @@ export function PageView() {
   const wCarry = useMemo(() => workspaceCarry(sp), [wKey])
   const wireOn = sp.get("w") === "1"
 
+  const setParam = useCallback(
+    (k: string, v: string | null) => {
+      const next = new URLSearchParams(sp)
+      if (v === null) next.delete(k)
+      else next.set(k, v)
+      setSp(next, { replace: true })
+    },
+    [sp, setSp]
+  )
+
+  const annotParam = sp.get("a")
+  const annotMode: "hover" | "all" | null = annotParam === "all" ? "all" : annotParam ? "hover" : null
+  const inspectOn = sp.get("i") === "1"
+  const commentsOpen = sp.get("comments") === "1"
+  const openCommentId = sp.get("c")
+  const tourId = sp.get("tour")
+  const tourStep = Number(sp.get("ts") ?? "0")
+  const scenario = tourId ? getScenario(tourId) : undefined
+
+  // Viewer mode flags to keep alive across every in-viewer navigation (SPEC.md §3).
+  const carry: Record<string, string> = { ...wCarry }
+  if (annotMode) carry.a = annotMode
+  if (inspectOn) carry.i = "1"
+  if (wireOn) carry.w = "1"
+
+  /* ---- the frame follows the viewer URL, and the viewer follows the frame ---- */
+  const desired = page ? appUrl(page, dims) : null
+  useEffect(() => {
+    if (!iframe || !page || !desired) return
+    const cur = frameHref(iframe)
+    const m = cur ? matchAppUrl(cur) : null
+    // Already showing this exact state (e.g. we just followed the frame there): don't reload.
+    if (m && m.page.id === page.id && dimsEqual(m.dims, dims)) return
+    iframe.src = desired
+    setDrift(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iframe, desired])
+
+  const lastHref = useRef<string | null>(null)
+  useEffect(() => {
+    if (!iframe || !page) return
+    const tick = () => {
+      const href = frameHref(iframe)
+      if (!href || href === lastHref.current) return
+      lastHref.current = href
+      const m = matchAppUrl(href)
+      if (!m) {
+        setDrift(href)
+        return
+      }
+      setDrift(null)
+      if (m.page.id !== page.id || !dimsEqual(m.dims, dims)) {
+        // The user navigated inside the prototype onto a registered state: follow it.
+        const { tour: _t, ts: _s, ...rest } = carry as Record<string, string>
+        void _t
+        void _s
+        navigate(pageUrl(m.page.id, m.dims, rest), { replace: true })
+      }
+    }
+    const t = setInterval(tick, 400)
+    iframe.addEventListener("load", tick)
+    return () => {
+      clearInterval(t)
+      iframe.removeEventListener("load", tick)
+    }
+  })
+
+  useEffect(() => setWireframe(doc, wireOn), [doc, wireOn])
+  useEffect(() => bridgeFrameKeys(doc), [doc])
+
   if (!page) {
     return (
       <div className="ps h-screen flex flex-col items-center justify-center gap-3" style={{ background: "var(--ps-canvas-bg)" }}>
         <p>
-          Page <code className="ps-mono">{pageId}</code> is not registered in this workspace
-          {__PROTO_SLICE__ ? ` (slice: ${__PROTO_SLICE__})` : ""}.
+          Page <code className="ps-mono">{pageId}</code> is not registered in this workspace.
         </p>
         <PsButton onClick={() => navigate(canvasUrl({ ...wCarry, ...(wireOn ? { w: "1" } : {}) }))}>
           <Layers /> Back to canvas
@@ -74,38 +156,10 @@ export function PageView() {
     )
   }
 
-  const template = manifest.templates.find((t) => t.id === page.template)
-  const annotParam = sp.get("a")
-  const annotMode: "hover" | "all" | null = annotParam === "all" ? "all" : annotParam ? "hover" : null
+  const template = getTemplate(page.template)
   const annotOn = annotMode !== null
   const cycleAnnot = () => setParam("a", annotMode === null ? "hover" : annotMode === "hover" ? "all" : null)
-  const inspectOn = sp.get("i") === "1"
-  const commentsOpen = sp.get("comments") === "1"
-  const openCommentId = sp.get("c")
-  const tourId = sp.get("tour")
-  const tourStep = Number(sp.get("ts") ?? "0")
-  const scenario = tourId ? getScenario(tourId) : undefined
   const pageScenarios = manifest.scenarios.filter((s) => s.steps.some((st) => st.page === page.id))
-
-  const setParam = (k: string, v: string | null) => {
-    const next = new URLSearchParams(sp)
-    if (v === null) next.delete(k)
-    else next.set(k, v)
-    setSp(next, { replace: true })
-  }
-
-  // Viewer mode flags to keep alive across every in-viewer navigation (SPEC.md §3).
-  const carry: Record<string, string> = { ...wCarry }
-  if (annotMode) carry.a = annotMode
-  if (inspectOn) carry.i = "1"
-  if (wireOn) carry.w = "1"
-
-  const nav = (pid: string, overrides?: Record<string, string>) => {
-    const target = getPage(pid)
-    if (!target) return
-    navigate(pageUrl(pid, resolveDims(target, overrides), carry))
-  }
-
   const exitUrl = pageUrl(page.id, dims, carry)
 
   // Toolbar dock: manifest default, overridable per link (?tb=) and by dragging the grip.
@@ -139,12 +193,6 @@ export function PageView() {
   const inScope = pageInWorkspace(page, wdims)
   const outOfScope = Object.entries(wdims).find(([d, v]) => d in page.dimensions && !page.dimensions[d].includes(v))
 
-  /**
-   * Switching a workspace axis changes the whole workspace, so it is a URL
-   * change like any other — except when this page does not exist in the new
-   * world, where staying put would show a screen that isn't there. Then the
-   * canvas is the honest destination.
-   */
   const setWorkspaceDim = (dimId: string, value: string) => {
     const dim = workspaceDimensions.find((d) => d.id === dimId)
     if (!dim) return
@@ -165,6 +213,10 @@ export function PageView() {
     const next = new URLSearchParams(sp)
     for (const [d] of dimEntries) next.delete(`d_${d}`)
     setSp(next, { replace: true })
+  }
+  const resetFrame = () => {
+    if (iframe && desired) iframe.src = desired
+    setDrift(null)
   }
 
   useHotkeys({
@@ -187,47 +239,26 @@ export function PageView() {
   })
   const commentCount = countFor(page.id, dims)
 
+  const hit = useCallback(
+    (e: MouseEvent): FrameHit | null => {
+      if (!iframe) return null
+      const el = elementAt(iframe, e.clientX, e.clientY)
+      return el ? { el, iframe, ctx: { page, template, dims } } : null
+    },
+    [iframe, page, template, dims]
+  )
+
   return (
     <div className="h-screen relative">
-      <div
-        className="ps-viewport h-full overflow-auto"
-        data-bar={isBar ? barSide : undefined}
-        ref={(el) => {
-          if (el && wrapperRef.current !== el) {
-            wrapperRef.current = el
-            forceOverlays((n) => n + 1)
-          }
-        }}
-      >
-        <div className="relative min-h-full">
-          <div ref={setProtoHost} className={cn("relative min-h-full", wireOn && "proto-wireframe")}>
-            {protoHost && <PageRenderer pageId={page.id} dims={dims} nav={nav} portalContainer={protoHost} />}
-          </div>
-          {wrapperRef.current && annotMode && page.annotations && (
-            <AnnotationOverlay annotations={page.annotations} wrapper={wrapperRef.current} mode={annotMode} />
-          )}
-          {wrapperRef.current && scenario && (
-            <TourOverlay scenario={scenario} stepIdx={tourStep} wrapper={wrapperRef.current} exitUrl={exitUrl} carry={carry} />
-          )}
-          {wrapperRef.current && (
-            <CommentLayer
-              wrapper={wrapperRef.current}
-              pageId={page.id}
-              dims={dims}
-              placing={placing}
-              onPlaced={() => setPlacing(false)}
-              openId={openCommentId}
-              onOpenChange={(id) => setParam("c", id)}
-            />
-          )}
-          {wrapperRef.current && inspectOn && !hidden && (
-            <Inspector
-              wrapper={wrapperRef.current}
-              context={() => ({ page, template, dims })}
-              onClose={() => setParam("i", null)}
-            />
-          )}
+      <div className="ps-viewport h-full relative" data-bar={isBar ? barSide : undefined}>
+        <div className="ps-player">
+          <iframe ref={setIframe} className="ps-frame" title={page.label} src={desired ?? undefined} />
+          {inspectOn && !hidden && <div ref={setShield} className="ps-shield" data-mode="inspect" />}
+          <CommentLayer iframe={iframe} doc={doc} pageId={page.id} dims={dims} placing={placing} onPlaced={() => setPlacing(false)} openId={openCommentId} onOpenChange={(id) => setParam("c", id)} />
         </div>
+        {annotMode && page.annotations && <AnnotationOverlay annotations={page.annotations} iframe={iframe} doc={doc} mode={annotMode} />}
+        {scenario && <TourOverlay scenario={scenario} stepIdx={tourStep} iframe={iframe} doc={doc} exitUrl={exitUrl} carry={carry} />}
+        {inspectOn && !hidden && shield && <Inspector host={shield} hit={hit} onClose={() => setParam("i", null)} />}
       </div>
 
       {!hidden && (
@@ -281,7 +312,15 @@ export function PageView() {
               <Layers style={{ color: "var(--ps-accent)" }} />
             </PsButton>
             <span className="font-semibold text-[13px] px-1.5 whitespace-nowrap">{page.label}</span>
-            <Chip sm mono>{template?.id}</Chip>
+            {template && <Chip sm mono>{template.id}</Chip>}
+            {drift && (
+              <Chip sm className="ps-chip-warn ps-drift" title={`The prototype navigated to ${drift}, which is not a registered state. Reset to return to this page's state.`}>
+                off the map
+                <button className="ps-copy" onClick={resetFrame} style={{ marginLeft: 2 }}>
+                  <RotateCcw className="size-3" /> reset
+                </button>
+              </Chip>
+            )}
             {workspaceDimensions.length > 0 && (
               <>
                 <PsDivider />
@@ -374,6 +413,9 @@ export function PageView() {
               {commentCount > 0 && <span className="ps-ccount">{commentCount}</span>}
             </PsButton>
             <PsDivider />
+            <a className="ps-btn ps-icon" href={desired ?? "#"} target="_blank" rel="noreferrer" title="Open this state in the prototype itself (new tab)">
+              <ExternalLink />
+            </a>
             <ThemeToggle tipBelow={barSide === "top"} />
             <HelpButton tipBelow={barSide === "top"} />
           </div>

@@ -87,8 +87,8 @@ export function dashboardFixture(role: string) {
   }
 }
 
-export function expenseDetailFixture(lifecycle: string): Expense {
-  const base = expenses.find((e) => e.id === "exp-2101")!
+export function expenseDetailFixture(lifecycle: string, id = "exp-2101"): Expense {
+  const base = expenses.find((e) => e.id === id) ?? expenses.find((e) => e.id === "exp-2101")!
   return { ...base, status: lifecycle as ExpenseStatus }
 }
 

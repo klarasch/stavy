@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { getPage, resolveDims, instanceKey } from "../manifest"
+import { getPage, resolveDims, instanceKey, snapshotEntry } from "../manifest"
 import type { CanvasNote } from "../types"
 
 interface Placed {
@@ -21,8 +21,7 @@ const GAP = 26
 
 /**
  * "Pointing notes": sticky notes placed next to a page instance on the canvas,
- * with a leader line to the instance — or to a specific data-proto element
- * inside it. Measured in canvas content coordinates (divided by the current
+ * with a leader line to the instance — or to a specific target inside it. Measured in canvas content coordinates (divided by the current
  * zoom), so they stay glued to their targets at any zoom level.
  */
 export function CanvasNotes({
@@ -57,14 +56,14 @@ export function CanvasNotes({
           root.querySelector<HTMLElement>(`[data-instance="${CSS.escape(key)}"][data-instance-scope="pages"]`) ??
           root.querySelector<HTMLElement>(`[data-instance="${CSS.escape(key)}"]`)
         if (!card) continue
-        const frame = card.firstElementChild?.firstElementChild as HTMLElement | null
-        const targetEl = n.target && frame ? frame.querySelector<HTMLElement>(`[data-proto="${CSS.escape(n.target)}"]`) : null
+        const frame = card.querySelector<HTMLElement>(".ps-card-frame")
+        // Target boxes come from the snapshot index (fractions of the frame), measured at scan time.
+        const box = n.target ? snapshotEntry(page, dims)?.targets[n.target] : undefined
         const fr = (frame ?? card).getBoundingClientRect()
-        const tr = (targetEl ?? frame ?? card).getBoundingClientRect()
         const tl = toLocal(fr.left, fr.top)
         const br = toLocal(fr.right, fr.bottom)
-        const tc = targetEl
-          ? toLocal(tr.left + tr.width / 2, tr.top + tr.height / 2)
+        const tc = box
+          ? toLocal(fr.left + fr.width * (box.x + box.w / 2), fr.top + fr.height * (box.y + box.h / 2))
           : { x: (tl.x + br.x) / 2, y: tl.y + 6 }
         const ox = n.offset?.x ?? 0
         const oy = n.offset?.y ?? 0
@@ -81,7 +80,7 @@ export function CanvasNotes({
         } else if (placement === "bottom") {
           const ax = tc.x + ox
           const ay = br.y + 58 + oy
-          p = { note: n, x: ax - NOTE_W / 2, y: ay, tx: "none", ax, ay, px: tc.x, py: targetEl ? tc.y : br.y - 6 }
+          p = { note: n, x: ax - NOTE_W / 2, y: ay, tx: "none", ax, ay, px: tc.x, py: box ? tc.y : br.y - 6 }
         } else {
           const ax = tc.x + ox
           const ay = tl.y - GAP + oy

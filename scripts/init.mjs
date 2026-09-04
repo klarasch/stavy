@@ -1,13 +1,17 @@
 #!/usr/bin/env node
-// Install the Stavy viewer, skill, validator and CSS into another repo.
+// Install Stavy into another repo — as an overlay. Nothing under the target's
+// src/ is touched: the viewer is a static folder in public/, the manifest a
+// JSON file next to it, and the checks are two scripts.
 //
-//   node /path/to/stavy/scripts/init.mjs ../my-prototype-repo
+//   node /path/to/stavy/scripts/init.mjs ../my-prototype-repo [--dir stavy] [--rebuild]
 //
-// Copies: src/stavy/ (viewer), src/lib/utils.ts, src/vite-env.d.ts,
-// scripts/validate.mjs, scripts/snapshot.mjs, src/stavy.css (tokens + chrome
-// styles + Tailwind utilities scoped to the viewer), .claude/skills/stavy/,
-// SPEC.md, docs/ADOPTION.md, and a starter stavy.json. Then prints what is
-// left to wire by hand (vite plugin, imports, deps).
+// Copies:
+//   public/<dir>/                 the built viewer (dist-viewer/, built here if missing)
+//   public/stavy.json             a starter manifest (only if absent)
+//   scripts/stavy/{validate,scan}.mjs + stavy.schema.json
+//   .claude/skills/stavy/SKILL.md the agent skill
+//   STAVY.md                      the rules for agents working in the prototype repo
+// Adds npm scripts stavy:validate / stavy:scan when absent. Then prints what is left.
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import { dirname, resolve, join } from "node:path"
@@ -16,151 +20,119 @@ import { fileURLToPath } from "node:url"
 const here = dirname(fileURLToPath(import.meta.url))
 const src = resolve(here, "..")
 const argv = process.argv.slice(2)
-const routeIx = argv.indexOf("--route")
-// --route /canvas  → mount the viewer under a sub-path of an existing app (sets viewer.base in stavy.json)
-const route = routeIx >= 0 ? (argv[routeIx + 1] ?? "").replace(/\/+$/, "") : ""
-const target = resolve(argv.filter((_, i) => routeIx < 0 || (i !== routeIx && i !== routeIx + 1))[0] ?? ".")
+const opt = (name, def) => {
+  const i = argv.indexOf(name)
+  return i >= 0 ? argv[i + 1] : def
+}
+const dir = opt("--dir", "stavy").replace(/^\/+|\/+$/g, "")
+const rebuild = argv.includes("--rebuild")
+const positional = argv.filter((a, i) => !a.startsWith("--") && argv[i - 1] !== "--dir")
+const target = resolve(positional[0] ?? ".")
 if (!existsSync(join(target, "package.json"))) {
-  console.error(`No package.json in ${target} — point init at a Vite + React project.`)
+  console.error(`No package.json in ${target} — point init at the prototype repo.`)
   process.exit(1)
 }
+
 const copy = (from, to) => {
   mkdirSync(dirname(join(target, to)), { recursive: true })
-  cpSync(join(src, from), join(target, to), { recursive: true })
+  cpSync(from, join(target, to), { recursive: true })
   console.log(`  + ${to}`)
 }
 
 console.log(`Installing Stavy into ${target}`)
-let stavyVersion = "unknown"
+
+// 1. the viewer: a self-contained static folder
+const dist = join(src, "dist-viewer")
+if (rebuild || !existsSync(join(dist, "index.html"))) {
+  console.log("  building the viewer (vite build -c vite.viewer.config.ts)…")
+  execFileSync("npx", ["vite", "build", "-c", "vite.viewer.config.ts"], { cwd: src, stdio: "inherit" })
+}
+let version = "unknown"
 try {
-  stavyVersion = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: src, encoding: "utf8" }).trim()
-  if (execFileSync("git", ["status", "--porcelain"], { cwd: src, encoding: "utf8" }).trim()) stavyVersion += "-dirty"
+  version = execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: src, encoding: "utf8" }).trim()
+  if (execFileSync("git", ["status", "--porcelain"], { cwd: src, encoding: "utf8" }).trim()) version += "-dirty"
 } catch {}
-copy("src/stavy", "src/stavy")
-writeFileSync(join(target, "src/stavy/VERSION"), stavyVersion + "\n")
-console.log(`  + src/stavy/VERSION (${stavyVersion})`)
-copy("src/vite-env.d.ts", "src/vite-env.d.ts")
-copy("scripts/validate.mjs", "scripts/validate.mjs")
-copy("scripts/snapshot.mjs", "scripts/snapshot.mjs")
-copy("skill/SKILL.md", ".claude/skills/stavy/SKILL.md")
-copy("SPEC.md", "SPEC.md")
-copy("docs/ADOPTION.md", "docs/STAVY-ADOPTION.md")
+copy(dist, `public/${dir}`)
+writeFileSync(join(target, `public/${dir}/VERSION`), version + "\n")
 
-// Viewer CSS: Tailwind utilities scoped to the viewer (no preflight) + tokens/chrome.
-// Default: precompiled here with the reference repo's Tailwind, so the host needs no Tailwind at all.
-// --css-source: write the Tailwind source instead (host must run Tailwind 4 + @tailwindcss/vite).
-const cssMode = argv.includes("--css-source") ? "source" : "prebuilt"
-const css = readFileSync(join(src, "src/index.css"), "utf8")
-const chromeStart = css.indexOf("/* =====")
-const chrome = chromeStart >= 0 ? css.slice(chromeStart) : css
-const sourceCss = (sourceDir) => `@import "tailwindcss/theme" layer(theme);
-@import "tailwindcss/utilities" layer(utilities);
-@source "${sourceDir}";
+// 2. the checks
+copy(join(src, "scripts/validate.mjs"), "scripts/stavy/validate.mjs")
+copy(join(src, "scripts/scan.mjs"), "scripts/stavy/scan.mjs")
+copy(join(src, "scripts/gen-tests.mjs"), "scripts/stavy/gen-tests.mjs")
+copy(join(src, "spec/stavy.schema.json"), "scripts/stavy/stavy.schema.json")
 
-${chrome}`
-if (cssMode === "source") {
-  writeFileSync(
-    join(target, "src/stavy.css"),
-    `/* Stavy viewer styles — generated by init. Import once from main.tsx. Needs Tailwind 4 + @tailwindcss/vite in this repo. */\n` + sourceCss("./stavy")
-  )
-  console.log("  + src/stavy.css (Tailwind source — this repo compiles it)")
-} else {
-  const cli = join(src, "node_modules/.bin/tailwindcss")
-  const committed = join(src, "prebuilt/stavy.css")
-  if (!existsSync(cli)) {
-    if (!existsSync(committed)) {
-      console.error(`Neither the Tailwind CLI (run \`npm install\` in the Stavy repo) nor prebuilt/stavy.css found — cannot produce the viewer CSS. Or pass --css-source.`)
-      process.exit(1)
-    }
-    writeFileSync(
-      join(target, "src/stavy.css"),
-      `/* Stavy viewer styles — copied from the reference repo's committed prebuilt/stavy.css (offline install). Plain CSS — import once from main.tsx. */\n` +
-        readFileSync(committed, "utf8")
-    )
-    console.log("  + src/stavy.css (from committed prebuilt — offline mode, no Tailwind needed)")
-  } else {
-  const tmpDir = join(src, "node_modules/.cache")
-  mkdirSync(tmpDir, { recursive: true })
-  const tmpIn = join(tmpDir, "stavy-init.css")
-  const tmpOut = join(tmpDir, "stavy-init.out.css")
-  writeFileSync(tmpIn, sourceCss("../../src/stavy"))
-  execFileSync(cli, ["-i", tmpIn, "-o", tmpOut], { stdio: ["ignore", "pipe", "pipe"] })
-  writeFileSync(
-    join(target, "src/stavy.css"),
-    `/* Stavy viewer styles — prebuilt by init: Tailwind utilities scoped to src/stavy + viewer chrome, no preflight.
-   Plain CSS — import once from main.tsx. Re-run init to regenerate after updating src/stavy. */\n` + readFileSync(tmpOut, "utf8")
-  )
-  console.log("  + src/stavy.css (prebuilt — no Tailwind needed in this repo)")
+// 3. the skill + the rules
+copy(join(src, "skill/SKILL.md"), ".claude/skills/stavy/SKILL.md")
+if (existsSync(join(src, "skill/RULES.md"))) copy(join(src, "skill/RULES.md"), "STAVY.md")
+copy(join(src, "SPEC.md"), "docs/STAVY-SPEC.md")
+
+// 4. a starter manifest, served from public/ next to the viewer
+const manifestPath = join(target, "public/stavy.json")
+if (!existsSync(manifestPath)) {
+  const pkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8"))
+  const starter = {
+    $schema: "../scripts/stavy/stavy.schema.json",
+    version: "0.2",
+    product: { name: pkg.name ?? "Prototype", description: "" },
+    viewer: { toolbar: "bottom", targetAttrs: ["data-testid", "data-proto"] },
+    dimensions: [
+      {
+        id: "state",
+        label: "Data state",
+        kind: "state",
+        values: [
+          { id: "loaded", label: "Loaded" },
+          { id: "empty", label: "Empty" },
+        ],
+      },
+    ],
+    pages: [
+      {
+        id: "home",
+        label: "Home",
+        description: "Replace me: the first screen of the prototype, at the URL it already has.",
+        url: "/?state={state}",
+        fidelity: "navigable",
+        dimensions: { state: ["loaded", "empty"] },
+        defaults: { state: "loaded" },
+        instances: [{ dims: { state: "loaded" } }],
+      },
+    ],
+    scenarios: [],
+  }
+  mkdirSync(dirname(manifestPath), { recursive: true })
+  writeFileSync(manifestPath, JSON.stringify(starter, null, 2) + "\n")
+  console.log("  + public/stavy.json (starter)")
+} else console.log("  = public/stavy.json (kept)")
+
+// 5. npm scripts (only when absent)
+const pkgPath = join(target, "package.json")
+const pkg = JSON.parse(readFileSync(pkgPath, "utf8"))
+pkg.scripts ??= {}
+const added = []
+const want = {
+  "stavy:validate": "node scripts/stavy/validate.mjs public/stavy.json --coverage",
+  "stavy:scan": "node scripts/stavy/scan.mjs public/stavy.json --url http://localhost:5173",
+  "stavy:tests": "node scripts/stavy/gen-tests.mjs public/stavy.json --out tests/stavy",
+}
+for (const [k, v] of Object.entries(want)) {
+  if (!pkg.scripts[k]) {
+    pkg.scripts[k] = v
+    added.push(k)
   }
 }
-
-if (!existsSync(join(target, "stavy.json"))) {
-  const pkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8"))
-  writeFileSync(
-    join(target, "stavy.json"),
-    JSON.stringify(
-      {
-        version: "0.1",
-        product: { name: pkg.name ?? "My product", description: "" },
-        viewer: { toolbar: "bottom", ...(route ? { base: route } : {}) },
-        dimensions: [
-          { id: "state", label: "Data state", kind: "state", values: [{ id: "loaded", label: "Loaded" }, { id: "empty", label: "Empty" }, { id: "loading", label: "Loading" }] },
-        ],
-        templates: [],
-        pages: [],
-        scenarios: [],
-        prototypes: [{ id: "full", label: "Full workspace", pages: [], scenarios: [] }],
-        notes: [],
-        boards: [],
-      },
-      null,
-      2
-    ) + "\n"
-  )
-  console.log("  + stavy.json (starter)")
-} else if (route) {
-  const mp = join(target, "stavy.json")
-  const m = JSON.parse(readFileSync(mp, "utf8"))
-  m.viewer = { ...(m.viewer ?? {}), base: route }
-  writeFileSync(mp, JSON.stringify(m, null, 2) + "\n")
-  console.log(`  ~ stavy.json (viewer.base = "${route}")`)
+if (added.length) {
+  writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n")
+  console.log(`  + package.json scripts: ${added.join(", ")}`)
 }
 
-const plugin = readFileSync(join(src, "vite.config.ts"), "utf8")
-const pluginSrc = plugin.slice(plugin.indexOf("// Stavy slice plugin"), plugin.indexOf("export default defineConfig"))
-
-const routePath = route ? route + "/*" : "/*"
-const routeNote = route
-  ? 'stavy.json has viewer.base = "' + route + '" — the route path and viewer.base must match.'
-  : '(Mounted at the root. To mount under a sub-path of an existing app instead, re-run init with --route /canvas, or set viewer.base in stavy.json and use path="/canvas/*".)'
-
-const steps = `
-Done. Left to wire by hand (or ask Claude — the skill knows these steps):
-
-1. Dependency: npm i react-router-dom   (skip if this repo already has it — the viewer vendors its icons and helpers)
-   Optional: npm i mermaid   (renders "mermaid" boards; without it a board shows its source text)
-   Optional: npm i -D playwright   (only for the snapshot script)${cssMode === "source" ? "\n   Required for --css-source: npm i -D tailwindcss @tailwindcss/vite" : ""}
-2. vite.config.ts — add ${cssMode === "source" ? "the tailwind plugin and " : ""}this plugin
-   (edit the default page path inside load() to where your pages live):
-${pluginSrc.split("\n").map((l) => "   " + l).join("\n")}
-   Optional, Vite ≤ 6 only: esbuild: { keepNames: true } keeps React component names in
-   production builds for the inspector. Vite 7+/8 (Rolldown) has no esbuild option — skip it;
-   it affects only prod name legibility, not conformance.
-3. main.tsx — add one line: import "./stavy.css"${cssMode === "source" ? "" : "   (plain prebuilt CSS, no Tailwind involved)"}
-   Mount the viewer — ONE route inside your existing <BrowserRouter><Routes>:
-     import { StavyApp } from "./stavy/StavyApp"
-     <Route path="${routePath}" element={<StavyApp />} />
-   ${routeNote}
-   If your kit ships a global reset (MUI CssBaseline, Chakra…), mount it inside the page
-   templates or scope it — at the app root it reaches the viewer's chrome too.
-4. package.json scripts: "validate": "node scripts/validate.mjs", "check": "node scripts/validate.mjs --coverage",
-   "snapshot": "node scripts/snapshot.mjs"  (snapshot needs a running dev server and \`npx playwright install chromium\`)
-5. Binding contract: page modules ({ dims, nav }), data-proto targets, and — if your kit doesn't stamp
-   component names — a data-component wrapper layer. See SPEC.md §2 and docs/STAVY-ADOPTION.md.
-6. Inspector adapter: src/stavy/inspect-adapter.ts (token names / component stack for your stack).
-`
-writeFileSync(join(target, "docs/STAVY-WIRING.md"), `# Stavy wiring steps
-Generated by init.mjs (stavy ${stavyVersion}) — safe to re-generate by re-running init.
-${steps}`)
-console.log(steps)
-console.log(`(also saved to docs/STAVY-WIRING.md — paste that file to Claude if you lose this output)`)
+console.log(`
+Done (viewer ${version}). Nothing under src/ was touched. Next:
+  1. npm i -D playwright ajv ajv-formats && npx playwright install chromium   (scan needs a browser)
+  2. npm run dev, then open  http://localhost:5173/${dir}/index.html          (the viewer, next to your app)
+  3. Register your first real screens in public/stavy.json: one entry per page with its existing URL.
+     Every dimension a page declares must appear in its url as {dim} — the app reads them as it likes.
+  4. npm run stavy:scan     → snapshots + a target report (the coverage contract, checked against the running app)
+     npm run stavy:validate → schema, cross-references, the URL contract, last scan's misses
+  5. Add "@STAVY.md" to your CLAUDE.md so agents follow the rules (additive only — never gut a page for Stavy).
+Docs: docs/STAVY-SPEC.md · skill: .claude/skills/stavy/SKILL.md · upgrade later by re-running init (--rebuild).`)

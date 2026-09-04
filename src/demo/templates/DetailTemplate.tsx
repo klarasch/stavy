@@ -1,9 +1,9 @@
 import { ArrowLeft, Receipt } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/ui/card"
 import { Separator } from "@/ui/separator"
-import { proto } from "@/stavy/proto"
+import { proto } from "@/demo/lib/proto"
 import { cn } from "@/lib/utils"
-import type { PageProps } from "@/stavy/types"
+import type { PageProps } from "@/demo/app/types"
 import { AppFrame, StatusBadge, money } from "./AppFrame"
 import { expenseDetailFixture, timelineFor } from "../fixtures"
 import { ApprovalActions } from "../organisms/ApprovalActions"
@@ -16,11 +16,12 @@ export function DetailTemplate({ dims, nav }: PageProps) {
   const density = dims.density ?? "comfortable"
   const locale = dims.locale ?? "en-US"
   const overlay = dims.overlay ?? "none"
+  const expense = dims.expense ?? "exp-2101"
   const t = makeT(locale)
-  const e = expenseDetailFixture(lifecycle)
+  const e = expenseDetailFixture(lifecycle, expense)
   const events = timelineFor(lifecycle)
   const goTo = (patch: Record<string, string>) =>
-    nav("expense-detail", { role, lifecycle, density, locale, overlay: "none", ...patch })
+    nav("expense-detail", { expense, role, lifecycle, density, locale, overlay: "none", ...patch })
   // Rejecting is destructive, so it walks to the overlay dimension first; the
   // modal's confirm advances the lifecycle. Both are nav() — every state on canvas.
   const setLifecycle = (next: string) =>

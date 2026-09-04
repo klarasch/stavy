@@ -3,52 +3,51 @@ import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "node:url"
 import { readFileSync, writeFileSync } from "node:fs"
-import { createRequire } from "node:module"
 import Ajv2020 from "ajv/dist/2020.js"
 import addFormats from "ajv-formats"
 
-// Same ajv setup as scripts/validate.mjs, so the dev annotation endpoint
-// accepts exactly what `npm run validate` would accept.
+/**
+ * This config builds two things from one repo:
+ *   /          the Orbit demo prototype (a normal React app)
+ *   /stavy/    the Stavy viewer, a static page that loads Orbit's URLs in iframes
+ *
+ * Adopters don't need any of this: they copy the built viewer into their
+ * app's public folder and serve `stavy.json` next to it (see docs/ADOPTION.md).
+ * The plugin below only (1) serves the repo-root `stavy.json` at /stavy.json
+ * in dev and emits it on build, and (2) offers the dev-only annotation
+ * endpoint the viewer's comment composer uses to write annotations back.
+ */
 const MAX_ANNOTATION_BODY_BYTES = 1_000_000
 
-// Stavy slice plugin: when PROTO=<prototype-id> is set, the build only
-// includes the pages declared in that prototype slice of stavy.json.
-function stavySlice(): Plugin {
+function stavyManifest(): Plugin {
   const manifestPath = fileURLToPath(new URL("./stavy.json", import.meta.url))
   const schemaPath = fileURLToPath(new URL("./spec/stavy.schema.json", import.meta.url))
   const ajv = new Ajv2020({ allErrors: true, strict: false })
   addFormats(ajv)
   const validateManifest = ajv.compile(JSON.parse(readFileSync(schemaPath, "utf8")))
-  const virtualId = "virtual:proto-pages"
-  const resolvedId = "\0" + virtualId
-  const stringsId = "virtual:proto-strings"
-  const resolvedStringsId = "\0" + stringsId
-  // mermaid is optional: boards of kind "mermaid" render with it, show their
-  // source without it. Resolved here because a bare import("mermaid") makes
-  // Vite fail at transform time when the package is absent.
-  const mermaidId = "virtual:proto-mermaid"
-  const resolvedMermaidId = "\0" + mermaidId
-  let hasMermaid = false
-  try {
-    createRequire(import.meta.url).resolve("mermaid")
-    hasMermaid = true
-  } catch {}
 
   return {
-    name: "stavy-slice",
+    name: "stavy-manifest",
     config() {
       return {
         define: {
-          __PROTO_SLICE__: JSON.stringify(process.env.PROTO ?? null),
           // Absolute workspace root, dev only — lets the inspector open files in the editor.
-          __PROTO_ROOT__: JSON.stringify(process.env.NODE_ENV === "production" ? null : process.cwd()),
+          __STAVY_ROOT__: JSON.stringify(process.env.NODE_ENV === "production" ? null : process.cwd()),
         },
       }
     },
-    // Dev-only authoring endpoint: the viewer can save a design annotation
-    // straight into stavy.json (designers annotate without prompting;
-    // HMR reloads the manifest and the pin appears).
     configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const path = (req.url ?? "").split("?")[0]
+        if (path.endsWith("/stavy.json")) {
+          res.setHeader("content-type", "application/json")
+          res.setHeader("cache-control", "no-store")
+          return res.end(readFileSync(manifestPath))
+        }
+        next()
+      })
+      // Dev-only authoring endpoint: the viewer can save a design annotation
+      // straight into stavy.json (designers annotate without prompting).
       server.middlewares.use("/__stavy/annotation", (req, res) => {
         if (req.method !== "POST") {
           res.statusCode = 405
@@ -96,43 +95,12 @@ function stavySlice(): Plugin {
         })
       })
     },
-    resolveId(id) {
-      if (id === virtualId) return resolvedId
-      if (id === stringsId) return resolvedStringsId
-      if (id === mermaidId) return hasMermaid ? this.resolve("mermaid") : resolvedMermaidId
+    handleHotUpdate({ file, server }) {
+      // The viewer fetches the manifest at runtime: reload it when the file changes.
+      if (file === manifestPath) server.ws.send({ type: "full-reload" })
     },
-    load(id) {
-      if (id === resolvedMermaidId) return "export default null\n"
-      if (id === resolvedStringsId) {
-        // The copy catalog, if the manifest points at one — the inspector uses it to show copy keys.
-        const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
-        const file = manifest.strings ? fileURLToPath(new URL(manifest.strings, new URL("./", import.meta.url))) : null
-        return `export const strings = ${file ? readFileSync(file, "utf8") : "{}"}\n`
-      }
-      if (id !== resolvedId) return
-      const manifest = JSON.parse(readFileSync(manifestPath, "utf8"))
-      const sliceId = process.env.PROTO
-      const slice = sliceId
-        ? manifest.prototypes.find((p: { id: string }) => p.id === sliceId)
-        : null
-      if (sliceId && !slice) {
-        throw new Error(
-          `PROTO="${sliceId}" does not match any prototype in stavy.json. ` +
-            `Known: ${manifest.prototypes.map((p: { id: string }) => p.id).join(", ")}`
-        )
-      }
-      const pages = manifest.pages.filter(
-        (p: { id: string }) => !slice || slice.pages.includes(p.id)
-      )
-      const entries = pages
-        .map(
-          (p: { id: string; module?: string }) =>
-            `  ${JSON.stringify(p.id)}: () => import(${JSON.stringify(
-              "/" + (p.module ?? `src/demo/pages/${p.id}.tsx`).replace(/^\/+/, "")
-            )})`
-        )
-        .join(",\n")
-      return `export const pageModules = {\n${entries}\n}\n`
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "stavy.json", source: readFileSync(manifestPath, "utf8") })
     },
   }
 }
@@ -140,13 +108,21 @@ function stavySlice(): Plugin {
 export default defineConfig({
   // Sub-path hosting (GitHub Pages): BASE_PATH=/stavy/ npm run build
   base: process.env.BASE_PATH ?? "/",
-  plugins: [react(), tailwindcss(), stavySlice()],
+  plugins: [react(), tailwindcss(), stavyManifest()],
   // Keep React component names in production builds so the inspector can
   // show "Badge" instead of "Ct" on deployed prototypes.
   esbuild: { keepNames: true },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        app: fileURLToPath(new URL("./index.html", import.meta.url)),
+        stavy: fileURLToPath(new URL("./stavy/index.html", import.meta.url)),
+      },
     },
   },
 })

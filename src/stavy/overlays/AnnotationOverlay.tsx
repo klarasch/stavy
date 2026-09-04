@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
-import { findProtoTarget } from "../proto"
+import { createPortal } from "react-dom"
+import { findTarget } from "../manifest"
+import { hostRect, onFrameChange } from "../frame"
 import type { AnnotationDef } from "../types"
 
 interface Pin extends AnnotationDef {
@@ -10,16 +12,20 @@ interface Pin extends AnnotationDef {
 export type AnnotationMode = "hover" | "all"
 
 /**
- * Annotation pins on a page. `hover`: numbered pins, note on hover, click to
- * keep it open. `all`: every note open at once (review / print mode).
+ * Annotation pins over the player frame. `hover`: numbered pins, note on
+ * hover, click to keep it open. `all`: every note open at once (review /
+ * print mode). Targets are measured inside the frame and drawn in a fixed
+ * host layer, following the frame's scroll.
  */
 export function AnnotationOverlay({
   annotations,
-  wrapper,
+  iframe,
+  doc,
   mode = "hover",
 }: {
   annotations: AnnotationDef[]
-  wrapper: HTMLElement
+  iframe: HTMLIFrameElement | null
+  doc: Document | null
   mode?: AnnotationMode
 }) {
   const [pins, setPins] = useState<Pin[]>([])
@@ -28,47 +34,49 @@ export function AnnotationOverlay({
   const isOpen = (id: string) => mode === "all" || pinned === id || hovered === id
 
   useEffect(() => {
+    if (!iframe || !doc) {
+      setPins([])
+      return
+    }
     let tries = 0
     let timer: ReturnType<typeof setTimeout>
     const measure = () => {
-      const w = wrapper.getBoundingClientRect()
       const found: Pin[] = []
       for (const a of annotations) {
-        const el = findProtoTarget(wrapper, a.target)
+        const el = findTarget(doc, a.target)
         if (!el) continue
-        const r = el.getBoundingClientRect()
-        found.push({
-          ...a,
-          top: r.top - w.top + wrapper.scrollTop - 10,
-          left: r.left - w.left + wrapper.scrollLeft + r.width - 10,
-        })
+        const r = hostRect(el, iframe)
+        found.push({ ...a, top: r.top - 10, left: r.left + r.width - 10 })
       }
       setPins(found)
-      if (tries++ < 20) timer = setTimeout(measure, 250)
     }
-    measure()
-    window.addEventListener("resize", measure)
+    const settle = () => {
+      measure()
+      if (tries++ < 20) timer = setTimeout(settle, 250)
+    }
+    settle()
+    const off = onFrameChange(iframe, measure)
     return () => {
       clearTimeout(timer)
-      window.removeEventListener("resize", measure)
+      off()
     }
-  }, [annotations, wrapper])
+  }, [annotations, iframe, doc])
 
-  return (
-    <div className="absolute inset-0 pointer-events-none z-30" data-ps-ui>
+  return createPortal(
+    <div className="ps-fixed-layer" data-ps-ui>
       {pins.map((p, i) => (
         <div
           key={p.target}
           className="absolute"
-          style={{ top: p.top, left: p.left, zIndex: isOpen(p.target) ? 2 : 1 }}
+          style={{ top: p.top, left: p.left, zIndex: isOpen(p.target) ? 2 : 1, pointerEvents: "auto" }}
           onMouseEnter={() => setHovered(p.target)}
           onMouseLeave={() => setHovered(null)}
         >
-          <button className="ps-pin pointer-events-auto size-6! text-[11px]!" onClick={() => setPinned(pinned === p.target ? null : p.target)}>
+          <button className="ps-pin size-6! text-[11px]!" onClick={() => setPinned(pinned === p.target ? null : p.target)}>
             {i + 1}
           </button>
           {isOpen(p.target) && (
-            <div className="ps ps-glass-strong pointer-events-auto absolute top-8 right-0 w-72 rounded-xl p-3.5 z-10">
+            <div className="ps ps-glass-strong absolute top-8 right-0 w-72 rounded-xl p-3.5 z-10">
               <div className="text-[13px] font-semibold mb-1">{p.title}</div>
               <p className="text-[12.5px] leading-relaxed" style={{ color: "var(--ps-muted)" }}>
                 {p.note}
@@ -77,6 +85,7 @@ export function AnnotationOverlay({
           )}
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   )
 }

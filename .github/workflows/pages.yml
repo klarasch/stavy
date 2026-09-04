@@ -18,11 +18,19 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
       - run: npm ci
-      - run: npm run validate
       - run: npx tsc -b
-      # committed generated artifacts must match the viewer source
-      - run: node scripts/vendor-icons.mjs && npm run build:css && npm run gen:tests
-      - run: git diff --exit-code -- src/stavy/icons.tsx prebuilt/stavy.css tests/scenarios
+      - run: npm test
+      # committed generated artifacts must match the source
+      - run: node scripts/vendor-icons.mjs && npm run gen:tests
+      - run: git diff --exit-code -- src/stavy/icons.tsx tests/scenarios
+      # 1) build the prototype + viewer, 2) scan it (targets + snapshots), 3) validate, 4) rebuild with the snapshots
+      - run: npx playwright install --with-deps chromium
+      - run: BASE_PATH=/stavy/ npx vite build
+      - run: |
+          npx vite preview --port 4173 --strictPort &
+          for i in $(seq 1 30); do curl -sf http://localhost:4173/stavy/ >/dev/null && break; sleep 1; done
+      - run: node scripts/scan.mjs --url http://localhost:4173 --app /stavy
+      - run: npm run check
       - run: BASE_PATH=/stavy/ npx vite build
       - run: cp dist/index.html dist/404.html   # SPA fallback for deep links on Pages
       - uses: actions/upload-pages-artifact@v3

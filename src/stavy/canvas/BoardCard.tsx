@@ -20,11 +20,7 @@ export const BoardCard = memo(function BoardCard({ board }: { board: BoardDef })
     let cancelled = false
     ;(async () => {
       try {
-        const mermaid = (await import("virtual:proto-mermaid")).default
-        if (!mermaid) {
-          if (!cancelled) setError("mermaid is not installed — showing the diagram source")
-          return
-        }
+        const mermaid = (await import("mermaid")).default
         mermaid.initialize({
           startOnLoad: false,
           theme: dark ? "dark" : "neutral",

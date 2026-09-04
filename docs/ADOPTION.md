@@ -1,272 +1,206 @@
-# Adopting Stavy on your own design system
+# Adopting Stavy on an existing prototype
 
-This is the hands-on guide for trying Stavy in a fresh repo with a
-different UI kit, and for rolling it onto an existing prototype/mock repo at
-work. Steps marked **(skill)** are what Claude does for you when the
-`stavy` skill is installed — you can do them by hand too.
+Stavy is an overlay. It is served *next to* your prototype, loads your
+prototype's own URLs, and never imports it. Adoption therefore touches nothing
+under `src/`: a static folder in `public/`, a JSON file, two scripts, and one
+rules file for the agents working in the repo. Steps marked **(skill)** are
+what Claude does for you when the `stavy` skill is installed.
 
----
-
-## A. Fresh trial repo (≈ 1–1.5 hours, mostly manifest design)
-
-1. **Scaffold** a Vite + React + TypeScript app and install your design system
-   package (MUI, Ant, Chakra, your in-house kit). Your *product* does not need
-   Tailwind — `init` writes the viewer's styles as prebuilt, self-contained
-   plain CSS (no preflight, so nothing in your app changes). The viewer also
-   vendors its icons and helpers; its only npm dependency is react-router-dom.
-2. **Install the viewer with one command** — do not re-theme it:
-   ```bash
-   node /path/to/stavy/scripts/init.mjs ../my-trial-repo
-   ```
-   It copies `src/stavy/`, the scoped `src/stavy.css`, the validator
-   and snapshot scripts, the skill, `SPEC.md`, this guide, and a starter
-   `stavy.json`, then prints the five things left to wire (deps, the
-   Vite plugin with your page path, the CSS import, routes, scripts).
-3. **Install the skill**: copy `skill/SKILL.md` to
-   `.claude/skills/stavy/SKILL.md` in the new repo (and `SPEC.md` next to
-   it or at the repo root — the skill reads it).
-4. **Let the skill set the workspace up** **(skill)** — in Claude Code:
-   > "Set up Stavy for *<product>* on *<design system>*. Start with a
-   > dashboard and a list page, roles *<a/b>*, a *<thing>* lifecycle
-   > *<x → y → z>*, and two scenarios."
-   It will create `stavy.json`, an `AppFrame`-style shell, the first
-   templates and pages, fixtures, scenarios, slices, and run the validator.
-5. **Binding contract checklist** (what the skill must have produced):
-   - page modules `export default ({ dims, nav }) => …` at the paths the
-     manifest names (`module`, or `src/demo/pages/<id>.tsx` by default —
-     change the default path in the Vite plugin's `load()` if your layout differs)
-   - `data-proto` on every region a scenario, annotation, or note references
-   - if your kit doesn't stamp component names (MUI/Ant don't): a one-file
-     wrapper layer that re-exports the components you use with
-     `data-component="<Name>"` on the root node. The whole pattern is:
-     ```tsx
-     // src/kit/index.tsx — import kit components from here, not from the kit
-     import MuiButton, { type ButtonProps } from "@mui/material/Button"
-     const stamp = <P extends object>(name: string, C: React.ComponentType<P>) =>
-       Object.assign((p: P) => React.createElement(C, { ...p, "data-component": name } as P), { displayName: name })
-     export const Button = stamp<ButtonProps>("Button", MuiButton)
-     ```
-6. **Adapt the inspector** **(skill)** — `src/stavy/inspect-adapter.ts`:
-   - React: nothing to do (component + props come from the React tree)
-   - Tailwind + shadcn tokens: nothing to do
-   - other token names (e.g. `--color-primary-500`): replace `tokenNames`
-   - CSS-in-JS (emotion/styled-components): class names are hashed, so
-     class-based color provenance degrades gracefully to computed values;
-     keep `componentStack` (still works) and optionally map your theme
-     object's palette to values for token matching. If the kit ships a global
-     reset (MUI `CssBaseline`, Chakra's baseline), mount it inside your page
-     templates rather than at the app root — both share one document, so a
-     root-level reset restyles the viewer's chrome too
-   - Vue/Svelte: replace `componentStack` with the framework's equivalent
-     (`__vueParentComponent` / `__svelte_meta`) — the rest is framework-free
-7. **Run**: `npm run dev` → the canvas. `npm run check` (validation + coverage;
-   add `--refs docs/your-prd.md` to check scenario refs against a PRD). Then
-   `PROTO=<slice> npx vite build --outDir dist-<slice>` and confirm excluded
-   page chunks are absent from `dist-<slice>/assets`. With the dev server
-   running and Playwright's browser installed (`npx playwright install
-   chromium`), `npm run snapshot -- --slice <id>` writes a PNG per pinned
-   instance to `public/snapshots/` — CI can diff them, and the canvas uses
-   them as raster placeholders for cards that aren't mounted (zoomed far out,
-   not yet visited, or evicted). Without them the canvas still works; cards
-   just show label placeholders instead of thumbnails.
-
-What to look for while testing: does the canvas read as a coverage map of
-your product? Can a colleague play a scenario without help? Does Inspect show
-the component you expected with the props you'd write?
+Same origin is the one requirement: the viewer must be served from the same
+host and port as the prototype (that is what `public/` gives you), otherwise
+the inspector, tours, pins and comments cannot reach into the frame. Snapshots
+work regardless.
 
 ---
 
-## B. Rolling onto an existing mock repo (recommended path at work)
+## A. An afternoon: from nothing to a canvas of what you already have
 
-Set it up **inside the existing mock repo** — it already imports the design
-system, has the fixtures, and designers know it. But **rebuild the page
-templates clean**, extracted from the existing mocks one shape at a time
-(strangler pattern), rather than registering every old page as-is:
+Clone the reference repo next to the prototype repo and run init from there:
 
-1. Add the viewer, plugin, validator, skill, and an empty `stavy.json`
-   (product + dimensions only): `node …/stavy/scripts/init.mjs . --route /canvas`,
-   then one route in the existing router — `<Route path="/canvas/*" element={<StavyApp />} />`
-   (`viewer.base` in the manifest matches the mount path, so every viewer link
-   stays under it). Nothing else changes; old routes keep working.
-   Step-by-step for a first trial on a branch: `docs/MONDAY.md`.
-2. Audit the mock: list the 3–5 dominant page shapes (list, detail, dashboard,
-   form flow, settings…). Those become the first `templates`, each extracted
-   from the cleanest existing page and fixed to the `({ dims, nav })` contract.
-3. Migrate pages by *feature*, not by folder: when a designer starts a new
-   exploration, the skill builds it on templates; when an old page is needed
-   in a scenario, port it then. Unported mock pages are not a problem — they
-   just aren't on the canvas yet.
-4. Promote organisms as they recur (`kind: "component"`), and make the
-   canvas the place PRs are reviewed from (the PR description links the
-   preview's canvas URL).
-   - **Pages that open modals/drawers**: most kits portal overlays to
-     `document.body`, which would cover the whole canvas. Route them into the
-     `portalContainer` the viewer passes to every page (SPEC §3 "Overlay
-     containment", SKILL "Modals and overlays"). If your kit's wrapper
-     (in-house `Modal` components often) doesn't forward a container prop,
-     extend the wrapper — never re-parent the portalled DOM after mount.
-5. Retire the separate builds repo once slice builds cover the demos
-   (see CI below).
-
-Branch model stays as it is: `main` = the system (templates, dimensions,
-shared fixtures, canonical mock); feature branches = explorations with their
-own slices; template changes = reviewed "system PRs".
-
----
-
-## B2. Keep the manifest true automatically (the "drift hook")
-
-Claude Code can run a shell command after specific events. Add this to the
-workspace's `.claude/settings.json` and the validator runs every time Claude
-edits the manifest, a page, a template, or an organism — its output goes
-straight back to Claude, which fixes the drift in the same turn:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in *stavy.json|*/pages/*|*/templates/*|*/organisms/*|*/components/*) npm run validate --silent ;; esac"
-          }
-        ]
-      }
-    ]
-  }
-}
+```bash
+git clone https://github.com/klarasch/stavy ../stavy
+cd ../stavy && npm install && cd -
+node ../stavy/scripts/init.mjs .
 ```
 
-(`jq` parses the hook's JSON input; drop the `case` filter if you'd rather run
-the validator after every edit — it takes well under a second.)
+Init builds the viewer once (`dist-viewer/`, self-contained, relative asset
+paths) and copies:
+
+| Into your repo | What it is |
+|---|---|
+| `public/stavy/` | the viewer, a static page (+ `VERSION`) |
+| `public/stavy.json` | a starter manifest (only if absent) |
+| `scripts/stavy/{validate,scan,gen-tests}.mjs`, `stavy.schema.json` | the checks |
+| `.claude/skills/stavy/SKILL.md` | the agent skill |
+| `STAVY.md` | the rules for agents in this repo — add `@STAVY.md` to your CLAUDE.md |
+| `docs/STAVY-SPEC.md` | the spec |
+
+and adds `stavy:validate`, `stavy:scan`, `stavy:tests` to `package.json`
+when absent. Then, in order:
+
+1. **Level 0 — register what exists.** `npm run dev`, open
+   `http://localhost:5173/stavy/index.html`. In `public/stavy.json`, add one
+   `pages[]` entry per screen you want on the canvas, with the URL it already
+   has (`"url": "/settings"`), no dimensions yet, one pinned instance
+   (`"instances": [{ "dims": {} }]`). **(skill)** Claude lists the routes and
+   writes the entries.
+2. **Scan.** `npm i -D playwright ajv ajv-formats && npx playwright install chromium`,
+   then `npm run stavy:scan` against the running dev server. Every registered
+   state gets a snapshot; the canvas now shows your real screens. Nothing in
+   the app changed.
+3. **Level 1 — one flow, addressable.** Pick the flow you want to walk
+   through. For each screen in it, decide which axes matter (a role, a data
+   state, a step, an open dialog) and make them reachable by URL — see §B. Add
+   them as `dimensions[]`, declare them on the page, put every declared
+   dimension in the page's `url` as `{dim}`, pin the instances you want to
+   see. Add stable ids to the elements the flow clicks (`data-testid` at the
+   usage site — or whatever attribute your kit already stamps; name it in
+   `viewer.targetAttrs`). Write the `scenarios[]` entry.
+4. **Scan again, validate.** `npm run stavy:scan` asserts every scenario
+   target exists in the rendered state and fails otherwise. `npm run
+   stavy:validate` checks the manifest and the URL contract statically and
+   reports the last scan's misses.
+5. Open the canvas: the flow is a lane of real snapshots; click a step to open
+   the player at that state; press **Play** to walk the tour with the
+   spotlight; press **I** to inspect. Show that.
+
+Level 2 — organisms — comes when you want a component's own state matrix on
+the canvas: add a harness route (§B, "Organisms"), register it as a page with
+`"kind": "component"` and a `frame`.
+
+---
+
+## B. Making states URL-addressable without touching page code
+
+The whole contract is: the prototype renders a state when opened at a URL.
+How it reads that URL is its business. The cheap patterns, in order of
+preference:
+
+- **A read at the data layer.** One hook or function that merges search
+  params over defaults (`role`, `state`, …) and hands the result to the
+  fixture selection. Orbit's `src/demo/app/dims.ts` is 60 lines and the only
+  place that knows the param names. Nothing in a page component changes.
+- **Dataset as a dimension.** For data-heavy prototypes don't flag UI states,
+  select a *dataset*: `?dataset=manager-empty` picks a named, deterministic
+  fixture set and the app's real logic computes the rest. Register `dataset`
+  as a dimension. This keeps real behaviour and still makes every state a link.
+- **Path segments.** `"url": "/expenses/{expense}?role={role}"` — a record id
+  is a dimension too; the viewer fills path and query placeholders alike and
+  recognises the state when the app navigates there on its own.
+- **Dialogs and overlays.** An `overlay=confirm-delete` param that opens the
+  dialog on mount. The state gets a snapshot, a tour can point at the confirm
+  button, and the modal stays inside its own document — containment is the
+  frame's job now, not yours.
+- **Workspace axes** (release phase, locale, tenant): one param the app reads
+  once, declared `"scope": "workspace"` so the viewer carries it across every
+  navigation (SPEC §1.1).
+
+When a state is *not* reachable by URL — it lives three clicks deep in local
+state — register the gap (leave the cell unpinned, note it in the page
+description) rather than restructuring the page. That is the rule agents in
+the repo follow (`STAVY.md`).
+
+**Organisms.** Add one route that mounts the organism alone with the app's
+real providers — `/components/<name>?state={state}` — and register it with
+`"kind": "component"` and a `frame`. If you already have Storybook or Ladle,
+point `url` at the story's iframe URL instead; no harness needed. Never strip
+an existing page down to one component.
+
+**Targets.** A bare id in the manifest is looked up in `viewer.targetAttrs`
+(default `["data-proto", "data-testid"]`); anything else is used as a CSS
+selector. Kits that already stamp instance ids need nothing added.
+
+**Copy provenance** (optional): if the app serves its string catalog as JSON,
+set `"strings": "/strings.json"` and the inspector names the key behind any
+text.
+
+---
+
+## B2. Keep the manifest true: scan in CI
+
+`scan` is the drift hook. It visits every state the manifest cares about —
+pinned instances, scenario steps, note anchors — asserts the referenced
+targets exist, measures them, and writes the snapshots. Run it against a
+preview of the built app in CI and the contract cannot silently rot: a renamed
+button or a state that stopped rendering fails the build with the exact
+state and selector in the log. The reference repo's
+`.github/workflows/pages.yml` is the template: build → preview → scan →
+validate → build again with the snapshots → deploy.
+
+Snapshots are generated artifacts. Commit them if reviewers should see the
+canvas on a static host without CI; otherwise ignore `public/snapshots/` and
+let CI produce them.
+
+---
 
 ## B3. Comments without a server (GitHub Pages + Slack)
 
 Comments are separate from annotations: annotations are authored
 documentation in the manifest; comments are conversation. The viewer stores
-comments **in the browser** (local-first), so a static host like GitHub Pages
-needs nothing extra:
+comments **in the browser** (local-first), so a static host needs nothing:
 
-1. On any page press **M** (or the speech-bubble button) and click where the
-   comment belongs — ideally on the element itself, so the comment anchors to
-   its `data-proto` target and survives redesigns. Name once; reply, resolve.
-2. Open **Comments** → **Copy link**. The link carries all comments as a
-   compressed payload in the URL hash (never sent to the server) — paste it
-   in Slack. Whoever opens it sees the bubbles and the panel. **Copy as
-   Markdown** produces a Slack-readable digest with a deep link per comment.
-3. Others comment and send *their* link back; **Import → Unpack** merges
-   payloads by comment id. The designer resolves items and, when the thread
-   is done, either exports the Markdown into the PR or simply clears.
+1. In the player press **M** (or the speech-bubble button) and click where
+   the comment belongs — on the element itself, so it anchors to the target
+   id and survives redesigns. Name once; reply, resolve.
+2. **Comments → Copy link.** The link carries every comment as a compressed
+   payload in the URL hash — paste it in Slack. **Copy as Markdown** produces
+   a digest with a deep link per comment (page, dims, target).
+3. Others send *their* link back; **Import → Unpack** merges by comment id.
 
-Capacity: a comment compresses to roughly 60 characters, so one link carries
-~500 comments before Safari's URL limit (~80k) or Slack's message limit (~40k)
-matter; the viewer falls back to the Markdown digest automatically beyond that.
+A comment compresses to roughly 60 characters, so one link carries a few
+hundred before URL limits matter; the Markdown digest is the fallback.
 
-When the team outgrows links, swap the store for a GitHub-issues or small
-hosted backend — the anchor model and UI stay the same.
+The Markdown export is also the agent's brief: each item names the page,
+the dimension assignment, the target and the URL. Hand it to Claude as the
+task list; it finds the file through the inspector's component/source view
+instead of searching the repo.
+
+---
 
 ## B4. What PMs, engineers, designers get without touching JSON
 
 - **PMs**: the *Requirement coverage* board on the canvas (requirements →
   scenarios → states, gaps in amber; click a scenario to play it). Their input
-  is the PRD: the skill extracts `requirements[]` from its headings and proposes
-  scenarios for gaps. No special PRD format is needed beyond stable section
-  handles (`§3`, ticket ids); Markdown exports from Confluence/Notion work.
-- **Engineers / QA**: `npm run handoff` (a sheet per page), `npm run gen:tests`
-  (Playwright specs from scenarios; run with `npm run test:scenarios`),
-  the inspector's copyable JSX, and `npm run changelog` in every PR.
-- **Designers and legal**: all copy is in `src/…/strings.json`; rewrite there
-  (no agent needed), or review it as `docs/strings.md` / `.csv` from
-  `npm run strings`. Designers also edit manifest text/annotations/fixtures directly (schema
-  autocompletion), or in dev use the comment composer's *Save as a design
-  annotation* to write straight into `stavy.json`; reference changes to
-  Claude as "page URL + target id"; export comments as `.json`/`.md` and hand
-  them to Claude as a task list — it returns a resolution file you import.
+  is the PRD: the skill extracts `requirements[]` from its headings and
+  proposes scenarios for gaps. Stable section handles (`§3`, ticket ids) are
+  enough; Markdown exports from Confluence/Notion work.
+- **Engineers / QA**: the scan log (which state, which selector), `npm run
+  stavy:tests` (Playwright specs from scenarios, against the app's own URLs),
+  the inspector (component + props, classes, tokens, the state's URL, a
+  source link in dev), `npm run handoff` and `npm run changelog` in the
+  reference repo.
+- **Designers**: the canvas link; the player with **N** for annotations,
+  **W** for wireframe, **⌘\** to hide the chrome for a clean demo; comments;
+  in dev, *Save as a design annotation* writes straight into the manifest.
 
-## B5. Maintenance: home is upstream, work is a consumer
+---
 
-The viewer is developed only in the reference repo (where npm works); adopting
-repos never edit `src/stavy/`. The loop:
+## B5. Maintenance: the viewer is a folder in `public/`
 
-1. **Change at home** → regenerate what's committed-but-generated
-   (`node scripts/vendor-icons.mjs` if icons changed, `npm run build:css`
-   always — CI fails the push if either is stale) → commit, push.
-2. **Update at work**: `git pull` in the Stavy clone, then re-run the same
-   init command in the adopting repo — it overwrites `src/stavy/` and
-   `src/stavy.css`, leaves `stavy.json`, pages and wiring alone:
-   ```bash
-   node ../stavy/scripts/init.mjs . --route /canvas
-   ```
-   Review `git diff src/stavy`, run `npm run validate`, commit.
-3. `src/stavy/VERSION` (written by init) records which Stavy commit an
-   adopting repo is on — compare it to the reference repo when something
-   behaves differently at work. A `-dirty` suffix means the clone had
-   uncommitted changes at install time.
-4. A bug found at work is reproduced and fixed at home, never patched in the
-   adopting repo — a work-local fix is overwritten by the next re-init.
+- **Upgrade:** pull the reference repo and re-run
+  `node ../stavy/scripts/init.mjs . --rebuild`. It overwrites `public/stavy/`
+  and `scripts/stavy/`, leaves `public/stavy.json`, `STAVY.md` and everything
+  else alone. `public/stavy/VERSION` records the Stavy commit you are on.
+- **Bugs** found while adopting are fixed in the reference repo, never by
+  patching the built viewer — the next init overwrites it.
+- **Removing Stavy** is `rm -r public/stavy public/stavy.json scripts/stavy
+  STAVY.md`. The app never knew.
+
+---
 
 ## C. CI/CD
 
-One workflow, three jobs. Example for GitHub Actions (adapt to GitLab/Bitbucket 1:1):
+Minimum: `node scripts/stavy/validate.mjs public/stavy.json` on every PR.
+Full: the scan. In the reference repo's Pages workflow the sequence is
 
-```yaml
-name: stavy
-on: [pull_request, push]
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run validate          # manifest ↔ code invariants (+ --refs docs/PRD.md for the contract)
-      - run: node scripts/changelog.mjs origin/${{ github.base_ref || 'main' }} > changelog.md   # post as PR comment
-      - run: npx tsc -b
-      - run: npx vite build            # full workspace
-
-  slices:
-    needs: check
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        slice: ${{ fromJson(needs.check.outputs.slices || '["full"]') }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: PROTO=${{ matrix.slice }} npx vite build --outDir dist-${{ matrix.slice }}
-      - uses: actions/upload-artifact@v4
-        with: { name: slice-${{ matrix.slice }}, path: dist-${{ matrix.slice }} }
-
-  preview:
-    needs: slices
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      # Deploy each slice artifact to your static host (Vercel/Netlify/Cloudflare
-      # Pages/S3+CloudFront/GitHub Pages) under <pr>-<slice>.your-preview.host
-      # and comment the canvas URLs on the PR. Slice ids come from
-      # `jq -r '.prototypes[].id' stavy.json`.
-      - run: echo "deploy + comment"
+```bash
+npx vite build
+npx vite preview --port 4173 &            # wait for it
+node scripts/scan.mjs --url http://localhost:4173 --app /stavy   # --app = the deploy's base path
+npm run check                              # validate + coverage + PRD refs + scan misses
+npx vite build                             # picks up public/snapshots
 ```
 
-Notes:
-- Read slice ids from the manifest (`jq -r '.prototypes[].id' stavy.json`)
-  and expose them as a job output for the matrix; build only the slices whose
-  pages changed if you want to save minutes (`git diff --name-only` against
-  `manifest.pages[].module`).
-- `main` deploys the full workspace; PRs deploy slices. The PR comment should
-  link the **canvas** of each slice — that's the review surface.
-- Visual diffs of every pinned state: run `vite preview` in the job, then
-  `node scripts/snapshot.mjs --url http://localhost:4173` and diff
-  `public/snapshots/` against the base branch (upload as artifact, or use a
-  visual diff service). Snapshotting before `vite build` also bakes the PNGs
-  into the deploy, so the published canvas gets instant thumbnails. The viewer hides its chrome with `?ui=0`, which the script sets.
-- The requirements check is built in: `node scripts/validate.mjs --refs
-  docs/PRD-118.md` fails if a scenario cites a ref that isn't in the document,
-  and warns for documented sections no scenario demonstrates — the manifest as
-  a contract between PM, design and engineering, enforced.
+Deploy `dist/`. The viewer opens at `<site>/stavy/` (or `/stavy/index.html`
+on hosts without directory indexes) and finds the manifest and snapshots one
+level up. No rewrite rules: the viewer routes by query string only.

@@ -1,26 +1,14 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react"
-import { PageRenderer } from "../PageRenderer"
-import { resolveDims } from "../manifest"
-import { findProtoTarget } from "../proto"
+import { memo, useState } from "react"
+import { resolveDims, snapshotEntry, snapshotUrl } from "../manifest"
 import { VIEWPORT_W, VIEWPORT_H } from "./InstanceCard"
-import { useLiveWhenVisible } from "./visibility"
 import type { PageDef } from "../types"
 
-interface Callout {
-  n: number
-  title: string
-  note: string
-  left: number
-  top: number
-  width: number
-  height: number
-}
-
 /**
- * Design anatomy: one instance of the page with its *annotations* drawn as
+ * Design anatomy: the page's snapshot with its *annotations* drawn as
  * numbered callouts and a legend of what each part does — for PMs, designers
- * and engineers alike. (Which components implement a part is the inspector's
- * job, not this card's.)
+ * and engineers alike. Boxes come from the snapshot index (measured by
+ * `scripts/scan.mjs`), so this costs nothing at view time. (Which components
+ * implement a part is the inspector's job, not this card's.)
  */
 export const AnatomyCard = memo(function AnatomyCard({
   page,
@@ -38,68 +26,22 @@ export const AnatomyCard = memo(function AnatomyCard({
   const FH = page.frame?.height ?? VIEWPORT_H
   const w = Math.round(FW * scale)
   const h = Math.round(FH * scale)
-  const frameRef = useRef<HTMLDivElement>(null)
-  const contentRef = useRef<HTMLDivElement | null>(null)
-  const live = useLiveWhenVisible(frameRef)
-  const [portalHost, setPortalHost] = useState<HTMLDivElement | null>(null)
-  const [callouts, setCallouts] = useState<Callout[]>([])
-
-  // Stable identity: React re-attaches a callback ref whose identity changed,
-  // so an inline one turns any re-render into detach(null) → attach(el) → state
-  // change → re-render — an unbounded loop the moment this card stops being
-  // memo-stable.
-  const setContent = useCallback((el: HTMLDivElement | null) => {
-    contentRef.current = el
-    setPortalHost((prev) => (prev === el ? prev : el))
-  }, [])
-
-  useEffect(() => {
-    if (!annotations.length) return
-    let tries = 0
-    let timer: ReturnType<typeof setTimeout>
-    const measure = () => {
-      const frame = frameRef.current
-      const content = contentRef.current
-      if (!frame || !content) return
-      const c = frame.getBoundingClientRect()
-      if (!c.width) return
-      const out: Callout[] = []
-      annotations.forEach((a, i) => {
-        const el = findProtoTarget(content, a.target)
-        if (!el) return
-        const r = el.getBoundingClientRect()
-        out.push({
-          n: i + 1,
-          title: a.title,
-          note: a.note,
-          left: ((r.left - c.left) / c.width) * 100,
-          top: ((r.top - c.top) / c.height) * 100,
-          width: (r.width / c.width) * 100,
-          height: (r.height / c.height) * 100,
-        })
-      })
-      setCallouts(out)
-      if (tries++ < 8) timer = setTimeout(measure, 350)
-    }
-    measure()
-    return () => clearTimeout(timer)
-  }, [page.id, annotations, live])
-
+  const entry = snapshotEntry(page, dims)
+  const [snapErr, setSnapErr] = useState(false)
   if (!annotations.length) return null
+
+  const callouts = annotations.flatMap((a, i) => {
+    const b = entry?.targets[a.target]
+    return b ? [{ n: i + 1, left: b.x * 100, top: b.y * 100, width: b.w * 100, height: b.h * 100 }] : []
+  })
 
   return (
     <div className="ps flex items-start gap-6" data-ps-ui>
-      <div ref={frameRef} className="ps-card-frame relative rounded-lg bg-white overflow-hidden shrink-0" style={{ width: w, height: h }}>
-        {live && (
-          <div
-            ref={setContent}
-            inert
-            className="relative pointer-events-none select-none origin-top-left"
-            style={{ width: FW, height: FH, transform: `scale(${scale})` }}
-          >
-            {portalHost && <PageRenderer pageId={page.id} dims={dims} nav={() => {}} portalContainer={portalHost} />}
-          </div>
-        )}
+      <div className="ps-card-frame relative rounded-lg bg-white overflow-hidden shrink-0" style={{ width: w, height: h }}>
+        <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium" style={{ color: "var(--ps-faint)" }}>
+          {page.label}
+        </div>
+        {!snapErr && <img className="ps-card-img" src={snapshotUrl(page, dims)} alt="" draggable={false} onError={() => setSnapErr(true)} />}
         {callouts.map((c) => (
           <div key={c.n}>
             <div className="ps-anat-box" style={{ left: `${c.left}%`, top: `${c.top}%`, width: `${c.width}%`, height: `${c.height}%` }} />
@@ -117,6 +59,11 @@ export const AnatomyCard = memo(function AnatomyCard({
             </div>
           </div>
         ))}
+        {!entry && (
+          <div className="ps-sub mt-1" style={{ color: "var(--ps-pin)" }}>
+            No snapshot yet — run <code className="ps-mono">npm run scan</code> to place the callouts.
+          </div>
+        )}
       </div>
     </div>
   )

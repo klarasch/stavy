@@ -4,17 +4,20 @@ import { validate } from "../../scripts/validate.mjs"
 
 const root = fileURLToPath(new URL("./fixtures", import.meta.url))
 const reqDoc = fileURLToPath(new URL("./fixtures/req-doc.md", import.meta.url))
+const snapsOk = fileURLToPath(new URL("./fixtures/snapshots-ok", import.meta.url))
+const snapsMissing = fileURLToPath(new URL("./fixtures/snapshots-missing", import.meta.url))
 
-// A fully valid manifest, referencing real fixture source files under
-// tests/unit/fixtures/ so the data-proto target lookups have something real
-// to scan. Every field that would otherwise trigger a warning is filled in,
-// so the "valid manifest" test can assert on a clean bill of health and each
-// other test can mutate exactly one thing via structuredClone().
+// A fully valid manifest. Targets are no longer looked up in source (that is
+// the scan's job, against the running prototype), so the fixture points the
+// validator at a canned scan index under tests/unit/fixtures/snapshots-ok.
+// Every field that would otherwise trigger a warning is filled in, so the
+// "valid manifest" test can assert on a clean bill of health and each other
+// test can mutate exactly one thing.
 function baseManifest() {
   return {
     version: "0.1",
     product: { name: "Test Product" },
-    strings: "strings.json",
+    strings: "/strings.json",
     dimensions: [
       {
         id: "role",
@@ -34,7 +37,7 @@ function baseManifest() {
         id: "simple-page",
         label: "Simple Page",
         template: "simple-template",
-        module: "src/page.tsx",
+        url: "/simple?role={role}",
         fidelity: "static",
         dimensions: { role: ["user", "admin"] },
         defaults: { role: "user" },
@@ -46,7 +49,7 @@ function baseManifest() {
         label: "Organism",
         kind: "component",
         template: "organism-template",
-        module: "src/organism.tsx",
+        url: "/components/organism",
         fidelity: "static",
         dimensions: {},
         instances: [{ dims: {} }],
@@ -72,11 +75,76 @@ interface ValidateResult {
   warnings: string[]
 }
 
-async function run(mutate?: (m: ReturnType<typeof baseManifest>) => void, flags?: { refs: string[]; coverage: boolean }): Promise<ValidateResult> {
+async function run(mutate?: (m: ReturnType<typeof baseManifest>) => void, flags?: { refs: string[]; coverage: boolean; snapshots?: string | null }): Promise<ValidateResult> {
   const m = baseManifest()
   mutate?.(m)
-  return (await validate(m as any, root, flags ?? { refs: [], coverage: false })) as ValidateResult
+  return (await validate(m as any, root, { snapshots: snapsOk, ...(flags ?? { refs: [], coverage: false }) })) as ValidateResult
 }
+
+describe("validate: the URL contract", () => {
+  it("errors when a page has no url", async () => {
+    const { errors } = await run((m) => {
+      // @ts-expect-error deliberately invalid
+      delete m.pages[0].url
+    })
+    expect(errors.some((e) => e.includes("no url"))).toBe(true)
+  })
+
+  it("errors when a declared dimension is missing from the url template", async () => {
+    const { errors } = await run((m) => {
+      m.pages[0].url = "/simple"
+    })
+    expect(errors.some((e) => e.includes('dimension "role" does not appear in url'))).toBe(true)
+  })
+
+  it("errors when the url references a dimension the page does not declare", async () => {
+    const { errors } = await run((m) => {
+      m.pages[0].url = "/simple?role={role}&theme={theme}"
+    })
+    expect(errors.some((e) => e.includes("placeholder {theme} is not a dimension"))).toBe(true)
+  })
+
+  it("errors when the url is relative", async () => {
+    const { errors } = await run((m) => {
+      m.pages[0].url = "simple?role={role}"
+    })
+    expect(errors.some((e) => e.includes('url must start with "/"'))).toBe(true)
+  })
+
+  it("accepts a page without a template", async () => {
+    const { errors } = await run((m) => {
+      // @ts-expect-error deliberately optional
+      delete m.pages[0].template
+    })
+    expect(errors).toEqual([])
+  })
+
+  it("warns when strings is not a URL path", async () => {
+    const { warnings } = await run((m) => {
+      m.strings = "src/strings.json"
+    })
+    expect(warnings.some((w) => w.includes("should be a URL path"))).toBe(true)
+  })
+})
+
+describe("validate: last scan results", () => {
+  it("reports targets the scan could not find in the rendered prototype", async () => {
+    const { errors } = await run(undefined, { refs: [], coverage: false, snapshots: snapsMissing })
+    expect(errors.some((e) => e.includes('scan: simple-page?role=user: target "SubmitButton" was not found'))).toBe(true)
+  })
+
+  it("warns when there is no scan yet", async () => {
+    const { warnings } = await run(undefined, { refs: [], coverage: false, snapshots: fileURLToPath(new URL("./fixtures/nowhere", import.meta.url)) })
+    expect(warnings.some((w) => w.includes("no") && w.includes("index.json yet"))).toBe(true)
+  })
+
+  it("warns when a pinned instance has not been scanned", async () => {
+    const { warnings } = await run((m) => {
+      m.pages[0].instances = [{ dims: { role: "user" } }, { dims: { role: "admin" } }]
+    })
+    expect(warnings.some((w) => w.includes("1 pinned instance(s) have no snapshot yet"))).toBe(true)
+  })
+})
 
 describe("validate: happy path", () => {
   it("a fully valid manifest produces no errors and no warnings", async () => {
@@ -166,28 +234,6 @@ describe("validate: pages", () => {
     expect(warnings.some((w) => w.includes("no pinned instances"))).toBe(true)
   })
 
-  it("errors when an annotation target is not found in source", async () => {
-    const { errors } = await run((m) => {
-      m.pages[0].annotations = [{ target: "NoSuchTarget", title: "x", note: "y" }]
-    })
-    expect(errors.some((e) => e.includes('annotation target "NoSuchTarget" not found in source'))).toBe(true)
-  })
-})
-
-describe("validate: module-level singleton stores", () => {
-  it("warns about a module-level zustand store shared across canvas cards", async () => {
-    const { warnings } = await run((m) => {
-      m.pages[0].module = "src/storePage.tsx"
-    })
-    expect(warnings.some((w) => w.includes("module-level store (zustand store)"))).toBe(true)
-  })
-
-  it("does not warn when the store line is annotated with @proto-shared-store", async () => {
-    const { warnings } = await run((m) => {
-      m.pages[0].module = "src/storePageOk.tsx"
-    })
-    expect(warnings.some((w) => w.includes("module-level store"))).toBe(false)
-  })
 })
 
 describe("validate: scenarios", () => {
@@ -196,13 +242,6 @@ describe("validate: scenarios", () => {
       m.scenarios[0].steps[0].page = "missing-page"
     })
     expect(errors.some((e) => e.includes('unknown page "missing-page"'))).toBe(true)
-  })
-
-  it("errors when a scenario step target is not found in source", async () => {
-    const { errors } = await run((m) => {
-      m.scenarios[0].steps[0].target = "NoSuchTarget"
-    })
-    expect(errors.some((e) => e.includes('target "NoSuchTarget" not found in source of "simple-page"'))).toBe(true)
   })
 
   it("errors when a scenario step uses an undeclared dimension value", async () => {
@@ -220,11 +259,11 @@ describe("validate: scenarios", () => {
     expect(warnings.some((w) => w.includes("no refs"))).toBe(true)
   })
 
-  it("errors when a scenario's page is not in any prototype that includes the scenario", async () => {
-    const { errors } = await run((m) => {
+  it("warns when a scenario's page is not in any prototype that includes the scenario", async () => {
+    const { warnings } = await run((m) => {
       m.prototypes[0].pages = ["organism-page"]
     })
-    expect(errors.some((e) => e.includes('page "simple-page" is not in any prototype that includes this scenario'))).toBe(true)
+    expect(warnings.some((w) => w.includes('page "simple-page" is not in any prototype that includes this scenario'))).toBe(true)
   })
 })
 
@@ -268,27 +307,11 @@ describe("validate: canvas notes", () => {
     expect(errors.some((e) => e.includes('note "note-1": unknown page "missing-page"'))).toBe(true)
   })
 
-  it("errors when a note target is not found in source", async () => {
-    const { errors } = await run((m) => {
-      m.notes[0].target = "NoSuchTarget"
-    })
-    expect(errors.some((e) => e.includes('note "note-1": target "NoSuchTarget" not found in source'))).toBe(true)
-  })
-
   it("warns when a note points at an instance that is not pinned", async () => {
     const { warnings } = await run((m) => {
       m.notes[0].dims = { role: "admin" } // only role=user is pinned
     })
     expect(warnings.some((w) => w.includes('note "note-1": points at an instance that is not pinned'))).toBe(true)
-  })
-})
-
-describe("validate: copy catalog", () => {
-  it("errors when the strings catalog file does not exist", async () => {
-    const { errors } = await run((m) => {
-      m.strings = "does-not-exist.json"
-    })
-    expect(errors.some((e) => e.includes('strings catalog "does-not-exist.json" not found'))).toBe(true)
   })
 })
 

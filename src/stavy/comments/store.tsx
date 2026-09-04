@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
-import { manifest, getPage, valueLabel, dimensionLabel, pageUrl } from "../manifest"
+import { manifest, getPage, valueLabel, dimensionLabel, pageUrl, canvasUrl, findTarget } from "../manifest"
 
 /* ------------------------------------------------------------------ */
 /* Comments: conversation about a prototype — separate from annotations  */
@@ -18,7 +18,7 @@ export interface Comment {
   id: string
   page: string
   dims: Record<string, string>
-  /** data-proto target the comment is anchored to (preferred: survives redesigns) */
+  /** Semantic target the comment is anchored to (preferred: survives redesigns) */
   target?: string
   /** nth-child path from the anchor (target or page root) down to the exact element clicked */
   path?: number[]
@@ -48,7 +48,7 @@ interface CommentsState {
 }
 
 const Ctx = createContext<CommentsState | null>(null)
-const KEY = `ps-comments:${manifest.product.name}`
+const storageKey = () => `ps-comments:${manifest.product.name}`
 const AUTHOR_KEY = "ps-author"
 
 export const uid = () => Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4)
@@ -60,7 +60,7 @@ export function dimsEqual(a: Record<string, string>, b: Record<string, string>) 
 
 function load(): Comment[] {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? "[]")
+    return JSON.parse(localStorage.getItem(storageKey()) ?? "[]")
   } catch {
     return []
   }
@@ -70,10 +70,10 @@ export function CommentsProvider({ children }: { children: ReactNode }) {
   const [comments, setComments] = useState<Comment[]>(load)
   const [author, setAuthorState] = useState(() => localStorage.getItem(AUTHOR_KEY) ?? "")
 
-  useEffect(() => localStorage.setItem(KEY, JSON.stringify(comments)), [comments])
+  useEffect(() => localStorage.setItem(storageKey(), JSON.stringify(comments)), [comments])
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === KEY) setComments(load())
+      if (e.key === storageKey()) setComments(load())
     }
     window.addEventListener("storage", onStorage)
     return () => window.removeEventListener("storage", onStorage)
@@ -180,8 +180,7 @@ export async function decodePayload(input: string): Promise<Comment[]> {
 }
 
 export async function shareUrl(list: Comment[]): Promise<string> {
-  const base = `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/$/, "")
-  return `${base}/?comments=1#c=${await encodePayload(list)}`
+  return `${window.location.origin}${canvasUrl({ comments: "1" })}#c=${await encodePayload(list)}`
 }
 
 /* ---------------- Markdown (Slack-friendly) ---------------- */
@@ -195,8 +194,7 @@ export function describeAnchor(c: Comment): string {
 }
 
 export function commentUrl(c: Comment): string {
-  const base = `${window.location.origin}${import.meta.env.BASE_URL}`.replace(/\/$/, "")
-  return base + pageUrl(c.page, c.dims, { c: c.id })
+  return window.location.origin + pageUrl(c.page, c.dims, { c: c.id })
 }
 
 export async function toMarkdown(list: Comment[]): Promise<string> {
@@ -254,9 +252,9 @@ export function followPath(from: Element, path: number[] | undefined): Element |
   return cur
 }
 
-/** Resolve a comment's anchor: exact element via path → target → page root. */
-export function resolveAnchor(c: Comment, wrapper: HTMLElement, root: Element): Element {
-  const target = c.target ? wrapper.querySelector<HTMLElement>(`[data-proto="${CSS.escape(c.target)}"]`) : null
+/** Resolve a comment's anchor inside the prototype document: exact element via path → target → page root. */
+export function resolveAnchor(c: Comment, doc: ParentNode, root: Element): Element {
+  const target = c.target ? findTarget(doc, c.target) : null
   const base = target ?? root
   return followPath(base, c.path) ?? base
 }

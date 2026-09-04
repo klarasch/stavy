@@ -1,384 +1,211 @@
 ---
 name: stavy
-description: Set up and operate a Stavy prototyping workspace — a manifest-driven system for vibe-coded prototypes with a zoomable canvas overview, guided scenario tours, dimension variants (states/roles/lifecycles), annotations, dev-mode inspection, and per-prototype build slicing. Use when the user wants to scaffold a prototyping workspace, register a page template, add a page/scenario/dimension/annotation to a prototype, create a demo build slice, or asks about stavy.json. Works with any UI kit or design system.
+description: Set up and operate a Stavy prototyping workspace — a manifest-driven overlay for reviewing an existing (or in-progress) prototype, with a zoomable canvas, a player, guided scenario tours, dimension variants (states/roles/lifecycles), annotations, and dev-mode inspection. Use when the user wants to register a page with Stavy, add a page/scenario/dimension/annotation to a prototype's manifest, work from a comments export, or asks about stavy.json. Works with any framework, router, or UI kit — Stavy never imports the prototype's code.
 ---
 
 # Stavy skill
 
-You are operating a **Stavy workspace**: a prototyping repo organized around
-a `stavy.json` manifest, per the spec in `SPEC.md` (read it if present;
-its rules win over this file on any conflict).
+You are operating a **Stavy workspace**: a prototype repo with a `stavy.json`
+manifest and a static viewer served alongside it (`public/stavy/`), per the
+spec in `SPEC.md` (read it if present; its rules win over this file on any
+conflict). Read `skill/RULES.md` (or `STAVY.md` if this repo was set up by
+`init`) before touching any page — it is the rule list this file summarizes,
+written to be read cold.
 
-## Core model (memorize this)
+## Core model
 
+- **Stavy is a viewer of existing things, not a way to build them.** It reads
+  the prototype's own URLs into a same-origin frame. It never imports the
+  prototype's code, and the prototype must run identically with Stavy absent.
 - **Dimensions** are generic named axes (data state, role, lifecycle stage,
-  process step, locale…). Never hardcode axis semantics; add a dimension when a
-  page varies along a new axis. Each axis declares a `scope`: `page` (default)
-  for axes that live inside one screen, `workspace` for axes that decide which
-  world the whole prototype is in — release phase, role, locale. See
-  "Workspace axes" below; getting this wrong is the most common modelling
-  mistake.
-- **Templates** are registered page-level compositions built from the host UI
-  kit. New pages start from a template; if none fits, create and register one.
-- **Pages** declare which dimensions they support, defaults, curated canvas
-  `instances`, and `annotations`. Pages with `kind: "component"` are bespoke
-  **organisms** (panels, widgets — not the design system's atoms) registered
-  with the same contract inside their own `frame`, so they get their own
-  states/notes on the canvas. Templates list the organisms they compose in
-  `organisms` (their anatomy).
-- **Scenarios** are executable step lists (page + dims + `target` + note) that
-  power guided tours, canvas lanes, and written walkthroughs. Every step is
-  rendered as a live instance card in its canvas lane — a 13-step scenario puts
-  13 more product pages on the canvas — so keep step lists purposeful; steps
-  that show the same page state as an existing pinned instance still cost a
-  full extra mount.
-- **Prototypes** are named slices (pages + scenarios) used for scoped demo
-  builds — a demo deploy must not pack the whole workspace.
-- Every interactive "state change" in a prototype is navigation across dimension
-  values via `nav(pageId, dims)` — never hidden component state — so every
-  reachable state stays addressable and visible on the canvas.
+  process step, locale…). Each declares a `scope`: `page` (default) for axes
+  that live inside one screen, `workspace` for axes that decide which world
+  the whole prototype is in — release phase, role, locale. See "Workspace
+  axes" below; getting this wrong is the most common modelling mistake.
+- **Pages** declare a `url` template with `{dim}` placeholders (this IS the
+  binding contract — SPEC §2.1), which dimensions they support, defaults,
+  curated canvas `instances`, and `annotations`. Pages with `kind:
+  "component"` are bespoke **organisms**, registered the same way but
+  rendered through a harness route or story in their own `frame`.
+- **Scenarios** are executable step lists (page + dims + `target` + note)
+  that power guided tours inside the player, canvas lanes, and written
+  walkthroughs. Every step is a card on the canvas — a 13-step scenario puts
+  13 more cards there — so keep step lists purposeful.
+- Every reachable state is a URL. There is no other kind of "state" Stavy
+  knows about: no hidden component state to wire, no navigation callback to
+  implement.
 
-## Invariants — keep the manifest true
+## Rules for an existing prototype (additive only)
 
-The manifest is the single source of truth and must never drift from the code:
+Full text and rationale: `skill/RULES.md`. Summary:
 
-1. Any new page/template/scenario/dimension you code gets registered in
-   `stavy.json` in the same change, and vice versa.
-2. Every scenario `target` and annotation `target` must exist as a
-   `data-proto="<Target>"` attribute on the page it references, with dims under
-   which it is actually rendered (a target inside a manager-only card needs
-   `role: manager` in the step dims).
-3. Target ids: PascalCase, stable, unique per page; repeated elements use
-   `Name:key` (e.g. `ExpenseRow:exp-2104`). Add `data-proto-meta` JSON with at
-   least `component`, plus anything an engineer would want in inspection
-   (props, advancesTo, mock notes).
-4. Page ids are kebab-case and must match the page module filename.
-5. Every page keeps `defaults` covering all its **page-scoped** dimensions;
-   instances/steps may be partial (defaults fill the rest). Never set a default
-   for a workspace-scoped axis — the workspace choice wins over it.
-6. Every page carries a `fidelity` rung (see the ladder below) that matches
-   what its code actually does. Canvas `notes` must reference an existing page
-   (and, if given, an instance that is pinned and a `target` that exists).
-   Scenario `refs` (PRD sections, tickets) are free-form strings — keep them
-   stable so they can be grepped against requirement docs.
-7. After edits, run `npm run validate` (`scripts/validate.mjs`). It checks:
-   every `template` referenced by a page exists; every dim value used in
-   instances/steps/defaults/notes is declared in `dimensions` AND allowed by
-   the page's `dimensions` map; every prototype references existing
-   pages/scenarios; every scenario step's page is in some prototype that
-   includes the scenario; every `target` (steps, annotations, notes) exists
-   as a `proto("…")` / `data-proto` in the page's source. Fix errors before
-   you report done; treat warnings (missing fidelity, refs, defaults,
-   un-pinned note targets) as prompts to decide, not noise.
+1. **Additive only** — add a param read, a harness route, an id, a manifest
+   entry. Never remove, restructure, or simplify a page to fit Stavy.
+2. **Never fake a state to satisfy Stavy.** Not URL-reachable yet? Register
+   it as a gap, don't mock it.
+3. **State = route + dataset + minimal UI params.** No forked pages per
+   state, no per-state branches.
+4. **No Stavy runtime imports in product code.** The app runs identically
+   with Stavy absent.
+5. **Fixtures are deterministic** — fixed clock, seeded ids, no network.
+6. **Organisms render through a harness route or stories** — never by
+   stripping a page down to one component.
+7. **Targets are the kit's own instance ids**, added at the usage site —
+   never inside a shared kit component.
+8. **Same origin** — the viewer is served from the app's public folder.
 
-## Copy lives in the catalog, never in components
+## Registering a page
 
-If the manifest has `strings`, every user-visible string goes through the
-catalog (`t("key")`): labels, headings, buttons, placeholders, empty/error
-copy, status names. Never inline UI copy in templates or organisms. Keys are
-dotted and stable (`list.empty.title`); add every key to every locale (use the
-source language as a fallback and mark it `TODO` in other locales rather than
-omitting it). Fixture data — names, merchants, amounts — is data, not copy.
-When a designer or legal reviewer changes text, change the catalog only; run
-`npm run strings` to refresh the review document.
+1. Find (or add) the URL that renders the state: which route, and which
+   search params / path segments select the dimension values.
+2. Write `url` with a `{dim}` placeholder for every dimension this page will
+   declare — nothing more, nothing less (`npm run validate`/`stavy:validate`
+   checks both directions).
+3. Make sure every declared dimension is actually reachable that way. If a
+   dimension the manifest wants isn't wired into the app's data layer yet,
+   wire it (see "URL state recipes" below) — additively.
+4. Add target ids at the elements a scenario, annotation, or note will point
+   at (rule 7).
+5. Add `dimensions`, `defaults`, 3–6 curated `instances`, and `annotations`.
+6. Run the scan (`npm run scan` / `stavy:scan`) against a running dev server,
+   then `npm run validate` / `stavy:validate`. Fix errors; treat warnings
+   (missing fidelity, no default, un-pinned note target) as prompts to
+   decide, not noise.
 
-## Fidelity ladder — static first, behaviour on demand
+## URL state recipes
 
-Prototypes drift toward "building the product". Stavy resists this with
-an explicit ladder. Every page declares its rung in the manifest (`fidelity`),
-and you only climb when a scenario step *requires* it:
+- **Search params via the app's own router.** The common case: read
+  `useSearchParams()` (or the framework's equivalent) at the route or
+  fixture layer, not deep inside a component. A ~20-line `useDims`-style
+  helper that merges declared dimension ids over per-route defaults is
+  usually all it takes (see `src/demo/app/dims.ts` in the Stavy repo for a
+  worked example — not code to copy verbatim, a shape to imitate).
+- **Dataset as a dimension.** For data-heavy prototypes, prefer a named
+  dataset id (`?dataset=empty-org`) over per-field query params — one
+  `{dataset}` placeholder can stand in for a whole fixture, which keeps the
+  `url` template short even when a state depends on a dozen fields.
+- **Dialogs and overlays as a param.** Model an open modal/drawer as an
+  `overlay` or `modal` dimension value (`?overlay=confirm-reject`) that the
+  page reads to decide whether to render it open — not as something reached
+  only by clicking, which would make that state unlinkable.
+- **When a state isn't URL-reachable:** register a gap (an annotation or a
+  requirement noting what's missing, or simply don't declare that dimension
+  value yet) and say so. Never rewrite the page's logic just to expose a URL
+  hook — that's rule 2.
 
-| Rung | `fidelity` | What the page may contain | Climb when… |
+## Harness routes for organisms
+
+A bespoke organism gets its own page entry with `kind: "component"` and a
+`frame: { width, height }`. Its `url` points at:
+
+- a new, **additive** route the app adds that renders just the organism with
+  the app's real providers and no page shell around it, or
+- an existing Storybook/Ladle story's iframe URL, if the team already runs
+  one — same `{dim}` placeholder contract.
+
+Never register an organism by registering an existing full page and pretending
+its `frame` is smaller — that still ships the whole page shell.
+
+## Scenarios & targets
+
+Write steps as a real user path: one `target` per step, a note that says
+*why* this step matters, not just what it does. Verify each target exists
+under the step's dims (the scan does this for you — run it before declaring
+done). `refs` cites the requirement(s) the scenario demonstrates.
+
+## Fidelity ladder
+
+Every page declares a `fidelity` rung. Climb only when a scenario step needs
+it:
+
+| Rung | `fidelity` | What the page has | Climb when… |
 |---|---|---|---|
-| 0 | `static` | Screens rendered from fixtures. No handlers except what the template ships. | — (default for every new page) |
-| 1 | `navigable` | `nav()` calls between pages / dimension values (row → detail, CTA → flow). | A scenario step targets an element whose purpose is to go somewhere. |
-| 2 | `interactive` | Local state beyond navigation: form inputs that affect the screen, toggles, optimistic list changes, in-page state machines. | A scenario step cannot be *demonstrated* without it (e.g. "filter narrows the table"). |
+| 0 | `static` | Renders a fixed state at its URL. | — (default) |
+| 1 | `navigable` | Links/buttons that change the URL (route, or a dimension param) to reach another registered state. | A scenario step's point is to go somewhere. |
+| 2 | `interactive` | Real local behaviour beyond navigation: form validation, optimistic updates, in-page state machines. | A scenario step can't be demonstrated without it. |
 
-Fidelity describes the *opened page*. Canvas cards are static previews at
-every rung — thumbnails are inert, clicking a card opens the page in that
-state, and the viewer may unmount and re-render a card at any time. Never
-build behaviour that only works on the canvas, and never rely on a card
-keeping state. (Run `npm run snapshot` when pinned states change: the PNGs
-in `public/snapshots/` double as the canvas's placeholder thumbnails.)
-| ✗ | — | Real data fetching, persistence, auth, validation libraries, business logic. | Never. Mock it, and say so in an annotation. |
-
-Rules of thumb:
-- **Default to static.** When asked for "a page", deliver rung 0 with the states
-  the reviewer must see (loaded / empty / loading / error as pinned instances).
-  Static variants on the canvas are cheaper and more reviewable than code paths.
-- **Prefer a dimension to a handler.** "After clicking Approve the status
-  changes" is a lifecycle *dimension* with a `nav()` between values — not
-  component state. This keeps every reachable state on the canvas.
-- **Bind logic only for a named scenario step.** Before adding interactivity,
-  point to the step that needs it. If no step needs it, add a pinned instance
-  instead and move on.
-- **Record the rung.** Set `fidelity` on the page and bump it deliberately in
-  the same change that adds the behaviour; the canvas shows it, so reviewers see
-  scope creep.
-- **Mark mocks.** Anything faked (upload, search, validation) gets an annotation
-  saying it is mocked, so stakeholders don't assume it works.
-- When a user asks for "full functionality", confirm which scenario it serves
-  and climb one rung at a time; never jump a whole page to `interactive` because
-  one button needed state.
-
-## Modals and overlays — portal into the card, never document.body
-
-Most kits (MUI/Base, Radix, Ant, Headless UI…) portal modals, drawers and
-toasts to `document.body`. On the canvas that escapes the card's scale and
-clip: the overlay lands at the document root at full viewport size and covers
-the whole canvas — pin a few modal states and the first thing a viewer sees is
-a stack of full-screen modals, not a canvas. The viewer hands every page a
-container instead:
-
-- Page modules receive `portalContainer` in their props, and any component can
-  read it with `useStavyPortalContainer()` (from `src/stavy/portal`).
-- Pass it to the kit's escape hatch: MUI/Base `<Modal container={…}>`, Radix
-  `<Portal container={…}>`, Ant `getContainer={…}`, or plain
-  `createPortal(node, portalContainer ?? document.body)`. Inside the card,
-  `position: fixed` resolves against the card frame (a scaled ancestor is a
-  containing block), so a full-screen modal fills the card — the modal state
-  stays live on the canvas, which is the point of pinning it.
-- If the host's wrapper component hard-codes `document.body` and forwards no
-  container prop, extend the wrapper to forward one. Do NOT adopt the
-  portalled node into the card after mount (MutationObserver + appendChild):
-  moving DOM that React owns desyncs React from the document and crashes the
-  canvas on unmount. If the wrapper can't be extended, drop the page to
-  `fidelity: static` and pin a screenshot, noting the limitation.
-
-Escape-hatch cheat sheet (where the container goes, per kit): MUI / Base UI /
-Joy `container` · Radix & shadcn `<DialogPortal container>` / `<Portal
-container>` · Ant `getContainer` (popovers: `getPopupContainer`) · Chakra
-`<Portal containerRef>` · Mantine `portalProps={{ target }}` ·
-react-bootstrap `container` · Fluent `mountNode` · no kit at all: plain
-`createPortal(node, portalContainer ?? document.body)` — the reference
-`ConfirmModal` organism in the demo does exactly this.
-
-Two rules beyond the container:
-
-- **Prototype overlays never trap focus or lock scroll.** Those are product
-  behaviours, not prototype behaviours — and kit scroll-locks (Radix's
-  react-remove-scroll, MUI's ScrollLock) install document-level listeners
-  that block canvas panning even when the modal is correctly contained in its
-  card. Disable them when wiring a kit modal: MUI `disableEnforceFocus
-  disableAutoFocus disableScrollLock`, Radix `<Dialog modal={false}>`, or the
-  kit's equivalent. (The viewer renders thumbnails `inert`, so a forgotten
-  focus trap can't steal focus on the canvas — but `inert` cannot neutralise
-  scroll locks or other document-level listeners; those must be off in the
-  page.)
-- **Imperative / singleton overlay APIs can't see the container.**
-  `Modal.confirm()`, `message.success()`, `notification.open()`, and global
-  toast libraries (sonner, react-hot-toast) render outside the component
-  tree, so context never reaches them. Prefer the declarative component
-  form; where the kit has global config, point it at the container (Ant:
-  `<App>` / `ConfigProvider` `getContainer`); otherwise treat that state as
-  `fidelity: static`.
-
-The reference viewer polices both rules in dev: a chrome warning (bottom-left,
-plus `console.warn` `[stavy] …`) names the page whose overlay landed at
-`document.body`, and another appears while a scroll lock holds `<body>`.
-Treat these as failing checks — fix the page, don't dismiss them.
-
-## State — every canvas card is an independent instance
-
-A page module renders as a pure function of `(dims, nav)`, and the canvas
-mounts *many instances of it at once* — one per pinned variant. Kit and store
-defaults assume one app instance per document; the canvas breaks that
-assumption the same way it breaks body portals. The rules:
-
-- **No module-level stores.** A store created at module scope is shared by
-  every card of that page: click something in one variant and three other
-  variants mutate. Instantiate per mount instead — Zustand: `createStore` /
-  `create` *inside* the component (or a context provider per instance), never
-  at top level; Redux: `configureStore` in a provider component, one per
-  instance, never an imported singleton; React Query: `new QueryClient()` per
-  mount, not a shared module export. Jotai atoms are definitions, not
-  instances — fine at module level; the *default store* is the shared thing
-  (use `<Provider>` per page if anything writes atoms).
-  `npm run validate` flags top-level `create(`/`configureStore(`/
-  `new QueryClient(` in page sources as warnings; suppress a deliberate
-  shared store with `// @proto-shared-store` on the declaration line (or the
-  line above).
-- **Data derives from dims, never from the network.** Resolve fixtures from
-  `dims`; don't fetch, and don't mock with service workers or global fetch
-  intercepts — those are document-wide singletons too, and they make the
-  canvas nondeterministic. Interactive-fidelity state is local
-  (`useState`/`useReducer`), seeded from the fixture.
-- **No import-time side effects.** Page modules are imported once and shared
-  by every card: nothing at module top level may touch `document`/`window`,
-  inject global CSS, set `body` classes, start timers, or init analytics.
-  Effects belong in the component and must clean up on unmount.
-- **The viewer owns the URL.** All viewer state is URL state, so a page that
-  reads or writes `location` (or mounts its own router) fights the viewer.
-  Navigation goes through the `nav` prop only.
-- **Deterministic fixtures.** No `Date.now()`, `new Date()` without arguments,
-  or `Math.random()` in fixtures or render paths — snapshots and scenario
-  tests diff. Fixed dates, seeded ids.
-
-If the product's real code paths depend on a singleton store you can't
-untangle, wrap the singleton in a factory in the workspace rather than
-importing the instance — same move as extending a modal wrapper to forward a
-container.
-
-## Setting up a new workspace
-
-When asked to install Stavy in a repo (any framework, any UI kit):
-
-1. Ask which UI kit / design system package to build on; import components from
-   it — never fork or restyle kit components in the workspace.
-2. Create `stavy.json` with the product info and an initial dimension set
-   drawn from the product's reality (typical starters: a `state` dimension with
-   loaded/empty/loading/error; a role dimension if the product has roles).
-3. Implement the binding contract for the host framework:
-   - page modules exporting `({ dims, nav })` renderers, resolving fixtures from dims;
-   - `data-proto` targets on everything scenarios/annotations reference;
-   - if the kit does not stamp component names (MUI, Ant, most in-house kits),
-     add a wrapper layer that re-exports the components you use with
-     `data-component="<Name>"` on the root node, and import from it;
-   - **probe the kit's overlay escape hatch on day one**: find the modal /
-     drawer / toast components pages will use and confirm a portal container
-     can reach them (see "Modals and overlays" below). If the product's
-     wrapper swallows the kit's `container` prop, extend the wrapper *now* —
-     discovering this when the first modal page lands on the canvas is the
-     single most expensive surprise in adoption trials;
-   - a registry that maps page ids → modules **through a build-time filter** so
-     a slice env var (`PROTO=<id>`) excludes unlisted pages from the bundle
-     (see `vite.config.ts` → `stavySlice()` in the reference repo for the
-     virtual-module pattern; port the idea to the host bundler). **Edit the
-     hardcoded page-import path** in the plugin's `load()` hook
-     (`/src/demo/pages/${id}.tsx`) to wherever this product's pages live —
-     if you forget, every page import 404s silently.
-4. Install the viewer: copy `src/stavy/` from the reference repo **as is**
-   (`scripts/init.mjs <repo> [--route /canvas]` does this) and mount it with
-   one route: `<Route path="/canvas/*" element={<StavyApp />} />` inside the
-   host's router, with `viewer.base: "/canvas"` in the manifest — the viewer
-   builds every link under that prefix. Root-mounted: `path="/*"`, no base.
-   It is self-contained (own CSS tokens in `index.css` under `--ps-*`, no
-   imports from the host UI kit) — do **not** re-theme it in the host kit; the
-   chrome is deliberately a different product from the prototype. Also copy
-   the `--ps-*` token block and `.ps-*` classes from the reference `index.css`,
-   and `scripts/validate.mjs`. Caution: the reference pins React 19; under
-   `@types/react@18`, `useRef<T>(null)` yields a read-only `current` — use
-   `useRef<T | null>(null)` if you hit that.
-5. Add an `AppFrame`-style shell template first, then register 2–4 page
-   templates that match the product's dominant page shapes (list, detail,
-   dashboard, form flow are the usual suspects).
+Record the rung honestly and bump it in the same change that adds the
+behaviour — the canvas shows it, so reviewers see scope creep. Never add real
+data fetching, persistence, auth, or business logic to satisfy a scenario —
+mock it, and say so in an annotation.
 
 ## Working with PMs: requirements and coverage
 
-- `requirements[]` in the manifest is the PM-facing list of what must be
-  demonstrated (PRD sections, tickets). When given a PRD (Markdown, Confluence
-  export, Notion export), **extract requirements from its headings/criteria**
-  into `requirements[]` (`id` = the stable handle people already use, e.g.
-  `PRD-118 §3`; `title` = one line; `source` = document + section), then
-  propose a scenario for each uncovered one — don't silently invent scenarios.
-- Scenarios cite requirements in `refs` using the exact `requirements[].id`.
-  The canvas "Requirement coverage" board shows demonstrated vs. gaps; `npm run
-  check --refs <prd.md>` cross-checks the document text. PMs never edit the
-  manifest: they review the board, comment, and ask for scenarios.
+`requirements[]` is the PM-facing list of what must be demonstrated. Given a
+PRD (Markdown, Confluence/Notion export), extract requirements from its
+headings/criteria into `requirements[]` (`id` = the stable handle people
+already use, e.g. `PRD-118 §3`), then propose a scenario for each uncovered
+one — don't silently invent scenarios. Scenarios cite requirements in `refs`
+using the exact id. The canvas's coverage board shows demonstrated vs. gaps;
+`npm run validate --coverage --refs <prd.md>` cross-checks the document text.
+PMs review the board and comment; they don't edit the manifest.
 
 ## Working from comments (designers' and PMs' feedback)
 
-When the user gives you a comments export (`.json` or `.md` from the viewer's
-Comments panel), treat **each open comment as a task**: it is anchored to
-`page + dims (+ target)`; open that state mentally, make the change, then
-produce a resolution payload the user can *Import* back so threads close with
-a reply — write `comments-resolved.json` containing the same comments with
+When given a comments export (`.json`/`.md` from the viewer's Comments
+panel), treat each open comment as a task: it's anchored to `page + dims (+
+target)` — open that state (in the player, at the manifest `url`), make the
+change, then produce a resolution payload to *Import* back so threads close
+with a reply: write `comments-resolved.json` with the same comments plus
 `resolved: true` and a reply `{ "author": "Claude", "body": "Done: …" }`
 (keep ids; merging is by id). Never delete comments; never invent new ones.
 
-## Changelog, handoff, tests — generate, don't write
-
-- `npm run changelog [base-ref]` prints a Markdown diff of the manifest
-  (states added, scenarios changed, fidelity bumps, requirement coverage).
-  **After every change that touches the manifest, run it and paste the result
-  into the PR description / your summary.** That is the changelog; do not
-  hand-write one.
-- `npm run handoff` writes `docs/handoff/<page>.md` per page/component —
-  template, organisms, dimensions, pinned states, semantic targets with their
-  meta, annotations, scenarios. Regenerate before a handoff; never edit by hand.
-- `npm run gen:tests` writes Playwright specs from scenarios (`tests/scenarios/`);
-  `npm run test:scenarios` runs them. Interactive pages get hard assertions,
-  navigable pages soft ones, static pages TODOs. A failing generated test is a
-  finding about the prototype's wiring or the scenario — fix the prototype or
-  the step, not the test.
-
-## Designers: cheap edits without spending tokens
-
-Tell designers (and do it yourself when cheaper) that these are safe to edit
-by hand, with editor autocompletion from `spec/stavy.schema.json`:
-`stavy.json` labels, descriptions, `instances[].note`, `annotations`,
-`notes`, `boards`, scenario titles/notes; fixture data in `src/demo/fixtures.ts`;
-copy text and Tailwind spacing/colour classes in templates (the inspector shows
-the exact classes and has "open template in VS Code"). When a designer
-describes a change, the most precise reference is **the page URL + the
-`data-proto` target** from the inspector — accept and prefer that form.
-In dev, the viewer can save a design annotation straight into the manifest
-(comment composer → "Save as a design annotation"); no prompt needed.
-
 ## Day-to-day operations
 
-**Extracting an organism**: when a region of a page is bespoke and will be
-reviewed or reused on its own (a decision panel, a queue widget, a stepper),
-move it to `src/demo/organisms/<Name>.tsx`, stamp its root with
-`proto("<Name>", { component: "<Name> (organism)", organism: "<id>" })`,
-register it as a page with `kind: "component"`, a `frame`, a `module`, **its
-own template entry** (`<id>-organism`, `source` = the organism file), its own
-dimensions/instances, and list it in the owning template's `organisms`. Ids
-that are computed rather than literal get a `// @proto-targets …` comment so
-`npm run validate` can see them. Do not
-register design-system atoms (buttons, inputs) — those live in the DS catalog.
+- **After any change to a registered page's markup or URL handling**: `npm
+  run scan` (needs a running dev/preview server + `npx playwright install
+  chromium` once). It checks every referenced target exists and refreshes
+  the canvas snapshots. A missing-target failure is a real finding — fix the
+  page or the manifest, not the scan.
+- **After any manifest edit**: `npm run validate`. Static only — schema,
+  cross-refs, the URL contract, the last scan's `missing` list.
+- **Changelog**: `npm run changelog [base-ref]` — a Markdown diff of the
+  manifest (states added, scenarios changed, fidelity bumps, requirement
+  coverage). Run it after every change that touches the manifest and paste
+  the result into the PR description; don't hand-write one.
+- **Handoff**: `npm run handoff` writes `docs/handoff/<page>.md` per
+  page/component from the manifest. Regenerate before a handoff; never edit
+  by hand.
+- **Generated tests**: `npm run gen:tests` writes Playwright specs from
+  scenarios (each step opens the page's real `url` and asserts the target);
+  `npm run test:scenarios` runs them. A failing generated test is a finding
+  about the prototype's wiring or the scenario — fix the prototype or the
+  step, not the test.
 
-**Workspace axes** (`scope: "workspace"`): use one when the question is *which
-world am I looking at* rather than *where in this screen am I*. The test: if a
-reviewer would be annoyed to re-pick it on every screen, it is workspace-scoped.
-Release phase ("Phase I" vs "Phase II" once more features land), role, and
-locale usually are; flow step, data state, overlay and density never are.
+## Workspace axes
 
-How to model a phased prototype — the canonical case:
+Use `scope: "workspace"` when the question is *which world am I looking at*
+rather than *where in this screen am I*. The test: if a reviewer would be
+annoyed to re-pick it on every screen, it's workspace-scoped. Release phase,
+role, and locale usually are; flow step, data state, overlay and density
+never are.
+
+How to model a phased prototype:
 
 - One `phase` dimension, `scope: "workspace"`, values in shipping order (the
   first value is the default world).
-- A screen that is **the same in both phases declares nothing** — absence means
-  unchanged, and it keeps showing in every phase.
-- A screen that **gains features** declares `"phase": ["p1", "p2"]` and pins an
-  instance per phase, so the canvas row reads as the before/after.
-- A screen that is **new later** declares `"phase": ["p2"]` only. It drops off
-  the canvas in Phase I, and the coverage matrix shows the gap.
-- Scenarios that differ per phase are separate scenarios (`…-p1`, `…-p2`) with
-  the phase pinned in every step; a scenario may never straddle two values.
-- Do **not** model phases as forked pages (`dashboard-p2`), branches, or repos —
-  all three hide the delta the canvas exists to show. Add a `prototypes[]` slice
-  (`phase-1`) when someone needs a build containing only that phase.
+- A screen that is **the same in both phases declares nothing** — absence
+  means unchanged, and it keeps showing in every phase.
+- A screen that **gains features** declares `"phase": ["p1", "p2"]` and pins
+  an instance per phase, so the canvas row reads as the before/after.
+- A screen that is **new later** declares `"phase": ["p2"]` only. It drops
+  off the canvas in Phase I; the coverage matrix shows the gap.
+- Scenarios that differ per phase are separate scenarios (`…-p1`, `…-p2`)
+  with the phase pinned in every step; a scenario may never straddle two
+  values.
+- Do **not** model phases as forked pages, branches, or repos — all three
+  hide the delta the canvas exists to show.
 
 **Many dimensions**: ten axes on one page is normal. Keep each axis small,
-pin instances for the combinations reviewers must see (the canvas lays pinned
-instances out on the two most-varying axes and shows unpinned cells as gaps),
-and use `defaults` so scenario steps and links stay short.
-
-**Adding a page**: pick (or register) a template → create the page module →
-declare dimensions/defaults → pin 3–6 curated instances (happy path + the
-states a reviewer must not miss) → write `annotations` as **design
-annotations**: one per meaningful region, `title` = what the part is, `note` =
-what it does / why. They render as pins on the page, pins on thumbnails, and
-the page's anatomy legend on the canvas — so write them for a PM, not for an
-engineer (engineers use Inspect).
-
-**Adding a scenario**: write steps as a real user path with one `target` per
-step and a note that says *why*, not just *what*. Verify each target exists
-under the step's dims. Add the scenario to the relevant prototypes.
-
-**Adding a demo slice**: add a `prototypes` entry with the minimal page set;
-build with the slice env var and confirm excluded pages are absent from the
-output before sharing a deploy.
-
-**Fixtures**: keep them as functions of dims in one fixtures module per product
-area. Loading/empty/error variants should come from the same fixture logic,
-not scattered conditionals.
+pin instances for the combinations reviewers must see, and use `defaults` so
+scenario steps and links stay short.
 
 ## Style
 
-- Prototype code is throwaway; the manifest is the durable artifact — optimize
-  for manifest legibility over code cleverness.
-- Mock everything behind the UI; never add real backends to a prototype.
-- When the user shows you a Figma frame or screenshot to prototype, first map
-  it to an existing template; only diverge when the mapping genuinely fails.
+- Prototype code is throwaway; the manifest is the durable artifact —
+  optimize for manifest legibility over code cleverness.
+- Mock data behind the UI; never add real backends to a prototype.
+- When the user shows you a Figma frame or screenshot to prototype, build it
+  as the real app would render it — a route, real components, wired to a
+  named dataset — then register the URL. Don't build a one-off screen just to
+  have something to point Stavy at.

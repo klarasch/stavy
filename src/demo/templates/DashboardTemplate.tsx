@@ -3,8 +3,8 @@ import { Button } from "@/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/ui/card"
 import { Skeleton } from "@/ui/skeleton"
 import { Separator } from "@/ui/separator"
-import { proto } from "@/stavy/proto"
-import type { PageProps } from "@/stavy/types"
+import { proto } from "@/demo/lib/proto"
+import type { PageProps } from "@/demo/app/types"
 import { AppFrame } from "./AppFrame"
 import { WorkQueue } from "../organisms/WorkQueue"
 import { dashboardFixture } from "../fixtures"
@@ -79,7 +79,7 @@ export function DashboardTemplate({ dims, nav }: PageProps) {
               subtitle={role === "employee" ? t("dashboard.queue.latest") : t("dashboard.queue.oldest")}
               items={fx.queue}
               locale={dims.locale}
-              onOpen={(e) => nav("expense-detail", { role, lifecycle: e.status })}
+              onOpen={(e) => nav("expense-detail", { id: e.id, role, lifecycle: e.status })}
               onViewAll={() => nav("expenses", { role })}
             />
 

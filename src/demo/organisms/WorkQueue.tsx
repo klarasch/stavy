@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/ui/card"
 import { Skeleton } from "@/ui/skeleton"
-import { proto } from "@/stavy/proto"
+import { proto } from "@/demo/lib/proto"
 import { StatusBadge, money } from "../templates/AppFrame"
 import type { Expense } from "../fixtures"
 import { makeT } from "../strings"

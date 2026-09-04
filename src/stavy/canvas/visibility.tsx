@@ -2,16 +2,14 @@ import { createContext, useContext, useEffect, useRef, useState } from "react"
 import type { Transform } from "./PanZoom"
 
 /**
- * Lazy canvas mounting + eviction (SPEC §3). Instance cards render real
- * product pages, and real product pages are heavy — grids, charts, context
- * providers. An adoption trial measured 32k DOM nodes and a 16 s settle with
- * every card mounted eagerly, 87% of them off-screen; gating on the viewport
- * cut that to 4.6k nodes and ~3 s. So cards stay placeholders until they come
+ * Lazy canvas mounting + eviction (SPEC §3), used by the canvas "live" mode
+ * where cards mount frozen frames of the real prototype instead of snapshots.
+ * A frame is a whole document, far heavier than a DOM subtree, so the budget
+ * is small and the legibility floor high. Cards stay snapshots until they come
  * near the viewport — and since canvas cards are by decision *static previews*
- * (interaction happens in the opened page, never on the canvas), a mounted
- * card holds no state worth keeping and can be evicted back to a placeholder
- * once it has been far off-screen for a while. Long sessions over big
- * canvases then stop accumulating every card ever visited.
+ * (interaction happens in the player, never on the canvas), a mounted card
+ * holds no state worth keeping and can be evicted back to its snapshot once
+ * it has been far off-screen for a while.
  *
  * Hysteresis keeps panning smooth: cards mount within NEAR_PX of the
  * viewport but evict only after sitting beyond EVICT_PX for EVICT_MS
@@ -36,19 +34,23 @@ export interface CanvasViewport {
 export const CanvasViewportContext = createContext<CanvasViewport | null>(null)
 
 /**
- * Canvas thumbnails are rendered `inert`: pages are real product code, and a
- * mounted modal's focus trap / autoFocus would otherwise steal focus from the
- * viewer (two of them would fight each other). `inert` makes the subtree
- * unfocusable regardless of what the page's kit does — defense that needs no
- * cooperation from page modules. Inspect mode lifts it so the inspector can
- * hover into thumbnails (CSS pointer-events can't override `inert`).
+ * What the canvas wants from its cards: `on` — inspect mode (the hovered card
+ * mounts a live frame so the inspector can read real DOM); `hold` — the frame
+ * the inspector has a selection pinned to (that card stays live); `live` —
+ * the canvas "live" flag: cards near the viewport mount frozen frames instead
+ * of snapshots (dev convenience before the first scan).
  */
-export const CanvasInspectContext = createContext(false)
+export interface CanvasInspect {
+  on: boolean
+  live: boolean
+  hold: HTMLIFrameElement | null
+}
+export const CanvasInspectContext = createContext<CanvasInspect>({ on: false, live: false, hold: null })
 
 /** Screen-space margin (px) around the viewport that already counts as near. */
 export const NEAR_PX = 400
 /** Below this zoom a live page is illegible anyway; cards keep placeholders. */
-export const MIN_LIVE_K = 0.15
+export const MIN_LIVE_K = 0.35
 /** A live card farther than this from the viewport is an eviction candidate. */
 export const EVICT_PX = 1200
 /** …but only after staying that far out for this long (pan-back never thrashes). */
@@ -56,14 +58,13 @@ export const EVICT_MS = 15_000
 /** Idle heartbeat so eviction still happens when nobody pans. */
 const SWEEP_MS = 5_000
 /**
- * Hard ceiling on simultaneously live cards, whatever the canvas size —
- * enterprise pages run 1k+ DOM nodes each, and dwell-based eviction alone
- * still lets a broad pan or a mid-zoom overview accumulate dozens of live
- * pages. Over budget, off-screen cards evict immediately, farthest first.
+ * Hard ceiling on simultaneously live frames, whatever the canvas size —
+ * each is a full document of the prototype. Over budget, off-screen cards
+ * evict immediately, farthest first.
  * Self-policing: each live card reports its distance into a shared registry
  * on every check and unmounts itself when it is the farthest one out.
  */
-export const LIVE_BUDGET = 24
+export const LIVE_BUDGET = 8
 /**
  * Budget eviction may only target cards the mount test would NOT immediately
  * bring back. Mounting is `withinMargin(NEAR_PX)`; evicting anything merely
@@ -154,7 +155,7 @@ export function farthestBeyondBudget<K>(distances: Map<K, number>): K | null {
  */
 export function useLiveWhenVisible(ref: React.RefObject<HTMLElement | null>): boolean {
   const ctx = useContext(CanvasViewportContext)
-  const inspecting = useContext(CanvasInspectContext)
+  const inspecting = useContext(CanvasInspectContext).on
   const [live, setLive] = useState(!ctx)
   const firstRun = useRef(true)
   useEffect(() => {

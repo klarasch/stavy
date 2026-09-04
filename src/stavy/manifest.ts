@@ -1,32 +1,153 @@
-import raw from "../../stavy.json"
-import type { Dimension, Manifest, PageDef, Scenario } from "./types"
+import type { Dimension, Manifest, PageDef, Scenario, SnapshotEntry, SnapshotIndex } from "./types"
 
-const full = raw as unknown as Manifest
+/* ------------------------------------------------------------------ */
+/* Where things are                                                    */
+/*                                                                     */
+/* The viewer is a static page served *next to* the prototype, e.g.     */
+/*   https://host/          → the prototype                             */
+/*   https://host/stavy/    → this viewer                               */
+/*   https://host/stavy.json                                            */
+/*   https://host/snapshots/…png + index.json                           */
+/* Both bases are derived from the viewer's own location, so the same   */
+/* build works at the root, under a sub-path, or on GitHub Pages.       */
+/* ------------------------------------------------------------------ */
 
-export const sliceId: string | null = typeof __PROTO_SLICE__ === "undefined" ? null : __PROTO_SLICE__
+const path = typeof location !== "undefined" ? location.pathname : "/"
+const isFile = /\.html$/.test(path)
+/** Directory the viewer is served from, without trailing slash ("" at root). */
+const viewerDir = (isFile ? path.replace(/\/[^/]*$/, "") : path).replace(/\/+$/, "")
+/**
+ * Prefix every viewer link starts with. When the viewer was opened as
+ * `/stavy/index.html` (static hosts without a directory index, Vite's
+ * `public/` in dev) links keep the file name so they keep working.
+ */
+export const viewerBase: string = isFile ? path : viewerDir
+/** Path prefix the prototype is served under: the parent of the viewer (override: manifest `viewer.app`). */
+export let appBase: string = viewerDir.replace(/\/[^/]*$/, "")
+/** viewerBase + the separator before a query string. */
+const viewerHref = isFile ? viewerBase : `${viewerBase}/`
 
-const slice = sliceId ? full.prototypes.find((p) => p.id === sliceId) ?? null : null
+export let manifest: Manifest = {
+  version: "0.2",
+  product: { name: "" },
+  dimensions: [],
+  pages: [],
+  scenarios: [],
+}
 
-/** The manifest, filtered down to the active prototype slice (if any). */
-export const manifest: Manifest = slice
-  ? {
-      ...full,
-      pages: full.pages.filter((p) => slice.pages.includes(p.id)),
-      scenarios: full.scenarios.filter((s) => slice.scenarios.includes(s.id)),
-    }
-  : full
+/** instanceKey → snapshot entry, written by scripts/scan.mjs. Empty until loaded / when absent. */
+export let snapshotIndex: SnapshotIndex = {}
 
-export const activeSlice = slice
+export const DEFAULT_TARGET_ATTRS = ["data-proto", "data-testid"]
 
-/** Path prefix the viewer is mounted under (manifest `viewer.base`), without trailing slash. "" at root. */
-export const viewerBase: string = (full.viewer?.base ?? "").replace(/\/+$/, "")
+/** Load the manifest (and the optional snapshot index). Call once before rendering. */
+export async function loadManifest(url?: string): Promise<Manifest> {
+  const src = url ?? `${appBase}/stavy.json`
+  const res = await fetch(src, { cache: "no-store" })
+  if (!res.ok) throw new Error(`${src} → ${res.status}`)
+  setManifest((await res.json()) as Manifest)
+  try {
+    const ir = await fetch(`${appBase}/snapshots/index.json`, { cache: "no-store" })
+    if (ir.ok) snapshotIndex = (await ir.json()) as SnapshotIndex
+  } catch {
+    /* no snapshots yet — cards show labels */
+  }
+  return manifest
+}
+
+/** Install a manifest object directly (tests, embedding). */
+export function setManifest(m: Manifest) {
+  manifest = m
+  if (m.viewer?.app !== undefined) appBase = m.viewer.app.replace(/\/+$/, "")
+  workspaceDimensions = m.dimensions.filter((d) => d.scope === "workspace")
+  workspaceDimIds = new Set(workspaceDimensions.map((d) => d.id))
+}
+
+/* ------------------------------------------------------------------ */
+/* URLs                                                                */
+/* ------------------------------------------------------------------ */
 
 /** URL of the canvas (the viewer home), optionally carrying mode flags (e.g. `w=1`). */
 export function canvasUrl(extra?: Record<string, string>): string {
-  const base = viewerBase || "/"
   const qs = extra ? new URLSearchParams(extra).toString() : ""
-  return qs ? `${base}?${qs}` : base
+  return `${viewerHref}${qs ? `?${qs}` : ""}`
 }
+
+/**
+ * Viewer URL of the player for a page + dimension assignment (+ extra query
+ * params). The viewer routes purely by query string (`?p=<page>`) so it works
+ * from any static host without rewrite rules.
+ */
+export function pageUrl(pageId: string, dims?: Record<string, string>, extra?: Record<string, string>): string {
+  const sp = new URLSearchParams()
+  sp.set("p", pageId)
+  for (const [k, v] of Object.entries(dims ?? {})) sp.set(`d_${k}`, v)
+  for (const [k, v] of Object.entries(extra ?? {})) sp.set(k, v)
+  return `${viewerHref}?${sp.toString()}`
+}
+
+/**
+ * THE contract, resolved: the prototype's own URL for a page at a dimension
+ * assignment — the page's `url` template with `{dim}` placeholders filled.
+ * Relative templates are served from the app base; absolute ones are used as-is.
+ */
+export function appUrl(page: PageDef, dims: Record<string, string>): string {
+  const full = resolveDims(page, dims)
+  const filled = page.url.replace(/\{([a-zA-Z0-9_-]+)\}/g, (_, d: string) => encodeURIComponent(full[d] ?? ""))
+  if (/^[a-z]+:\/\//i.test(filled)) return filled
+  return `${appBase}${filled.startsWith("/") ? "" : "/"}${filled}`
+}
+
+/** Dimension ids a url template references. */
+export function urlDims(template: string): string[] {
+  return [...template.matchAll(/\{([a-zA-Z0-9_-]+)\}/g)].map((m) => m[1])
+}
+
+/* ------------------------------------------------------------------ */
+/* Targets                                                             */
+/* ------------------------------------------------------------------ */
+
+const BARE_ID = /^[A-Za-z][\w:.-]*$/
+
+/**
+ * Selector for a target reference. A bare id (`ApproveButton`,
+ * `ExpenseRow:exp-2101`) is looked up in `viewer.targetAttrs`
+ * (default data-proto, then data-testid); anything else is a CSS selector.
+ */
+export function targetSelector(target: string): string {
+  if (!BARE_ID.test(target)) return target
+  const attrs = manifest.viewer?.targetAttrs?.length ? manifest.viewer.targetAttrs : DEFAULT_TARGET_ATTRS
+  const v = target.replace(/["\\]/g, "\\$&")
+  return attrs.map((a) => `[${a}="${v}"]`).join(", ")
+}
+
+/** Find a target inside a document or element (the prototype's, usually). */
+export function findTarget(root: ParentNode | null | undefined, target: string): HTMLElement | null {
+  if (!root) return null
+  try {
+    return root.querySelector<HTMLElement>(targetSelector(target))
+  } catch {
+    return null
+  }
+}
+
+/** The target id an element (or its nearest ancestor) carries, if any. */
+export function targetIdOf(el: Element | null): string | null {
+  const attrs = manifest.viewer?.targetAttrs?.length ? manifest.viewer.targetAttrs : DEFAULT_TARGET_ATTRS
+  let cur: Element | null = el
+  while (cur) {
+    for (const a of attrs) {
+      const v = cur.getAttribute(a)
+      if (v) return v
+    }
+    cur = cur.parentElement
+  }
+  return null
+}
+
+/* ------------------------------------------------------------------ */
+/* Lookups                                                             */
+/* ------------------------------------------------------------------ */
 
 export function getPage(pageId: string): PageDef | undefined {
   return manifest.pages.find((p) => p.id === pageId)
@@ -36,15 +157,16 @@ export function getScenario(id: string): Scenario | undefined {
   return manifest.scenarios.find((s) => s.id === id)
 }
 
+export function getTemplate(id: string | undefined) {
+  return id ? manifest.templates?.find((t) => t.id === id) : undefined
+}
+
 export function dimensionLabel(dimId: string): string {
   return manifest.dimensions.find((d) => d.id === dimId)?.label ?? dimId
 }
 
 export function valueLabel(dimId: string, valueId: string): string {
-  return (
-    manifest.dimensions.find((d) => d.id === dimId)?.values.find((v) => v.id === valueId)?.label ??
-    valueId
-  )
+  return manifest.dimensions.find((d) => d.id === dimId)?.values.find((v) => v.id === valueId)?.label ?? valueId
 }
 
 /* ------------------------------------------------------------------ */
@@ -57,9 +179,8 @@ export function valueLabel(dimId: string, valueId: string): string {
 /* ------------------------------------------------------------------ */
 
 /** Dimensions declared `scope: "workspace"`, in manifest order. */
-export const workspaceDimensions: Dimension[] = manifest.dimensions.filter((d) => d.scope === "workspace")
-
-const workspaceDimIds = new Set(workspaceDimensions.map((d) => d.id))
+export let workspaceDimensions: Dimension[] = []
+let workspaceDimIds = new Set<string>()
 
 export function isWorkspaceDim(dimId: string): boolean {
   return workspaceDimIds.has(dimId)
@@ -131,19 +252,6 @@ export function resolveDims(page: PageDef, overrides?: Record<string, string>): 
   return out
 }
 
-/** Build a viewer URL for a page + dimension assignment (+ extra query params). */
-export function pageUrl(
-  pageId: string,
-  dims?: Record<string, string>,
-  extra?: Record<string, string>
-): string {
-  const sp = new URLSearchParams()
-  for (const [k, v] of Object.entries(dims ?? {})) sp.set(`d_${k}`, v)
-  for (const [k, v] of Object.entries(extra ?? {})) sp.set(k, v)
-  const qs = sp.toString()
-  return `${viewerBase}/p/${pageId}${qs ? `?${qs}` : ""}`
-}
-
 /** Parse dimension overrides for a page out of URLSearchParams. */
 export function dimsFromParams(page: PageDef, sp: URLSearchParams): Record<string, string> {
   const wdims = workspaceDimsFromParams(sp)
@@ -161,19 +269,9 @@ export function dimsFromParams(page: PageDef, sp: URLSearchParams): Record<strin
   return resolveDims(page, overrides)
 }
 
-/**
- * URL of the instance's pre-rendered snapshot (scripts/snapshot.mjs writes
- * `public/snapshots/<page>__<dim=value>__….png`, dims in declaration order).
- * Purely optional raster fallback: cards try it as their placeholder and fall
- * back to a label when the file doesn't exist (404s are expected and cheap).
- */
-export function snapshotUrl(page: PageDef, dims: Record<string, string>): string {
-  const full = resolveDims(page, dims)
-  const name = `${page.id}__${Object.keys(page.dimensions)
-    .map((d) => `${d}=${full[d]}`)
-    .join("__")}.png`
-  return `${import.meta.env.BASE_URL}snapshots/${name}`
-}
+/* ------------------------------------------------------------------ */
+/* Snapshots                                                           */
+/* ------------------------------------------------------------------ */
 
 /** Stable key identifying a page instance (page + full dimension assignment). */
 export function instanceKey(pageId: string, dims: Record<string, string>): string {
@@ -182,4 +280,98 @@ export function instanceKey(pageId: string, dims: Record<string, string>): strin
     .map(([k, v]) => `${k}=${v}`)
     .join("&")
   return `${pageId}?${q}`
+}
+
+/** Conventional snapshot file name for an instance (what scripts/scan.mjs writes). */
+export function snapshotFile(page: PageDef, dims: Record<string, string>): string {
+  const full = resolveDims(page, dims)
+  return `${page.id}__${Object.keys(page.dimensions)
+    .map((d) => `${d}=${full[d]}`)
+    .join("__")}.png`
+}
+
+/** The scan entry for an instance, if the index has one. */
+export function snapshotEntry(page: PageDef, dims: Record<string, string>): SnapshotEntry | undefined {
+  return snapshotIndex[instanceKey(page.id, resolveDims(page, dims))]
+}
+
+/**
+ * URL of the instance's pre-rendered snapshot. Cards use it as their
+ * far-view image and fall back to a label when the file doesn't exist.
+ */
+export function snapshotUrl(page: PageDef, dims: Record<string, string>): string {
+  const entry = snapshotEntry(page, dims)
+  return `${appBase}/snapshots/${entry?.file ?? snapshotFile(page, dims)}`
+}
+
+/** The target id this element itself carries (no ancestor walk), if any. */
+export function ownTargetId(el: Element): string | null {
+  const attrs = manifest.viewer?.targetAttrs?.length ? manifest.viewer.targetAttrs : DEFAULT_TARGET_ATTRS
+  for (const a of attrs) {
+    const v = el.getAttribute(a)
+    if (v) return v
+  }
+  return null
+}
+
+/* ------------------------------------------------------------------ */
+/* Reverse matching: which (page, dims) is the prototype showing?       */
+/* The player follows in-frame navigation with this; anything that does */
+/* not match a registered page is reported as drift.                    */
+/* ------------------------------------------------------------------ */
+
+function templateParts(page: PageDef): { pathRe: RegExp; pathDims: string[]; query: URLSearchParams } {
+  const [pathT, queryT = ""] = page.url.split("?")
+  const abs = /^[a-z]+:\/\//i.test(pathT)
+  const pathT2 = abs ? new URL(pathT).pathname : `${appBase}${pathT.startsWith("/") ? "" : "/"}${pathT}`
+  const pathDims: string[] = []
+  const src = pathT2
+    .split(/(\{[a-zA-Z0-9_-]+\})/)
+    .map((part) => {
+      const m = part.match(/^\{([a-zA-Z0-9_-]+)\}$/)
+      if (m) {
+        pathDims.push(m[1])
+        return "([^/?#]+)"
+      }
+      return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    })
+    .join("")
+  return { pathRe: new RegExp(`^${src}/?$`), pathDims, query: new URLSearchParams(queryT) }
+}
+
+export function matchAppUrl(href: string): { page: PageDef; dims: Record<string, string> } | null {
+  let u: URL
+  try {
+    u = new URL(href, location.origin)
+  } catch {
+    return null
+  }
+  for (const page of manifest.pages) {
+    const { pathRe, pathDims, query } = templateParts(page)
+    const m = u.pathname.match(pathRe)
+    if (!m) continue
+    const dims: Record<string, string> = {}
+    pathDims.forEach((d, i) => (dims[d] = decodeURIComponent(m[i + 1])))
+    let ok = true
+    for (const [k, v] of query) {
+      const dm = v.match(/^\{([a-zA-Z0-9_-]+)\}$/)
+      if (dm) {
+        const pv = u.searchParams.get(k)
+        if (pv != null) dims[dm[1]] = pv
+      } else if (u.searchParams.get(k) !== v) {
+        ok = false
+        break
+      }
+    }
+    if (!ok) continue
+    // Values the page does not declare are not this page (e.g. a role it doesn't render).
+    if (Object.entries(dims).some(([d, v]) => page.dimensions[d] && !page.dimensions[d].includes(v))) continue
+    return { page, dims: resolveDims(page, dims) }
+  }
+  return null
+}
+
+export function dimsEqual(a: Record<string, string>, b: Record<string, string>): boolean {
+  const ka = Object.keys(a)
+  return ka.length === Object.keys(b).length && ka.every((k) => a[k] === b[k])
 }

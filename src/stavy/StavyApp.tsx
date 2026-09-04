@@ -1,31 +1,27 @@
-import { Route, Routes } from "react-router-dom"
+import { Route, Routes, useSearchParams } from "react-router-dom"
 import { CanvasPage } from "./canvas/CanvasPage"
 import { PageView } from "./PageView"
 import { ChromeProvider, EyeToggle } from "./chrome"
 import { CommentsProvider } from "./comments/store"
-import { StavyDiagnostics } from "./diagnostics"
 
 /**
- * The whole viewer as one element, mountable inside any react-router app.
- *
- * Root-mounted (the viewer is the app):
- *   <BrowserRouter><Routes><Route path="/*" element={<StavyApp />} /></Routes></BrowserRouter>
- *
- * Under a sub-path of an existing app (set `viewer.base` in stavy.json to the same prefix):
- *   <Route path="/canvas/*" element={<StavyApp />} />
- *
- * Routes are relative to the mount point, so nothing else changes.
+ * The whole viewer. It routes by query string only — `?p=<page>` opens the
+ * player, no `p` is the canvas — so a single static `index.html` serves every
+ * deep link without rewrite rules (GitHub Pages, S3, a folder on a server).
  */
+function Root() {
+  const [sp] = useSearchParams()
+  return sp.get("p") ? <PageView /> : <CanvasPage />
+}
+
 export function StavyApp() {
   return (
     <ChromeProvider>
       <CommentsProvider>
         <Routes>
-          <Route path="/" element={<CanvasPage />} />
-          <Route path="p/:pageId" element={<PageView />} />
+          <Route path="*" element={<Root />} />
         </Routes>
         <EyeToggle />
-        {import.meta.env.DEV && <StavyDiagnostics />}
       </CommentsProvider>
     </ChromeProvider>
   )
