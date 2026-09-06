@@ -1,165 +1,173 @@
 /**
  * Inspector adapter — the seam that makes dev-mode inspection work across
- * frameworks and design systems. The reference adapter knows React (component
- * tree via fibers) and Tailwind/shadcn (class → token provenance). A workspace
- * on another stack replaces the parts that differ and keeps the rest.
+ * frameworks and design systems.
  *
- * To customise: edit this file (or point the import in overlays/Inspector.tsx
- * at your own adapter module). The skill does this during setup.
+ * It has two halves. The **framework** half turns a DOM node into the
+ * components that rendered it; the React implementation ships. The **design
+ * system** half turns a computed value into the token, class or type-scale
+ * entry behind it; three implementations ship and the right one is detected
+ * per frame document.
+ *
+ * Most design systems need no code at all: describe the kit in `viewer.inspect`
+ * in the manifest and the CSS-variables path does the rest. For what data
+ * cannot express, `viewer.inspect.module` names a same-origin ES module that
+ * the viewer imports at startup and whose partial adapter is merged over the
+ * defaults. `docs/INSPECT-ADAPTERS.md` is the recipe for both.
  */
 
-export interface CompFrame {
-  name: string
-  props: Record<string, unknown>
-  /** The component's own root DOM node (first host descendant) — what the inspector should outline and measure */
-  host: Element | null
-}
+import { appBase, manifest } from "./manifest"
+import { compileInspectConfig, isConfigured, type InspectSettings } from "./inspect/config"
+import { cssVariablesDesignSystem, genericDesignSystem, utilityClassDesignSystem, type InspectConfig } from "./inspect/design-system"
+import { reactComponentStack } from "./inspect/react"
+import type { CompFrame, DesignSystemAdapter, InspectAdapter, InspectAdapterModule, Kit } from "./inspect/types"
 
-export interface InspectAdapter {
-  /** Framework: walk outward from a DOM element and list user-land components, innermost first. */
-  componentStack: (el: Element, stopAt: string) => CompFrame[]
-  /** Design system: CSS-variable token names (without `--`) that colors may resolve to. */
-  tokenNames: Set<string>
-  /** Design system: palette class suffixes that are "raw" colors rather than tokens. */
-  paletteClass: RegExp
-  /** Design system: which class (if any) on an element sets text/background/border color. */
-  colorClass: (className: string, kind: "text" | "bg" | "border") => string | null
-  /** Attributes that mark UI-kit components in the DOM (for the kit chain). */
-  componentAttrs: string[]
-}
+export type { CompFrame, DesignSystemAdapter, FrameworkAdapter, InspectAdapter, InspectAdapterModule, Provenance, TypeMetrics } from "./inspect/types"
+export { frameToJsx, componentName, reactComponentStack } from "./inspect/react"
+export { invalidateStyleCache, computedStyleOf, primaryFontFamily, resolveVarChain, matchedDeclarations, specificity } from "./inspect/cssom"
+export { compileInspectConfig } from "./inspect/config"
+export { matchTypeScale, utilityClassDesignSystem, cssVariablesDesignSystem, genericDesignSystem } from "./inspect/design-system"
 
-/* ---------------- React ---------------- */
+/* ---------------- assembling the adapter ---------------- */
 
-const SKIP = /^(Primitive|Slot|SlotClone|Presence|Portal|FocusScope|DismissableLayer|RovingFocus|Collection|Anonymous|Suspense|Fragment|Lazy|Memo|ForwardRef|Route|Routes|Router|BrowserRouter|Navigator|Location|Outlet|RenderedRoute|StrictMode|Styled|Insertion|Tooltip|Popper|Arrow|ErrorBoundary|Unstable|Focus|Scroll|Visually)/
+let loadedModule: InspectAdapterModule | null = null
+let cached: { adapter: InspectAdapter; from: InspectSettings | undefined; withModule: InspectAdapterModule | null } | null = null
 
-function fiberOf(el: Element): any {
-  const key = Object.keys(el).find((k) => k.startsWith("__reactFiber$"))
-  return key ? (el as any)[key] : null
-}
+function build(): InspectAdapter {
+  const settings = manifest.viewer?.inspect
+  if (cached && cached.from === settings && cached.withModule === loadedModule) return cached.adapter
 
-export function componentName(type: any): string | null {
-  if (!type) return null
-  if (typeof type === "function") return type.displayName || type.name || null
-  if (typeof type === "object") return type.displayName || componentName(type.render) || componentName(type.type) || null
-  return null
-}
+  const cfg: InspectConfig = compileInspectConfig(settings)
+  const designSystems: DesignSystemAdapter[] = []
 
-/** First DOM node a fiber renders (depth-first through its children). */
-function hostOf(fiber: any): Element | null {
-  let f = fiber?.child
-  while (f) {
-    if (f.tag === 5 && f.stateNode instanceof Element) return f.stateNode // HostComponent
-    const inner = hostOf(f)
-    if (inner) return inner
-    f = f.sibling
+  if (loadedModule?.designSystem) {
+    // A code adapter applies wherever the workspace's own token pattern is seen;
+    // with no pattern declared it simply applies, which is what a workspace that
+    // wrote a module for exactly one app wants.
+    const base = cssVariablesDesignSystem(cfg, cfg.tokenPattern ? undefined : () => true)
+    designSystems.push({ ...base, ...loadedModule.designSystem })
   }
-  return null
+  if (isConfigured(cfg)) designSystems.push(cssVariablesDesignSystem(cfg))
+  designSystems.push(utilityClassDesignSystem(cfg))
+  designSystems.push(genericDesignSystem(cfg))
+
+  const framework = {
+    componentStack: (el: Element, stopAt: string) => reactComponentStack(el, stopAt, kitsFor(el.ownerDocument)),
+    ...loadedModule?.framework,
+  }
+  const adapter: InspectAdapter = { framework, designSystems }
+  cached = { adapter, from: settings, withModule: loadedModule }
+  dsForDoc = new WeakMap()
+  return adapter
 }
 
-export function reactComponentStack(el: Element, stopAt: string): CompFrame[] {
-  const out: CompFrame[] = []
-  let f = fiberOf(el)
-  while (f) {
-    const name = componentName(f.type)
-    if (name) {
-      if (name === stopAt) break
-      const internal =
-        SKIP.test(name) || /(Context|Provider|Consumer|Impl|Boundary)$/.test(name) || name.startsWith("_") || name.includes("$")
-      if (!internal && /^[A-Z]/.test(name) && out[out.length - 1]?.name !== name) {
-        out.push({ name, props: (f.memoizedProps ?? {}) as Record<string, unknown>, host: hostOf(f) })
-      }
+/** The assembled adapter for this workspace. */
+export function inspectAdapter(): InspectAdapter {
+  return build()
+}
+
+let dsForDoc = new WeakMap<Document, DesignSystemAdapter>()
+
+/** Which design system styles this frame document. Detected once per document, then remembered. */
+export function designSystemFor(doc: Document): DesignSystemAdapter {
+  const hit = dsForDoc.get(doc)
+  if (hit) return hit
+  const { designSystems } = build()
+  let chosen = designSystems[designSystems.length - 1]
+  for (const ds of designSystems) {
+    let ok = false
+    try {
+      ok = ds.detect(doc)
+    } catch {
+      ok = false
     }
-    f = f.return
+    if (ok) {
+      chosen = ds
+      break
+    }
   }
-  return out
+  dsForDoc.set(doc, chosen)
+  return chosen
 }
 
-/* ---------------- JSX serialization (what the author wrote, nested) ---------------- */
-
-function fmtAttr(k: string, v: unknown): string | null {
-  if (v === undefined || v === null || v === false) return null
-  if (v === true) return k
-  if (typeof v === "string") return `${k}=${JSON.stringify(v)}`
-  if (typeof v === "number") return `${k}={${v}}`
-  if (typeof v === "function") return `${k}={${v.name || "handler"}}`
-  if (typeof v === "object" && (v as any).$$typeof) return `${k}={${elementToJsx(v, 0, 1)}}`
+function kitsFor(doc: Document | null | undefined): Kit[] {
+  if (!doc) return []
   try {
-    const j = JSON.stringify(v)
-    return `${k}={${j.length > 60 ? j.slice(0, 57) + "…}" : j}}`
+    return designSystemFor(doc).kits
   } catch {
-    return `${k}={…}`
+    return []
   }
 }
 
-function elementToJsx(node: unknown, indent: number, depth: number): string {
-  const pad = "  ".repeat(indent)
-  if (node === null || node === undefined || typeof node === "boolean") return ""
-  if (typeof node === "string" || typeof node === "number") {
-    const text = String(node).replace(/\s+/g, " ").trim()
-    return text ? pad + text : ""
+/** Components that rendered `el`, innermost first. */
+export function componentStack(el: Element, stopAt = ""): CompFrame[] {
+  return build().framework.componentStack(el, stopAt)
+}
+
+/* ---------------- the code adapter ---------------- */
+
+let modulePromise: Promise<InspectAdapterModule | null> | null = null
+
+/**
+ * Fetch a same-origin module's source and evaluate it from a blob URL.
+ *
+ * Importing the URL directly would be the obvious thing, and it is wrong here:
+ * an adopter serves this file out of their app's static folder, and a dev
+ * server that owns the module graph refuses to serve such a file as a module
+ * — loudly, with a 500 and a full-screen error overlay over the prototype.
+ * Going through a blob asks the dev server for a plain file, which every
+ * server can do, and behaves identically on a static host.
+ *
+ * The trade is that a blob URL has no base to resolve relative specifiers
+ * against, so the module must be self-contained. For a file whose whole job is
+ * to answer questions about one design system, that is not a real constraint —
+ * and it is documented in `docs/inspect-adapter.template.js`.
+ */
+async function importModule(url: string): Promise<Record<string, unknown>> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`${url} → ${res.status}`)
+  const blob = URL.createObjectURL(new Blob([await res.text()], { type: "text/javascript" }))
+  try {
+    return await import(/* @vite-ignore */ blob)
+  } finally {
+    URL.revokeObjectURL(blob)
   }
-  if (Array.isArray(node)) return node.map((n) => elementToJsx(n, indent, depth)).filter(Boolean).join("\n")
-  const el = node as any
-  if (!el.$$typeof) return pad + "{…}"
-  const type = el.type
-  const name = typeof type === "string" ? type : type?.$$typeof && !componentName(type) ? "" : componentName(type) ?? "Component"
-  if (!name) return elementToJsx(el.props?.children, indent, depth) // Fragment: flatten
-  const attrs = Object.entries(el.props ?? {})
-    .filter(([k]) => k !== "children" && !k.startsWith("data-proto"))
-    .map(([k, v]) => fmtAttr(k, v))
-    .filter(Boolean) as string[]
-  const open = `${pad}<${name}${attrs.length ? " " + attrs.join(" ") : ""}`
-  const children = el.props?.children
-  if (children === undefined || children === null || (Array.isArray(children) && children.length === 0)) return `${open} />`
-  if (depth <= 0) return `${open}>…</${name}>`
-  if (typeof children === "string" || typeof children === "number") return `${open}>${String(children).trim()}</${name}>`
-  const inner = elementToJsx(children, indent + 1, depth - 1)
-  return `${open}>\n${inner}\n${pad}</${name}>`
 }
 
-/** JSX for a component frame as its author wrote it: props as attributes, children nested (3 levels). */
-export function frameToJsx(frame: CompFrame): string {
-  const attrs = Object.entries(frame.props)
-    .filter(([k]) => k !== "children" && !k.startsWith("data-proto"))
-    .map(([k, v]) => fmtAttr(k, v))
-    .filter(Boolean) as string[]
-  const open = attrs.length <= 2 ? `<${frame.name}${attrs.length ? " " + attrs.join(" ") : ""}` : `<${frame.name}\n  ${attrs.join("\n  ")}\n`
-  const ch = frame.props.children
-  if (ch === undefined || ch === null || (Array.isArray(ch) && ch.length === 0)) return `${open}${attrs.length <= 2 ? " />" : "/>"}`
-  if (typeof ch === "string" || typeof ch === "number") return `${open}>${String(ch).trim()}</${frame.name}>`
-  return `${open}>\n${elementToJsx(ch, 1, 3)}\n</${frame.name}>`
-}
-
-/* ---------------- Tailwind + shadcn tokens ---------------- */
-
-export const SHADCN_TOKENS = new Set([
-  "background", "foreground", "card", "card-foreground", "popover", "popover-foreground", "primary", "primary-foreground",
-  "secondary", "secondary-foreground", "muted", "muted-foreground", "accent", "accent-foreground", "destructive", "border",
-  "input", "ring",
-])
-
-export const TAILWIND_PALETTE =
-  /^(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}$|^(white|black|transparent|current)$/
-
-export function tailwindColorClass(tokens: Set<string>, palette: RegExp) {
-  return (className: string, kind: "text" | "bg" | "border"): string | null => {
-    for (const c of className.split(/\s+/)) {
-      const base = c.replace(/^[a-z-]+:/, "")
-      const m = base.match(new RegExp(`^${kind}-(.+)$`))
-      if (!m) continue
-      const v = m[1].replace(/\/\d+$/, "")
-      if (tokens.has(v) || palette.test(v) || v.startsWith("[")) return c
+/**
+ * Import the workspace's `viewer.inspect.module`, if it declared one, and merge
+ * its partial adapter over the defaults. The viewer is a static bundle served
+ * next to the prototype, so a runtime `import()` of a same-origin file is the
+ * only plug an adopter can reach; a cross-origin URL is refused.
+ *
+ * Resolves to true when the adapter changed, so the caller can re-render.
+ */
+export function loadInspectModule(): Promise<boolean> {
+  const spec = manifest.viewer?.inspect?.module
+  if (!spec) return Promise.resolve(false)
+  modulePromise ??= (async () => {
+    const url = spec.startsWith("/") ? `${appBase}${spec}` : spec
+    try {
+      if (new URL(url, location.href).origin !== location.origin) {
+        console.warn(`[stavy] viewer.inspect.module must be same-origin, ignored — ${spec}`)
+        return null
+      }
+      const mod = await importModule(url)
+      const partial = (mod.default ?? mod) as InspectAdapterModule
+      if (!partial || typeof partial !== "object") {
+        console.warn(`[stavy] viewer.inspect.module ${spec} has no default export shaped like an adapter, ignored`)
+        return null
+      }
+      return partial
+    } catch (err) {
+      console.warn(`[stavy] viewer.inspect.module ${spec} failed to load, using the built-in adapter —`, err)
+      return null
     }
-    return null
-  }
-}
-
-/* ---------------- default adapter ---------------- */
-
-export const adapter: InspectAdapter = {
-  componentStack: reactComponentStack,
-  tokenNames: SHADCN_TOKENS,
-  paletteClass: TAILWIND_PALETTE,
-  colorClass: tailwindColorClass(SHADCN_TOKENS, TAILWIND_PALETTE),
-  componentAttrs: ["data-slot", "data-component"],
+  })()
+  return modulePromise.then((partial) => {
+    if (!partial || loadedModule === partial) return false
+    loadedModule = partial
+    cached = null
+    dsForDoc = new WeakMap()
+    return true
+  })
 }

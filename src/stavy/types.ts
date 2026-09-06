@@ -179,6 +179,48 @@ export interface RequirementDef {
 
 export type ToolbarAnchor = "bottom" | "top" | "bottom-left" | "bottom-right" | "top-left" | "top-right" | "bar-bottom" | "bar-top"
 
+/**
+ * What the inspector needs to know about the design system the prototype is
+ * built from (SPEC §1.8). Every field is optional: with none of it the
+ * inspector still reports computed values and the `var()` chain behind them.
+ * With it, values get token names, components get their real names, and type
+ * gets the name of its scale entry. Regex fields are strings compiled once by
+ * the viewer; an invalid one is warned about and ignored.
+ *
+ * See `docs/INSPECT-ADAPTERS.md`.
+ */
+export interface InspectSettings {
+  /** Component libraries the prototype is built from. */
+  kits?: Array<{
+    /** Shown in the panel, e.g. "Acme" */
+    name: string
+    /** A component whose own name starts with this belongs to the kit, e.g. "Ac" */
+    componentPrefix?: string
+    /**
+     * Matches a class the kit stamps on a component's root node; capture group 1
+     * must be the component's name, e.g. "^(Ac[A-Z]\\w*)-module_". This is what
+     * gives a name to components written as anonymous `forwardRef` wrappers.
+     */
+    classPattern?: string
+  }>
+  /** A custom property matching this is a design token — where a `var()` chain stops, e.g. "^--acme-" */
+  tokenPattern?: string
+  /** A custom property matching this is a private primitive: shown as such, never as a token, e.g. "^--acme-_" */
+  privateTokenPattern?: string
+  /** Narrows which tokens are offered as spacing/radius names; defaults to `tokenPattern`. */
+  spacingTokenPattern?: string
+  /** The type scale, for naming what an element's computed type is. `lineHeight` is a ratio (1.5) or px (21). */
+  typeScale?: Array<{ name: string; family: string; size: number; weight: number; lineHeight: number }>
+  /** Attributes that mark UI-kit components in the DOM. Default ["data-slot", "data-component"]. */
+  componentAttrs?: string[]
+  /**
+   * A same-origin ES module the viewer imports at startup, default-exporting
+   * `{ framework?, designSystem? }` partials merged over the built-in adapter.
+   * Only for what the data above cannot say.
+   */
+  module?: string
+}
+
 /** Workspace-level viewer defaults (a product/design system picks these once; viewers may override per link). */
 export interface ViewerDefaults {
   /** Where the prototype-mode toolbar docks by default */
@@ -193,6 +235,8 @@ export interface ViewerDefaults {
   app?: string
   /** Attributes a bare target id is looked up in, in order. Default ["data-proto", "data-testid"]. */
   targetAttrs?: string[]
+  /** What the inspector should know about this workspace's design system. */
+  inspect?: InspectSettings
 }
 
 export interface Manifest {

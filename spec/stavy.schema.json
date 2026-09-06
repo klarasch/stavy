@@ -71,6 +71,77 @@
             "type": "string"
           },
           "description": "Attributes a bare target id is looked up in, in order. Default [\"data-proto\",\"data-testid\"]. Any target that is not a bare id is used as a CSS selector as-is."
+        },
+        "inspect": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "What the inspector should know about this workspace's design system (SPEC §1.8). Every field is optional: without any of it the inspector still reports computed values and the var() chain behind them. See docs/INSPECT-ADAPTERS.md.",
+          "properties": {
+            "kits": {
+              "type": "array",
+              "description": "Component libraries the prototype is built from, so their components can be named and their internals collapsed.",
+              "items": {
+                "type": "object",
+                "required": ["name"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Shown in the panel, e.g. \"Acme\"."
+                  },
+                  "componentPrefix": {
+                    "type": "string",
+                    "description": "A component whose own name starts with this belongs to the kit, e.g. \"Ac\"."
+                  },
+                  "classPattern": {
+                    "type": "string",
+                    "format": "regex",
+                    "description": "Regular expression matching a class the kit stamps on a component's root node; capture group 1 must be the component's name, e.g. \"^(Ac[A-Z]\\\\w*)-module_\". This is what names components written as anonymous forwardRef wrappers."
+                  }
+                }
+              }
+            },
+            "tokenPattern": {
+              "type": "string",
+              "format": "regex",
+              "description": "A custom property matching this is a design token — where a var() chain stops, e.g. \"^--acme-\". Also how the viewer detects, per frame document, that this design system is the one in use."
+            },
+            "privateTokenPattern": {
+              "type": "string",
+              "format": "regex",
+              "description": "A custom property matching this is a private primitive: reported as such, never as a token, e.g. \"^--acme-_\"."
+            },
+            "spacingTokenPattern": {
+              "type": "string",
+              "format": "regex",
+              "description": "Narrows which tokens are offered as names for spacing and radius values. Default: tokenPattern."
+            },
+            "typeScale": {
+              "type": "array",
+              "description": "The type scale, for naming what an element's computed type is.",
+              "items": {
+                "type": "object",
+                "required": ["name", "family", "size", "weight", "lineHeight"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": { "type": "string" },
+                  "family": { "type": "string", "description": "One family name, as it appears first in the computed font stack." },
+                  "size": { "type": "number", "description": "px" },
+                  "weight": { "type": "number" },
+                  "lineHeight": { "type": "number", "description": "A ratio (1.5) or px (21); values above 4 are read as px." }
+                }
+              }
+            },
+            "componentAttrs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Attributes that mark UI-kit components in the DOM. Default [\"data-slot\",\"data-component\"]."
+            },
+            "module": {
+              "type": "string",
+              "description": "Same-origin ES module the viewer imports at startup, default-exporting { framework?, designSystem? } partials merged over the built-in adapter. Only for what the data above cannot say."
+            }
+          }
         }
       }
     },
