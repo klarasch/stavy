@@ -5,6 +5,7 @@ A single expense across its whole lifecycle; actions depend on role × lifecycle
 | | |
 |---|---|
 | id | `expense-detail` |
+| section | Expenses |
 | template | `detail-page` — `src/demo/templates/DetailTemplate.tsx` |
 | UI-kit components | Card, Badge, Button, Separator, Avatar |
 | organisms | [Approval actions](./approval-actions.md) |
@@ -16,11 +17,10 @@ A single expense across its whole lifecycle; actions depend on role × lifecycle
 - **Expense** (`expense`): **DataConf 2026** (default) · SkyRail
 - **Role** (`role`): **Employee** (default) · Manager · Finance
 - **Expense lifecycle** (`lifecycle`): Draft · **Submitted** (default) · In review · Approved · Rejected · Reimbursed
-- **Density** (`density`): **Comfortable** (default) · Compact
 - **Locale** (`locale`): English (US) · Deutsch
 - **Overlay** (`overlay`): **No overlay** (default) · Reject confirmation
 
-## Pinned states (8)
+## Pinned states (7)
 
 - Role: Employee, Expense lifecycle: Draft — Owner can still edit
 - Role: Manager, Expense lifecycle: Submitted — Approve / reject / request changes
@@ -29,7 +29,6 @@ A single expense across its whole lifecycle; actions depend on role × lifecycle
 - Role: Finance, Expense lifecycle: Approved — Finance marks reimbursed
 - Role: Employee, Expense lifecycle: Rejected
 - Role: Finance, Expense lifecycle: Reimbursed — Terminal state
-- Role: Manager, Expense lifecycle: Submitted, Density: Compact — Compact density
 
 ## Semantic targets (`data-proto`)
 
@@ -54,8 +53,10 @@ A single expense across its whole lifecycle; actions depend on role × lifecycle
 2. **Timeline** (`LifecycleTimeline`) — Renders the audit trail up to the current lifecycle stage.
 3. **Contained overlay** (`RejectConfirmModal`) — The confirm dialog is a dimension value (overlay: reject-confirm), not component state, and portals into the viewer's portalContainer — on the canvas it fills its own card instead of covering everything (SPEC §3 overlay containment).
 
-## Scenarios that pass through (2)
+## Scenarios that pass through (3)
 
+- **Employee submits an expense** — PRD-118 §2
+  7. Open the expense you filed → `LifecycleTimeline` (expense=exp-2101, role=employee, lifecycle=submitted)
 - **Manager reviews and approves** — PRD-118 §3, JIRA-ORB-412
   3. Approve it → `ApproveButton` (role=manager, lifecycle=submitted)
   4. Approved → `LifecycleTimeline` (role=manager, lifecycle=approved)

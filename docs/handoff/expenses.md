@@ -5,6 +5,7 @@ All expenses visible to the current role, with filters.
 | | |
 |---|---|
 | id | `expenses` |
+| section | Expenses |
 | template | `list-page` — `src/demo/templates/ListTemplate.tsx` |
 | UI-kit components | Input, Select, Table, Badge, Button, Skeleton, Alert |
 | fidelity | navigable |
@@ -13,14 +14,13 @@ All expenses visible to the current role, with filters.
 ## Dimensions
 
 - **Role** (`role`): **Employee** (default) · Manager · Finance
-- **Data state** (`state`): **Loaded** (default) · Empty · Loading · Error
+- **Data state** (`state`): **Loaded** (default) · Empty · Error
 
-## Pinned states (5)
+## Pinned states (4)
 
 - Role: Employee, Data state: Loaded
 - Role: Manager, Data state: Loaded — Manager sees submitter column + quick actions
 - Role: Employee, Data state: Empty
-- Role: Employee, Data state: Loading
 - Role: Employee, Data state: Error — API failure fallback with retry
 
 ## Semantic targets (`data-proto`)

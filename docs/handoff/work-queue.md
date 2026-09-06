@@ -14,15 +14,14 @@ Bespoke organism: the role-aware queue card from the dashboard.
 ## Dimensions
 
 - **Role** (`role`): Employee · **Manager** (default) · Finance
-- **Data state** (`state`): **Loaded** (default) · Empty · Loading
+- **Data state** (`state`): **Loaded** (default) · Empty
 
-## Pinned states (5)
+## Pinned states (4)
 
 - Role: Employee, Data state: Loaded
 - Role: Manager, Data state: Loaded
 - Role: Finance, Data state: Loaded
 - Role: Manager, Data state: Empty
-- Role: Manager, Data state: Loading
 
 ## Semantic targets (`data-proto`)
 

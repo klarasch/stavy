@@ -1,5 +1,11 @@
 key,en-US,de-DE
 nav.dashboard,"Dashboard","Übersicht"
+policy.title,"Expense policy","Spesenrichtlinie"
+policy.intro,"What Orbit approves automatically, and what a manager has to look at.","Was Orbit automatisch genehmigt und was eine Führungskraft prüfen muss."
+policy.rule.limit,"Anything at or under $250 is approved automatically once a receipt is attached.","Beträge bis 250 $ werden automatisch genehmigt, sobald ein Beleg angehängt ist."
+policy.rule.receipt,"Receipts are required above $25. Photos are fine; the amount and date have to be readable.","Ab 25 $ ist ein Beleg erforderlich. Fotos genügen, sofern Betrag und Datum lesbar sind."
+policy.rule.deadline,"Submit within 60 days of the purchase date. Later than that needs a written exception.","Einreichung innerhalb von 60 Tagen nach dem Kaufdatum. Später nur mit schriftlicher Ausnahme."
+policy.updated,"Last updated 12 August 2026 · Finance","Zuletzt aktualisiert am 12. August 2026 · Finanzabteilung"
 nav.expenses,"Expenses","Ausgaben"
 nav.new,"New expense","Neue Ausgabe"
 status.draft,"Draft","Entwurf"

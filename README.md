@@ -33,9 +33,10 @@ cd ../my-prototype-repo && npm run dev
 
 ## What it does
 
-- **Canvas = map, not playground.** Every declared page × dimension variant
-  shows as a pre-rendered snapshot, grouped by page and by scenario. Clicking
-  a card opens the **player** — the canvas itself never runs your app.
+- **Canvas = map, not playground.** Every pinned page variant shows as a
+  pre-rendered snapshot, clustered by section and by scenario, with a site
+  map over the top. Clicking a card opens the **player** — the canvas itself
+  never runs your app.
 - **Player = the real thing.** One same-origin frame of your actual
   prototype, fully interactive, with viewer chrome floating over it.
   Switching a dimension rewrites the frame's URL; navigating inside the app
@@ -73,15 +74,22 @@ cd ../my-prototype-repo && npm run dev
   through an additive harness route or an existing Storybook/Ladle story,
   with their own states; each page's annotations double as its anatomy —
   numbered callouts with *what each part does*, right next to the states.
-- **Areas, not a noodle** — the canvas is organised into named areas
-  (scenarios, one per page/component, boards) with titles that stay readable
-  from orbit, plus a table of contents to jump around.
+- **Site map** — every screen as one node, arrows derived from your
+  scenarios, laid out by section. It answers "how do these fit together"
+  before you zoom into any of them; screens no scenario walks through are
+  shown unconnected rather than hidden.
+- **Areas and sections, not a noodle** — the canvas is organised into named
+  areas (the site map, scenarios, one per page/component, boards) with titles
+  that stay readable from orbit, clustered into sections by `group`, plus a
+  table of contents to jump around.
 - **Boards** — IA, flow and state diagrams (Mermaid), images, notes:
   supporting material next to the prototype, explicitly outside the contract.
-- **Coverage matrix** — pinned variants laid out on their two most-varying
-  dimensions with labels that stay legible when zoomed out; unpinned cells
-  show as gaps. Pages with many axes (10+) get a dimension panel instead of
-  an overflowing toolbar.
+- **Coverage matrix — only where there is coverage to show** — when two
+  dimensions actually vary, the pinned variants are laid out on them with
+  labels that stay legible when zoomed out and unpinned cells showing as
+  gaps. A page with one axis is a plain row; a page with none is one card,
+  which is a perfectly normal page. Cards are labelled with what varies, and
+  nothing else.
 - **Inspector for engineers** — on the player and on canvas thumbnails,
   reaching into the real frame: the React component and its props, the
   element's classes (copyable), type/spacing tokens, and *where each color

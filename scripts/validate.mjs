@@ -110,7 +110,7 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     // scenario is a pointer at one state, not a walkthrough that stopped early.
     const visited = new Set(sc.steps.map((st) => st.page))
     if (sc.steps.length > 1 && visited.size === 1)
-      warn(`${w}: stays on page "${sc.steps[0].page}" for all ${sc.steps.length} steps — is it end to end (success plus the thing that changed)?`)
+      warn(`${w}: stays on page "${sc.steps[0].page}" for all ${sc.steps.length} steps: is it end to end (the success state plus the thing that changed)?`)
     // A scenario belongs to one world: if its steps pin two values of a
     // workspace axis, or a step's page excludes a value another step pins, the
     // walkthrough can never be shown whole.

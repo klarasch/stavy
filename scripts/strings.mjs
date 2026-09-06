@@ -15,7 +15,9 @@ if (!m.strings) {
   console.error("stavy.json has no `strings` entry (path to the copy catalog).")
   process.exit(1)
 }
-const catalog = JSON.parse(readFileSync(resolve(m.strings), "utf8"))
+// `strings` is a URL path the prototype serves ("/strings.json"), so it is
+// read relative to the repo, not from the filesystem root.
+const catalog = JSON.parse(readFileSync(resolve(m.strings.replace(/^\//, "")), "utf8"))
 const locales = Object.keys(catalog)
 const keys = Object.keys(catalog[locales[0]])
 const esc = (s) => String(s ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ")

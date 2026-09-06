@@ -5,6 +5,7 @@ Landing page; content adapts to the viewer's role.
 | | |
 |---|---|
 | id | `dashboard` |
+| section | Overview |
 | template | `dashboard-page` — `src/demo/templates/DashboardTemplate.tsx` |
 | UI-kit components | Card, Badge, Button, Skeleton, Avatar, Separator |
 | organisms | [Work queue](./work-queue.md) |
@@ -14,15 +15,14 @@ Landing page; content adapts to the viewer's role.
 ## Dimensions
 
 - **Role** (`role`): **Employee** (default) · Manager · Finance
-- **Data state** (`state`): **Loaded** (default) · Empty · Loading
+- **Data state** (`state`): **Loaded** (default) · Empty
 
-## Pinned states (5)
+## Pinned states (4)
 
 - Role: Employee, Data state: Loaded
 - Role: Manager, Data state: Loaded — Manager gets an approvals queue
 - Role: Finance, Data state: Loaded — Finance gets a reimbursement queue
 - Role: Employee, Data state: Empty — First-run experience
-- Role: Employee, Data state: Loading
 
 ## Semantic targets (`data-proto`)
 

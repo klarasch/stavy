@@ -5,6 +5,7 @@ Multi-step submission flow; each step is a value of the 'step' process dimension
 | | |
 |---|---|
 | id | `submit-expense` |
+| section | Submitting |
 | template | `form-flow-page` — `src/demo/templates/FormFlowTemplate.tsx` |
 | UI-kit components | Card, Progress, Input, Label, Select, Textarea, Button |
 | organisms | [Flow progress](./flow-progress.md) |
