@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { ChevronDown, ChevronRight, List } from "../icons"
-import { manifest, pageInWorkspace, scenarioInWorkspace } from "../manifest"
+import { groupPages, manifest, pageInWorkspace, scenarioInWorkspace } from "../manifest"
 import { cn } from "../cn"
 
 /** Table of contents for the canvas: jump to any scenario, page, or component. */
@@ -8,11 +8,14 @@ export function CanvasToc({
   onJump,
   className,
   wdims = {},
+  showMap = true,
 }: {
   onJump: (tocId: string) => void
   className?: string
   /** Active workspace assignment — the TOC lists only what the canvas shows */
   wdims?: Record<string, string>
+  /** Whether the canvas is drawing the site map (`?map=0` hides it) */
+  showMap?: boolean
 }) {
   const [open, setOpen] = useState(true)
   const inScope = manifest.pages.filter((p) => pageInWorkspace(p, wdims))
@@ -28,6 +31,12 @@ export function CanvasToc({
       </button>
       {open && (
         <div className="ps-toc px-1.5 pb-2">
+          {showMap && pages.length > 1 && (
+            <button className="ps-toc-item" onClick={() => onJump("area:map")}>
+              <span className="truncate">Site map</span>
+              <span className="ps-toc-count">{pages.length}</span>
+            </button>
+          )}
           <div className="ps-toc-h">Scenarios</div>
           {scenarios.map((s) => (
             <button key={s.id} className="ps-toc-item" onClick={() => onJump(`scenario:${s.id}`)} title={s.label}>
@@ -35,12 +44,17 @@ export function CanvasToc({
               <span className="ps-toc-count">{s.steps.length}</span>
             </button>
           ))}
-          <div className="ps-toc-h">Pages</div>
-          {pages.map((p) => (
-            <button key={p.id} className="ps-toc-item" onClick={() => onJump(`page:${p.id}`)} title={p.label}>
-              <span className="truncate">{p.label}</span>
-              <span className="ps-toc-count">{p.instances?.length ?? 0}</span>
-            </button>
+          {/* Sections (SPEC §1.3), in the same order the canvas lays them out. */}
+          {groupPages(pages).map((section) => (
+            <div key={section.group ?? " "}>
+              <div className="ps-toc-h">{section.group ?? "Pages"}</div>
+              {section.pages.map((p) => (
+                <button key={p.id} className="ps-toc-item" onClick={() => onJump(`page:${p.id}`)} title={p.label}>
+                  <span className="truncate">{p.label}</span>
+                  <span className="ps-toc-count">{p.instances?.length ?? 1}</span>
+                </button>
+              ))}
+            </div>
           ))}
           {((manifest.boards?.length ?? 0) > 0 || (manifest.requirements?.length ?? 0) > 0) && (
             <>
@@ -63,7 +77,7 @@ export function CanvasToc({
               {components.map((p) => (
                 <button key={p.id} className="ps-toc-item" onClick={() => onJump(`page:${p.id}`)} title={p.label}>
                   <span className="truncate">{p.label}</span>
-                  <span className="ps-toc-count">{p.instances?.length ?? 0}</span>
+                  <span className="ps-toc-count">{p.instances?.length ?? 1}</span>
                 </button>
               ))}
             </>

@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
-  ArrowRight, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play,
+  ArrowRight, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play, Waypoints,
 } from "../icons"
 import { cn } from "../cn"
 import {
@@ -16,6 +16,7 @@ import { InstanceCard, VIEWPORT_W } from "./InstanceCard"
 import { CanvasNotes } from "./CanvasNotes"
 import { AnatomyCard } from "./AnatomyCard"
 import { CanvasToc } from "./CanvasToc"
+import { SiteMap } from "./SiteMap"
 import { BoardCard } from "./BoardCard"
 import { CoverageBoard } from "./CoverageBoard"
 import { Inspector, type FrameHit } from "../overlays/Inspector"
@@ -356,6 +357,7 @@ export function CanvasPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const wCarry = useMemo(() => workspaceCarry(sp), [wKey])
   const showNotes = sp.get("notes") === "1"
+  const showMap = sp.get("map") !== "0"
   const wireframe = sp.get("w") === "1"
   const inspect = sp.get("i") === "1"
   const liveMode = sp.get("live") === "1"
@@ -391,13 +393,13 @@ export function CanvasPage() {
   }, [])
 
   // Zoom the viewport to fit the chosen section.
-  const jumpTo = (tocId: string) => {
+  const jumpTo = useCallback((tocId: string) => {
     const el = contentEl?.querySelector<HTMLElement>(`[data-toc="${CSS.escape(tocId)}"]`)
     if (!el || !pz.current) return
     pz.current.fitTo(el, true)
     el.setAttribute("data-flash", "true")
     setTimeout(() => el.removeAttribute("data-flash"), 1200)
-  }
+  }, [contentEl])
 
   useHotkeys({
     n: () => setFlag("notes", !showNotes),
@@ -445,6 +447,8 @@ export function CanvasPage() {
   const outOfScopeCount = manifest.pages.length - inScope.length
   const pages = inScope.filter((p) => p.kind !== "component")
   const components = inScope.filter((p) => p.kind === "component")
+  // Sections (SPEC §1.3): page areas cluster by `group`, ungrouped last.
+  const sections = groupPages(pages)
   const scenarios = manifest.scenarios.filter((sc) => scenarioInWorkspace(sc, wdims))
 
   const setWorkspaceDim = (dimId: string, value: string) => {
@@ -465,6 +469,13 @@ export function CanvasPage() {
           data-canvas-root
           className={cn("ps flex flex-col items-start gap-14 p-12", wireframe && "proto-wireframe", inspect && "ps-inspect-on")}
         >
+          {/* ---- Site map: how the screens fit together (arrows from scenarios) ---- */}
+          {showMap && pages.length > 1 && (
+            <Area title="Site map" kind={`${pages.length} screens`} icon={<Waypoints />} tocId="area:map" className="self-start">
+              <SiteMap pages={pages} scenarios={scenarios} wdims={wdims} linkExtra={linkExtra} onJump={jumpTo} />
+            </Area>
+          )}
+
           {/* ---- Boards: supporting material, outside the contract ---- */}
           {((manifest.boards?.length ?? 0) > 0 || (manifest.requirements?.length ?? 0) > 0) && (
             <Area title="Boards" kind="supporting material" icon={<MapIcon />} tocId="area:boards" className="self-start">
@@ -545,14 +556,23 @@ export function CanvasPage() {
             </div>
           </Area>
 
-          {/* ---- Pages: one area per page, flowing left→right, wrapping ---- */}
-          <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
-            {pages.map((page) => (
-              <Area key={page.id} title={page.label} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
-                <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} />
-              </Area>
-            ))}
-          </div>
+          {/* ---- Pages: one area per page, clustered by section ---- */}
+          {sections.map((section) => (
+            <div key={section.group ?? " "} className="flex flex-col gap-5">
+              {section.group && (
+                <div data-ps-ui>
+                  <span className="ps-group-h">{section.group}</span>
+                </div>
+              )}
+              <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
+                {section.pages.map((page) => (
+                  <Area key={page.id} title={page.label} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
+                    <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} />
+                  </Area>
+                ))}
+              </div>
+            </div>
+          ))}
 
           {/* ---- Components ---- */}
           {components.length > 0 && (
@@ -601,7 +621,7 @@ export function CanvasPage() {
             )}
           </div>
           <MockNotice className="absolute top-[58px] left-6 z-20" />
-          <CanvasToc className="absolute top-[84px] left-4 z-20" onJump={jumpTo} wdims={wdims} />
+          <CanvasToc className="absolute top-[84px] left-4 z-20" onJump={jumpTo} wdims={wdims} showMap={showMap} />
 
           <div className="ps ps-glass absolute top-4 right-4 z-20 rounded-2xl px-1.5 py-1 flex items-center gap-0.5">
             <PsButton active={showNotes} tip="Annotation pins and pointing notes" keys={["N"]} tipBelow onClick={() => setFlag("notes", !showNotes)}>
