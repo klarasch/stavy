@@ -45,6 +45,10 @@ Reload the canvas. Every registered screen is there as a real snapshot,
 grouped by page. Zoom around. Click one: the player shows the live app at that
 URL. This is the demo's first slide — *"nothing was rewritten."*
 
+If the dev server (or the deploy you scan against later) serves the app under
+a Vite `base` other than `/`, add `--app <base>` to the `stavy:scan` command —
+see docs/ADOPTION.md, "Dev server or deploy under a base path".
+
 ## 3. Level 1 — one flow (2 hours)
 
 Pick the flow people ask about most. Work with Claude under the rules in

@@ -68,6 +68,16 @@ Level 2 — organisms — comes when you want a component's own state matrix on
 the canvas: add a harness route (§B, "Organisms"), register it as a page with
 `"kind": "component"` and a `frame`.
 
+**Dev server or deploy under a base path.** If your prototype's dev server or
+deploy uses a Vite `base` other than `/` (a GitHub Pages project site is
+typically `/pages/<org>/<repo>/dist/`), a page's `url` in the manifest is
+still the app's own route (`/settings`), but scan needs to know the prefix to
+find it: pass `--app <base>` — e.g. `node scripts/stavy/scan.mjs --url
+http://localhost:5173 --app /pages/<org>/<repo>/dist/`. The viewer figures out
+the same base from its own script path by default, so nothing else changes;
+set `"viewer": { "app": "/pages/<org>/<repo>/dist/" }` in the manifest only if
+the viewer is served from somewhere other than a path directly under that base.
+
 ---
 
 ## B. Making states URL-addressable without touching page code
