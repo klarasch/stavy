@@ -75,7 +75,16 @@ interface ValidateResult {
   warnings: string[]
 }
 
-async function run(mutate?: (m: ReturnType<typeof baseManifest>) => void, flags?: { refs: string[]; coverage: boolean; snapshots?: string | null }): Promise<ValidateResult> {
+interface Flags {
+  refs: string[]
+  coverage: boolean
+  snapshots?: string | null
+  requireSchema?: boolean
+  /** test-only hook: exercise the "ajv absent" path without uninstalling ajv */
+  simulateNoAjv?: boolean
+}
+
+async function run(mutate?: (m: ReturnType<typeof baseManifest>) => void, flags?: Flags): Promise<ValidateResult> {
   const m = baseManifest()
   mutate?.(m)
   return (await validate(m as any, root, { snapshots: snapsOk, ...(flags ?? { refs: [], coverage: false }) })) as ValidateResult
@@ -176,6 +185,30 @@ describe("validate: JSON schema", () => {
       m.version = "9.9"
     })
     expect(errors.some((e) => e.startsWith("schema"))).toBe(true)
+  })
+})
+
+describe("validate: schema check availability (README feedback item 4)", () => {
+  it("warns loudly, as a warning (not an error), when ajv cannot be resolved", async () => {
+    const { errors, warnings } = await run(undefined, { refs: [], coverage: false, simulateNoAjv: true })
+    expect(warnings.some((w) => w.includes("SCHEMA NOT CHECKED") && w.includes("ajv@8.12.0") && w.includes("ajv-formats@2.1.1"))).toBe(true)
+    expect(errors.some((e) => e.startsWith("schema"))).toBe(false)
+  })
+
+  it("does not warn when ajv is actually available", async () => {
+    const { warnings } = await run()
+    expect(warnings.some((w) => w.includes("SCHEMA NOT CHECKED"))).toBe(false)
+  })
+
+  it("--require-schema turns the missing-ajv case into an error", async () => {
+    const { errors, warnings } = await run(undefined, { refs: [], coverage: false, simulateNoAjv: true, requireSchema: true })
+    expect(errors.some((e) => e.includes("--require-schema") && e.includes("ajv/ajv-formats is not installed"))).toBe(true)
+    expect(warnings.some((w) => w.includes("SCHEMA NOT CHECKED"))).toBe(false)
+  })
+
+  it("--require-schema does not error when ajv is actually available", async () => {
+    const { errors } = await run(undefined, { refs: [], coverage: false, requireSchema: true })
+    expect(errors.some((e) => e.includes("--require-schema"))).toBe(false)
   })
 })
 

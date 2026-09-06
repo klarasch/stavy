@@ -24,8 +24,11 @@ cd ~/Code/prototyping/stavy && git push
 cd ~/work/prototype && git checkout -b stavy
 git clone <stavy repo> ../stavy && (cd ../stavy && npm install)
 node ../stavy/scripts/init.mjs .
-npm i -D playwright ajv ajv-formats && npx playwright install chromium
+npm i -D playwright ajv@8.12.0 ajv-formats@2.1.1 && npx playwright install chromium
 ```
+
+(Those exact ajv versions install cleanly on a locked-down/corporate
+registry — see docs/ADOPTION.md, "Locked-down registries".)
 
 Add `@STAVY.md` to the repo's `CLAUDE.md`. Commit. Start the dev server and
 open `http://localhost:5173/stavy/index.html` — an empty-ish canvas with the

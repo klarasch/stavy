@@ -6,9 +6,11 @@
 // summary. Whether targets *exist* is the scan's job (scripts/scan.mjs) —
 // the viewer never reads the prototype's source.
 //
-//   node scripts/validate.mjs [stavy.json] [--refs docs/PRD-118.md ...] [--coverage] [--snapshots <dir>]
+//   node scripts/validate.mjs [stavy.json] [--refs docs/PRD-118.md ...] [--coverage] [--snapshots <dir>] [--require-schema]
 //
-// Exit code 1 on errors; warnings never fail the run.
+// Exit code 1 on errors; warnings never fail the run. Schema checking (spec/stavy.schema.json)
+// needs ajv + ajv-formats — when either is missing it is skipped with a loud warning instead of
+// silently passing; --require-schema (use this in CI) turns that into an error.
 import { readFileSync, existsSync, statSync } from "node:fs"
 import { resolve, dirname, relative } from "node:path"
 import { pathToFileURL } from "node:url"
@@ -19,6 +21,11 @@ import { pathToFileURL } from "node:url"
 // errors/warnings that the CLI otherwise prints and exits on. Any console
 // output the original script produced inline (the --refs summary line) is
 // still produced here, in the same place, so CLI output stays byte-identical.
+// Versions that install cleanly through locked-down/corporate registries: a
+// newer ajv pulls in `fast-uri`, which some artifactories refuse (see
+// docs/ADOPTION.md, "Locked-down registries").
+export const AJV_PIN = "ajv@8.12.0 ajv-formats@2.1.1"
+
 export async function validate(m, root, flags = { refs: [], coverage: false }) {
   const errors = []
   const warnings = []
@@ -26,18 +33,35 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   const warn = (s) => warnings.push(s)
 
   // ---- shape: JSON Schema (spec/stavy.schema.json), if ajv is installed
-  try {
-    const { default: Ajv } = await import("ajv/dist/2020.js")
-    const { default: addFormats } = await import("ajv-formats")
+  // `simulateNoAjv` is a test-only hook (tests/unit/validate.unit.ts) so the
+  // "ajv absent" path can be exercised without actually uninstalling ajv.
+  let ajvAvailable = false
+  let Ajv, addFormats
+  if (!flags.simulateNoAjv) {
+    try {
+      ;({ default: Ajv } = await import("ajv/dist/2020.js"))
+      ;({ default: addFormats } = await import("ajv-formats"))
+      ajvAvailable = true
+    } catch {
+      /* ajv not installed — structural checks below still run */
+    }
+  }
+  let schemaChecked = false
+  if (ajvAvailable) {
     const schemaPath = [resolve(root, "spec/stavy.schema.json"), resolve(import.meta.dirname, "stavy.schema.json"), resolve(import.meta.dirname, "../spec/stavy.schema.json")].find(existsSync)
     if (schemaPath) {
       const ajv = new Ajv({ allErrors: true, strict: false })
       addFormats(ajv)
       const validateSchema = ajv.compile(JSON.parse(readFileSync(schemaPath, "utf8")))
       if (!validateSchema(m)) for (const e of validateSchema.errors ?? []) err(`schema ${e.instancePath || "/"}: ${e.message}${e.params?.allowedValues ? ` (${e.params.allowedValues.join(" | ")})` : ""}`)
+      schemaChecked = true
     }
-  } catch {
-    /* ajv not installed — structural checks below still run */
+  }
+  // Silently skipping the schema check is how an invalid manifest "passes"
+  // with 0 errors — loud on purpose, and --require-schema (CI) makes it fatal.
+  if (!schemaChecked) {
+    if (flags.requireSchema) err(`schema validation required (--require-schema) but ${ajvAvailable ? "spec/stavy.schema.json was not found" : "ajv/ajv-formats is not installed"} — npm i -D ${AJV_PIN}`)
+    else warn(`SCHEMA NOT CHECKED — install ${AJV_PIN} (npm i -D ${AJV_PIN})`)
   }
 
   const dimIndex = new Map(m.dimensions.map((d) => [d.id, new Set(d.values.map((v) => v.id))]))
@@ -233,17 +257,18 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     }
   }
 
-  return { errors, warnings }
+  return { errors, warnings, schemaChecked }
 }
 
 async function main() {
   const argv = process.argv.slice(2)
-  const flags = { refs: [], coverage: false, snapshots: null }
+  const flags = { refs: [], coverage: false, snapshots: null, requireSchema: false }
   const positional = []
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--refs") {
       while (argv[i + 1] && !argv[i + 1].startsWith("--")) flags.refs.push(argv[++i])
     } else if (argv[i] === "--coverage") flags.coverage = true
+    else if (argv[i] === "--require-schema") flags.requireSchema = true
     else if (argv[i] === "--snapshots") flags.snapshots = resolve(argv[++i])
     else positional.push(argv[i])
   }
@@ -251,13 +276,15 @@ async function main() {
   const root = dirname(manifestPath)
   const m = JSON.parse(readFileSync(manifestPath, "utf8"))
 
-  const { errors, warnings } = await validate(m, root, flags)
+  const { errors, warnings, schemaChecked } = await validate(m, root, flags)
 
-  // ---- report
+  // ---- report (the schema-not-checked warning, when present, is pushed
+  // first in validate() so it prints as the very first line here — loud on
+  // purpose, per README feedback item 4)
   for (const w of warnings) console.log(`  warn  ${w}`)
   for (const e of errors) console.log(`  ERROR ${e}`)
   console.log(
-    `\nstavy: ${m.pages.length} pages · ${m.scenarios.length} scenarios · ${(m.notes ?? []).length} notes — ${errors.length} error(s), ${warnings.length} warning(s)`
+    `\nstavy: ${m.pages.length} pages · ${m.scenarios.length} scenarios · ${(m.notes ?? []).length} notes — ${errors.length} error(s), ${warnings.length} warning(s)${schemaChecked ? "" : " · SCHEMA NOT CHECKED"}`
   )
   process.exit(errors.length ? 1 : 0)
 }

@@ -44,10 +44,11 @@ when absent. Then, in order:
    has (`"url": "/settings"`), no dimensions yet, one pinned instance
    (`"instances": [{ "dims": {} }]`). **(skill)** Claude lists the routes and
    writes the entries.
-2. **Scan.** `npm i -D playwright ajv ajv-formats && npx playwright install chromium`,
+2. **Scan.** `npm i -D playwright ajv@8.12.0 ajv-formats@2.1.1 && npx playwright install chromium`,
    then `npm run stavy:scan` against the running dev server. Every registered
    state gets a snapshot; the canvas now shows your real screens. Nothing in
-   the app changed.
+   the app changed. (Those exact ajv versions matter on a locked-down
+   registry — see "Locked-down registries" below.)
 3. **Level 1 — one flow, addressable.** Pick the flow you want to walk
    through. For each screen in it, decide which axes matter (a role, a data
    state, a step, an open dialog) and make them reachable by URL — see §B. Add
@@ -198,10 +199,32 @@ instead of searching the repo.
 
 ---
 
+## B6. Locked-down registries
+
+`validate` checks the manifest against `spec/stavy.schema.json` only when
+`ajv` and `ajv-formats` resolve — without them the check is silently skipped,
+so a broken manifest can "pass" with 0 errors. Pin the versions that install
+cleanly through a strict corporate registry/artifactory:
+
+```bash
+npm i -D ajv@8.12.0 ajv-formats@2.1.1
+```
+
+Newer `ajv` releases pull in `fast-uri`, which some artifactories block by
+policy, and the install fails or falls back to a stale cached version. If
+`validate` runs without ajv installed it now prints `SCHEMA NOT CHECKED —
+install ajv@8.12.0 ajv-formats@2.1.1 …` as the first line and counts it as a
+warning; pass `--require-schema` (wired into `npm run check`) to make CI fail
+instead of warn when the schema can't be checked.
+
+---
+
 ## C. CI/CD
 
-Minimum: `node scripts/stavy/validate.mjs public/stavy.json` on every PR.
-Full: the scan. In the reference repo's Pages workflow the sequence is
+Minimum: `node scripts/stavy/validate.mjs public/stavy.json --require-schema`
+on every PR — `--require-schema` fails the build instead of silently skipping
+the schema check when ajv isn't installed. Full: the scan. In the reference
+repo's Pages workflow the sequence is
 
 ```bash
 npx vite build
