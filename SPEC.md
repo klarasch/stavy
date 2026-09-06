@@ -132,9 +132,10 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
   "id": "expense-detail",
   "label": "Expense detail",
   "url": "/expenses/exp-2101?role={role}&lifecycle={lifecycle}",
+  "group": "Approvals",                 // optional section on the canvas
   "template": "detail-page",
   "fidelity": "interactive",
-  "dimensions": {                       // dimension id -> supported value ids
+  "dimensions": {                       // optional; dimension id -> value ids
     "role": ["employee", "manager", "finance"],
     "lifecycle": ["draft", "submitted", "approved"]
   },
@@ -159,6 +160,10 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
   defaults, instances, annotations, fidelity, `url`), render inside their own
   `frame: { width, height }`, and appear in their own canvas section. See §2.4
   for how their `url` resolves.
+- `group` (optional, free text) — the section this page belongs to
+  ("Onboarding", "Approvals"). The canvas clusters page areas by it, groups in
+  first-appearance order, under a quiet heading; ungrouped pages come last,
+  under none. It is presentation only — nothing resolves against it.
 - `template` (optional) — an informational grouping id (§1.2). Nothing reads
   it to decide how the page renders.
 - `fidelity` (optional: `static` | `navigable` | `interactive`) declares how
@@ -168,6 +173,14 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
 - The full variant space is `dimensions` (the cartesian product, addressable
   at runtime by editing the URL). `instances` is the *curated subset* shown
   on the canvas — coverage made visible without combinatorial explosion.
+- **`dimensions` and `instances` are both optional.** A page with no
+  dimensions is a first-class page: one screen, one card on the canvas, at its
+  defaults — the equivalent of a single frame in a design file. A page with
+  dimensions but no `instances` shows one card too, at its defaults. Declare
+  an axis when a reviewer must compare its values side by side, and pin the
+  handful of instances that are worth reviewing; a viewer MUST NOT treat a
+  page without dimensions or instances as incomplete, and a conforming
+  validator MUST NOT warn about either.
 - `defaults` fill in unspecified dimensions everywhere (instances, scenario
   steps, deep links).
 
@@ -345,6 +358,14 @@ template is drift: state the manifest doesn't know about (§3, player).
 A relative `url` (starting with `/`) is resolved against `viewer.app`
 (§1.8); an absolute one (`https://…`) is used as-is, e.g. for a page served
 from a different origin.
+
+The contract runs both ways, which is what keeps dimension counts honest: an
+app parameter that is not a declared dimension simply stays out of the `url`
+template and keeps its app-side default. For data-heavy pages, bundle the
+seeds behind one named scene instead of promoting each of them to an axis —
+`?scene=empty-org` rather than `?users=0&teams=0&invites=0` — so the page
+declares the two or three axes a reviewer actually compares (see the skill's
+"Dataset as a dimension").
 
 ### 2.2 Targets
 
