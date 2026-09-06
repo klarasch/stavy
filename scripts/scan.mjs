@@ -3,10 +3,11 @@
 //
 // Visits every state the manifest cares about (pinned instances, scenario
 // steps, note anchors) at the prototype's own URL, asserts that every target
-// referenced for that state exists, measures where it is, and takes the
+// referenced for that state exists, scrolls the state's first required target
+// into view if it's below the fold, measures where it is, and takes the
 // snapshot the canvas shows. Writes:
 //   <out>/<page>__<dim=value>__….png       one per state
-//   <out>/index.json                         instanceKey → { file, width, height, targets, missing }
+//   <out>/index.json                         instanceKey → { file, width, height, targets, missing, scrolled }
 //
 //   node scripts/scan.mjs [stavy.json] [--url http://localhost:5173] [--app /base] [--out public/snapshots]
 //                         [--only <pageId>] [--dpr 1] [--dark]
@@ -17,6 +18,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs"
 import { resolve, dirname } from "node:path"
 import { chromium } from "playwright"
+import { isOutsideViewport } from "./lib/viewport.mjs"
 
 const argv = process.argv.slice(2)
 const opt = (name, def) => {
@@ -122,6 +124,32 @@ for (const [key, s] of states) {
   await page.waitForTimeout(300)
   const required = [...s.required]
   const targets = [...new Set([...required, ...s.optional])]
+  // Scroll the state's first required target (a scenario step or a note, whichever
+  // this state exists for) into view before measuring and screenshotting — otherwise
+  // a target below the fold (a selected row deep in a list) renders a thumbnail that
+  // shows nothing selected. The "is it outside the viewport" decision runs in Node
+  // (isOutsideViewport, unit-tested in tests/unit/viewport.unit.ts) against a rect
+  // fetched from the page; only the query + the actual scroll run in the browser.
+  // scrollIntoView handles nested scrollers natively. Boxes are measured after the
+  // scroll, so they stay consistent with what the screenshot shows.
+  let scrolled = false
+  if (required[0]) {
+    const sel = selectorFor(required[0])
+    const rect = await page.evaluate((sel) => {
+      let el = null
+      try {
+        el = document.querySelector(sel)
+      } catch {}
+      if (!el) return null
+      const r = el.getBoundingClientRect()
+      return { top: r.top, left: r.left, bottom: r.bottom, right: r.right }
+    }, sel)
+    if (rect && isOutsideViewport(rect, W, H)) {
+      await page.evaluate((sel) => document.querySelector(sel)?.scrollIntoView({ block: "center", inline: "nearest" }), sel)
+      await page.waitForTimeout(150) // let the scroll/layout settle before measuring
+      scrolled = true
+    }
+  }
   const boxes = await page.evaluate(
     ({ targets, selectors, W, H }) => {
       const out = {}
@@ -147,7 +175,7 @@ for (const [key, s] of states) {
   n++
   const missing = boxes.missing.filter((t) => required.includes(t))
   const absent = boxes.missing.filter((t) => !required.includes(t))
-  index[key] = { file, width: W, height: H, targets: boxes.out, ...(missing.length ? { missing } : {}), ...(absent.length ? { absent } : {}), at: new Date().toISOString() }
+  index[key] = { file, width: W, height: H, targets: boxes.out, ...(missing.length ? { missing } : {}), ...(absent.length ? { absent } : {}), ...(scrolled ? { scrolled: true } : {}), at: new Date().toISOString() }
   const bad = missing.length > 0 || (status && status >= 400)
   if (bad) failures++
   const mark = bad ? "✗" : "✓"

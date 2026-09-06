@@ -222,6 +222,8 @@ export interface SnapshotEntry {
   missing?: string[]
   /** Optional targets (annotations) not present on this state — no pin is drawn; not a failure */
   absent?: string[]
+  /** The scan scrolled the state's first required target into view before measuring/capturing (it was below the fold) */
+  scrolled?: boolean
   /** ISO timestamp of the scan */
   at?: string
 }

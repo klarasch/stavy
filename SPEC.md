@@ -542,12 +542,14 @@ A workspace SHOULD ship:
 - **`scan`** (`scripts/scan.mjs`, `npm run scan`) — the contract check and
   the snapshots, one Playwright pass against a running dev/preview server.
   Visits every state that matters (pinned instances ∪ scenario step states ∪
-  note anchors), asserts every referenced target exists at that state,
-  measures each found target's box as a fraction of the frame, and
-  screenshots the state. Writes `public/snapshots/index.json` (instanceKey →
-  `{ file, width, height, targets, missing }`) and one PNG per state. Exits 1
-  when a target is missing or a state fails to load — that is the contract
-  breaking, made visible in CI.
+  note anchors), asserts every referenced target exists at that state, scrolls
+  the state's first required target into view first if it's outside the
+  viewport (so a target below the fold still shows as selected in the
+  thumbnail), measures each found target's box as a fraction of the frame,
+  and screenshots the state. Writes `public/snapshots/index.json` (instanceKey
+  → `{ file, width, height, targets, missing, scrolled }`) and one PNG per
+  state. Exits 1 when a target is missing or a state fails to load — that is
+  the contract breaking, made visible in CI.
 - **`validate`** (`scripts/validate.mjs`, `npm run validate`) — static
   checks only, never reads the prototype's source: manifest shape against
   `spec/stavy.schema.json`, cross-references (templates, scenario pages,
