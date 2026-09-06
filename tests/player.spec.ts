@@ -17,7 +17,11 @@ test("switching a dimension rewrites the frame url", async ({ page }) => {
   await page.getByRole("button", { name: /Data state/ }).click()
   await page.getByRole("option", { name: "Empty" }).click()
   await expect(page).toHaveURL(/d_state=empty/)
-  await expect(page.locator("iframe.ps-frame")).toHaveAttribute("src", /state=empty/)
+  // The frame navigates client-side now (pushState, not a `src` rewrite — see
+  // navigateFrame in frame.ts), so the live URL is asserted through the frame's
+  // own window rather than the iframe element's `src` attribute.
+  const frame = page.locator("iframe.ps-frame")
+  await expect.poll(() => frame.evaluate((el: HTMLIFrameElement) => el.contentWindow?.location.href)).toContain("state=empty")
   await expect(page.frameLocator("iframe.ps-frame").getByText("No expenses yet", { exact: false })).toBeVisible()
 })
 
@@ -42,4 +46,107 @@ test("the inspector resolves the element under the pointer inside the frame", as
   expect(target).not.toBeNull()
   await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height / 2)
   await expect(page.getByText("ApproveButton", { exact: true })).toBeVisible()
+})
+
+// Item 1 (adopter feedback): tour steps used to rewrite the iframe's `src`,
+// which the browser treats as a document load — the frame re-bootstrapped on
+// every step and any state built up in the app was lost. navigateFrame()
+// (frame.ts) pushes into the frame's own history and dispatches a popstate
+// instead, for a same-origin frame with a live document.
+test("tour steps navigate the frame client-side, without reloading it", async ({ page }) => {
+  await page.goto("/stavy/?p=dashboard&tour=employee-submits&ts=0")
+  const frame = page.locator("iframe.ps-frame")
+  await frame.evaluate((el: HTMLIFrameElement) => {
+    ;(el.contentWindow as unknown as { __stamp?: number }).__stamp = 1
+  })
+  // employee-submits: dashboard -> submit-expense (details/receipt/review/done) -> expenses.
+  // Every step but the page itself changes; a real navigation anywhere in
+  // there would reset the stamp and add a navigation entry.
+  for (let i = 1; i <= 5; i++) {
+    await page.getByRole("button", { name: "Next" }).click()
+    await expect(page).toHaveURL(new RegExp(`[?&]ts=${i}(&|$)`))
+  }
+  const stamp = await frame.evaluate((el: HTMLIFrameElement) => (el.contentWindow as unknown as { __stamp?: number }).__stamp)
+  expect(stamp).toBe(1)
+  const navCount = await frame.evaluate((el: HTMLIFrameElement) => el.contentWindow?.performance.getEntriesByType("navigation").length)
+  expect(navCount).toBe(1)
+})
+
+// Item 2 (adopter feedback): a deep link straight into a tour step, with no
+// d_* params yet, used to render the page's defaults until Next was pressed.
+// expense-detail defaults to role=employee (no ApproveButton); step 2 of
+// manager-approves pins role=manager, so the step's own dims must apply
+// immediately.
+test("a deep link into a tour step resolves dims from the step, not the page defaults", async ({ page }) => {
+  await page.goto("/stavy/?p=expense-detail&tour=manager-approves&ts=2")
+  await expect(page.frameLocator("iframe.ps-frame").locator('[data-proto="ApproveButton"]')).toBeVisible()
+})
+
+// Item 2, continued: the tour is the intent, so a stale/mismatched `p` in the
+// URL (here: dashboard, but step 2 of manager-approves is expense-detail)
+// must not win over the step's own page.
+test("a deep link whose page disagrees with the tour step uses the step's page", async ({ page }) => {
+  await page.goto("/stavy/?p=dashboard&tour=manager-approves&ts=2")
+  await expect(page.frameLocator("iframe.ps-frame").locator('[data-proto="ApproveButton"]')).toBeVisible()
+})
+
+// Item 3 (adopter feedback): after clicking inside the app frame, the tour's
+// arrow-key hotkeys stopped working. bridgeFrameKeys (frame.ts) forwards the
+// frame's keydown/keyup to the host window — but it listened in the bubble
+// phase. Root cause: a focused widget with its own keyboard handling (a UI
+// kit's listbox, roving-tabindex menu, a modal focus trap — anything managing
+// its own arrow-key navigation) commonly calls stopPropagation() on keydown so
+// it doesn't also trigger page-level shortcuts. That stops the event on its
+// way up through bubble listeners, exactly where the bridge used to sit —
+// silently losing the hotkey the moment focus lands on such a widget. The
+// plain demo has no such widget, so this simulates one the way a real design
+// system's component does.
+test("arrow keys still step the tour when a focused frame widget stops keydown propagation", async ({ page }) => {
+  await page.goto("/stavy/?p=dashboard&d_role=manager&d_state=loaded&tour=manager-approves&ts=0")
+  const dashboardTab = page.frameLocator("iframe.ps-frame").getByRole("button", { name: "Dashboard" })
+  await dashboardTab.evaluate((el) => el.addEventListener("keydown", (e) => e.stopPropagation()))
+  await dashboardTab.click()
+  await page.keyboard.press("ArrowRight")
+  await expect(page).toHaveURL(/[?&]ts=1(&|$)/, { timeout: 3000 })
+})
+
+// Item 3, continued: the bridge must still never hijack typing — the capture-
+// phase fix must not turn into "every keystroke gets forwarded regardless of
+// where it lands".
+test("typing inside a frame input is never hijacked by tour hotkeys", async ({ page }) => {
+  await page.goto("/stavy/?p=submit-expense&tour=employee-submits&ts=1")
+  const merchant = page.frameLocator("iframe.ps-frame").locator("#merchant")
+  await merchant.click()
+  // ArrowLeft/ArrowRight are the tour's own hotkeys — inside a text field they
+  // must move the cursor, never step the tour. Checked after each key so a
+  // stray Prev-then-Next couldn't mask a real hijack.
+  await merchant.press("ArrowLeft")
+  await expect(page).toHaveURL(/[?&]ts=1(&|$)/)
+  await merchant.press("ArrowRight")
+  await expect(page).toHaveURL(/[?&]ts=1(&|$)/)
+})
+
+// Item 4: navigateFrame (Item 1) makes the frame's document persist across
+// ordinary steps, so useFrameDocument's load-listener/poll matters less day
+// to day — but drift recovery still does a real `iframe.src` reload
+// (resetFrame in PageView.tsx), and `doc` must still pick up that new
+// document afterwards (the halo, the inspector and the hotkey bridge all read
+// through it).
+test("drift is detected and reset returns to the registered state with a live document", async ({ page }) => {
+  await page.goto("/stavy/?p=dashboard&d_role=manager&d_state=loaded")
+  await expect(page.frameLocator("iframe.ps-frame").locator('[data-proto="ViewQueueLink"]')).toBeVisible()
+
+  // The prototype navigating itself somewhere the manifest doesn't know about.
+  await page.locator("iframe.ps-frame").evaluate((el: HTMLIFrameElement) => {
+    const win = el.contentWindow as unknown as { history: History; dispatchEvent: (e: Event) => boolean; PopStateEvent: typeof PopStateEvent }
+    win.history.pushState({}, "", "/somewhere-not-registered")
+    win.dispatchEvent(new win.PopStateEvent("popstate"))
+  })
+  await expect(page.getByText("off the map")).toBeVisible()
+
+  await page.getByText("reset", { exact: true }).click()
+  await expect(page.getByText("off the map")).toHaveCount(0)
+  // The reset was a real reload (not navigateFrame) — confirm the frame's
+  // document came back live, not just that the drift chip cleared.
+  await expect(page.frameLocator("iframe.ps-frame").locator('[data-proto="ViewQueueLink"]')).toBeVisible()
 })

@@ -44,6 +44,39 @@ export function frameHref(iframe: HTMLIFrameElement | null | undefined): string 
   }
 }
 
+/**
+ * Point the frame at `src` without a document load when it can be avoided.
+ *
+ * A same-origin frame with a live document shares a scriptable history, so we
+ * push the URL into its history and dispatch `popstate` — exactly what a link
+ * click inside the app does, and what its client-side router listens for. No
+ * re-bootstrap, no white flash, and app state built up so far survives, so a
+ * walkthrough step reads as a state change rather than a reload.
+ *
+ * Falls back to a real navigation for the first load (about:blank), a
+ * cross-origin target, or any frame we cannot script.
+ */
+export function navigateFrame(iframe: HTMLIFrameElement, src: string): void {
+  const win = frameWin(iframe)
+  if (win) {
+    try {
+      const target = new URL(src, win.location.href)
+      const isBlank = win.location.href === "about:blank"
+      if (!isBlank && target.origin === win.location.origin) {
+        win.history.pushState({}, "", target.href)
+        // Built in the frame's own realm: an event from the host's constructor
+        // is a different class inside the frame, which some listeners reject.
+        const Ctor = (win as unknown as { PopStateEvent: typeof PopStateEvent }).PopStateEvent
+        win.dispatchEvent(new Ctor("popstate"))
+        return
+      }
+    } catch {
+      /* cross-origin or detached: fall through to a document load */
+    }
+  }
+  iframe.src = src
+}
+
 /** Rendered scale of the frame: on the canvas the iframe is CSS-scaled, so 1 frame px ≠ 1 screen px. */
 export function frameScale(iframe: HTMLIFrameElement): number {
   const w = iframe.offsetWidth
@@ -169,10 +202,17 @@ export function bridgeFrameKeys(doc: Document | null): () => void {
     const consumed = !window.dispatchEvent(ev)
     if (consumed) e.preventDefault()
   }
-  doc.addEventListener("keydown", onKey)
-  doc.addEventListener("keyup", onKey)
+  // Capture phase, not bubble: a focused widget inside the prototype (a UI
+  // kit's listbox, roving-tabindex menu, modal focus trap — anything that
+  // manages its own arrow-key navigation) commonly calls stopPropagation() on
+  // its own keydown handling so it doesn't also trigger page-level shortcuts.
+  // That stops the event on its way *up* through bubble listeners, which is
+  // exactly where a bubble-phase listener here would sit. Capture runs first,
+  // on the way down from the document, before any such handler gets a chance.
+  doc.addEventListener("keydown", onKey, { capture: true })
+  doc.addEventListener("keyup", onKey, { capture: true })
   return () => {
-    doc.removeEventListener("keydown", onKey)
-    doc.removeEventListener("keyup", onKey)
+    doc.removeEventListener("keydown", onKey, { capture: true })
+    doc.removeEventListener("keyup", onKey, { capture: true })
   }
 }
