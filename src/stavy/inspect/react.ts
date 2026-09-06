@@ -35,7 +35,7 @@ const HARD_EXCLUDE =
  * thing as "the kit's internals", and an app's own `Button` must not collapse.
  */
 const KIT_PRIMITIVES =
-  /^(Button|Input|TextField|Menu|MenuItem|Listbox|Option|Select|Switch|Slider|Tabs|Tab|Badge|Popup|Modal|Backdrop|Snackbar|ClickAwayListener|Portal)$/
+  /^(Button|Input|TextField|Menu|MenuItem|Listbox|Option|Select|Switch|Slider|Tabs|Tab|Badge|Popup|Modal|Backdrop|Snackbar|ClickAwayListener)$/
 
 /** Drop a bundler's numeric collision suffix ("Button2") before matching a name against the lists above. */
 function debundled(name: string): string {

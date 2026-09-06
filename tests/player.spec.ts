@@ -95,4 +95,34 @@ test.describe("inspector", () => {
     await expect(background).toContainText("var(--primary)")
     await expect(background).toContainText("background-color ←")
   })
+
+  // A design system that needs more than manifest data points
+  // `viewer.inspect.module` at a same-origin ES module. Both the manifest and
+  // the module are stubbed here, so the demo itself ships neither.
+  test("a viewer.inspect.module is imported and merged over the built-in adapter", async ({ page }) => {
+    const module = `export default {
+      designSystem: {
+        detect: () => true,
+        provenance: (el, prop) => ({ token: "--probe-token", chain: ["var(--probe-" + prop + ")"], raw: "probe", inheritedFrom: null }),
+      },
+    }`
+    await page.route("**/stavy.json", async (route) => {
+      const manifest = await (await route.fetch()).json()
+      manifest.viewer = { ...manifest.viewer, inspect: { tokenPattern: "^--probe-", module: "/stavy-inspect-probe.js" } }
+      await route.fulfill({ json: manifest })
+    })
+    await page.route("**/stavy-inspect-probe.js", (route) => route.fulfill({ body: module, contentType: "text/javascript" }))
+
+    await page.goto("/stavy/?p=expense-detail&d_role=manager&d_lifecycle=submitted&i=1")
+    const at = await targetCentre(page, "ApproveButton")
+    await page.mouse.move(at.x, at.y)
+    await page.mouse.click(at.x, at.y)
+    const panel = page.locator(".ps-inspect-panel")
+    await expect(panel.getByText("pinned", { exact: true })).toBeVisible()
+    // The module's own provenance, in place of the built-in one…
+    await expect(panel).toContainText("--probe-token")
+    await expect(panel).toContainText("var(--probe-background-color)")
+    // …while everything it did not override keeps working.
+    await expect(panel.locator(".ps-crumb", { hasText: /^Button$/ })).toBeVisible()
+  })
 })

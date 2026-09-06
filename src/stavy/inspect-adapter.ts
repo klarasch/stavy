@@ -108,6 +108,32 @@ export function componentStack(el: Element, stopAt = ""): CompFrame[] {
 let modulePromise: Promise<InspectAdapterModule | null> | null = null
 
 /**
+ * Fetch a same-origin module's source and evaluate it from a blob URL.
+ *
+ * Importing the URL directly would be the obvious thing, and it is wrong here:
+ * an adopter serves this file out of their app's static folder, and a dev
+ * server that owns the module graph refuses to serve such a file as a module
+ * — loudly, with a 500 and a full-screen error overlay over the prototype.
+ * Going through a blob asks the dev server for a plain file, which every
+ * server can do, and behaves identically on a static host.
+ *
+ * The trade is that a blob URL has no base to resolve relative specifiers
+ * against, so the module must be self-contained. For a file whose whole job is
+ * to answer questions about one design system, that is not a real constraint —
+ * and it is documented in `docs/inspect-adapter.template.js`.
+ */
+async function importModule(url: string): Promise<Record<string, unknown>> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`${url} → ${res.status}`)
+  const blob = URL.createObjectURL(new Blob([await res.text()], { type: "text/javascript" }))
+  try {
+    return await import(/* @vite-ignore */ blob)
+  } finally {
+    URL.revokeObjectURL(blob)
+  }
+}
+
+/**
  * Import the workspace's `viewer.inspect.module`, if it declared one, and merge
  * its partial adapter over the defaults. The viewer is a static bundle served
  * next to the prototype, so a runtime `import()` of a same-origin file is the
@@ -125,7 +151,7 @@ export function loadInspectModule(): Promise<boolean> {
         console.warn(`[stavy] viewer.inspect.module must be same-origin, ignored — ${spec}`)
         return null
       }
-      const mod = await import(/* @vite-ignore */ url)
+      const mod = await importModule(url)
       const partial = (mod.default ?? mod) as InspectAdapterModule
       if (!partial || typeof partial !== "object") {
         console.warn(`[stavy] viewer.inspect.module ${spec} has no default export shaped like an adapter, ignored`)

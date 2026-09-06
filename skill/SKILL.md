@@ -209,3 +209,20 @@ scenario steps and links stay short.
   as the real app would render it — a route, real components, wired to a
   named dataset — then register the URL. Don't build a one-off screen just to
   have something to point Stavy at.
+
+## Inspector on your design system
+
+The inspector reads the prototype through the frame — DOM, fiber tree, CSSOM —
+so it hardcodes no design system, including the one this repo's demo uses.
+What it cannot work out unaided is your names. Add `viewer.inspect` to the
+manifest (SPEC §1.8): `kits[]` with a `componentPrefix` and the `classPattern`
+your kit stamps on component roots (capture group 1 = the component name),
+`tokenPattern` / `privateTokenPattern` for your CSS custom properties, and
+`typeScale`. That is data, no code, and it is what turns a hex value into a
+token name and an anonymous `forwardRef` wrapper into `AcButton`. Detection is
+per frame document, so apps on different stacks coexist in one workspace.
+Without it the inspector still reports computed values and the `var()` chain
+behind them. For the long tail there is `viewer.inspect.module`, a same-origin
+ES module merged over the defaults. Recipe, worked example, ten-minute
+checklist and troubleshooting: `docs/INSPECT-ADAPTERS.md`; a fill-in-the-blanks
+module: `docs/inspect-adapter.template.js`.
