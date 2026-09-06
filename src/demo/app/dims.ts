@@ -14,6 +14,7 @@ const ROUTES: Record<string, string> = {
   expenses: "/expenses",
   "expense-detail": "/expenses/:id",
   "submit-expense": "/submit",
+  policy: "/policy",
   "approval-actions": "/components/approval-actions",
   "flow-progress": "/components/flow-progress",
   "work-queue": "/components/work-queue",

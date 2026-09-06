@@ -1,5 +1,5 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom"
-import { DashboardRoute, ExpensesRoute, ExpenseDetailRoute, SubmitExpenseRoute } from "./demo/app/routes"
+import { DashboardRoute, ExpensesRoute, ExpenseDetailRoute, SubmitExpenseRoute, PolicyRoute } from "./demo/app/routes"
 import ApprovalActionsComponent from "./demo/components/approval-actions"
 import FlowProgressComponent from "./demo/components/flow-progress"
 import WorkQueueComponent from "./demo/components/work-queue"
@@ -12,6 +12,7 @@ export default function App() {
         <Route path="/expenses" element={<ExpensesRoute />} />
         <Route path="/expenses/:id" element={<ExpenseDetailRoute />} />
         <Route path="/submit" element={<SubmitExpenseRoute />} />
+        <Route path="/policy" element={<PolicyRoute />} />
         <Route path="/components/approval-actions" element={<ApprovalActionsComponent />} />
         <Route path="/components/flow-progress" element={<FlowProgressComponent />} />
         <Route path="/components/work-queue" element={<WorkQueueComponent />} />

@@ -5,6 +5,7 @@ import { DashboardTemplate } from "../templates/DashboardTemplate"
 import { ListTemplate } from "../templates/ListTemplate"
 import { DetailTemplate } from "../templates/DetailTemplate"
 import { FormFlowTemplate } from "../templates/FormFlowTemplate"
+import { PolicyTemplate } from "../templates/PolicyTemplate"
 import { useParams } from "react-router-dom"
 import { useAppNav, useDims } from "./dims"
 
@@ -37,6 +38,13 @@ export function ExpenseDetailRoute() {
   const dims = { ...useDims(EXPENSE_DETAIL_DEFAULTS), expense: id }
   const nav = useAppNav()
   return <DetailTemplate dims={dims} nav={nav} />
+}
+
+/** A screen with no dimensions at all: same copy for everyone, one state. */
+export function PolicyRoute() {
+  const dims = useDims({})
+  const nav = useAppNav()
+  return <PolicyTemplate dims={dims} nav={nav} />
 }
 
 export function SubmitExpenseRoute() {

@@ -70,11 +70,15 @@ describe("site map edges", () => {
     expect(scenarioEdges([scenario("s", "S", ["a", "hidden", "b"])], (id) => id !== "hidden")).toEqual([])
   })
 
-  it("routes a distant same-row hop under the row instead of through its neighbours", () => {
+  it("routes a hop that skips its neighbours around them, not through them", () => {
     const a = { x: 0, y: 0, w: 100, h: 60 }
-    const far = { x: 500, y: 0, w: 100, h: 60 }
-    const next = { x: 160, y: 0, w: 100, h: 60 }
-    expect(edgePath(a, far).startsWith("M 50 60")).toBe(true)
-    expect(edgePath(a, next).startsWith("M 100 30")).toBe(true)
+    // along the row: leaves the bottom edge and swings under
+    expect(edgePath(a, { x: 500, y: 0, w: 100, h: 60 }).startsWith("M 50 60")).toBe(true)
+    // to the next node along: leaves the right edge
+    expect(edgePath(a, { x: 160, y: 0, w: 100, h: 60 }).startsWith("M 100 30")).toBe(true)
+    // skipping a whole row: leaves the left edge and brackets down the margin
+    expect(edgePath(a, { x: 0, y: 300, w: 100, h: 60 }).startsWith("M 0 30")).toBe(true)
+    // the next row down: leaves the bottom edge
+    expect(edgePath(a, { x: 0, y: 90, w: 100, h: 60 }).startsWith("M 50 60")).toBe(true)
   })
 })

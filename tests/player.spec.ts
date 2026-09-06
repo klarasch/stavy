@@ -8,7 +8,7 @@ import { test, expect } from "@playwright/test"
 test("the frame shows the prototype at the page url for the dims", async ({ page }) => {
   await page.goto("/stavy/?p=expense-detail&d_role=manager&d_lifecycle=submitted")
   const frame = page.locator("iframe.ps-frame")
-  await expect(frame).toHaveAttribute("src", /\/expenses\/exp-2101\?role=manager&lifecycle=submitted&density=comfortable&locale=en-US&overlay=none$/)
+  await expect(frame).toHaveAttribute("src", /\/expenses\/exp-2101\?role=manager&lifecycle=submitted&locale=en-US&overlay=none$/)
   await expect(page.frameLocator("iframe.ps-frame").locator('[data-proto="ApproveButton"]')).toBeVisible()
 })
 

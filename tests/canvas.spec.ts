@@ -7,7 +7,7 @@ test("canvas lists every page area and opens the player from a card", async ({ p
   await page.goto("/stavy/")
   await expect(page.locator("[data-canvas-root]")).toBeVisible()
   await expect(page.locator('[data-toc="page:expenses"]')).toHaveCount(1)
-  await page.getByRole("button", { name: "Expenses" }).click()
+  await page.locator(".ps-toc-item", { hasText: "Expenses list" }).click()
   // The canvas is a pan/zoom surface: the card may sit outside the window after the jump, so click it directly.
   await page.locator('[data-instance="expenses?role=employee&state=loaded"] .ps-card-shield').first().dispatchEvent("click")
   await expect(page).toHaveURL(/[?&]p=expenses(?:&|$)/)
