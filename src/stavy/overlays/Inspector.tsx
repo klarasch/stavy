@@ -21,6 +21,12 @@ import { hostRect, withWireframeLifted, frameDoc } from "../frame"
 /* Selection model                                                     */
 /* ================================================================== */
 
+/** The panel's own geometry in host viewport pixels — it dodges the pointer, so the numbers are shared. */
+const PANEL_WIDTH = 360
+const PANEL_INSET = 16
+/** Upper bound on how far down the viewport the panel can reach (`max-h` on its scroll area). */
+const PANEL_MAX_VH = 0.9
+
 interface Level {
   el: Element
   kind: "exact" | "proto"
@@ -349,6 +355,7 @@ export function Inspector({
   const [levelIdx, setLevelIdx] = useState<number | null>(null)
   const [compIdx, setCompIdx] = useState<number | null>(null)
   const [internalsOpen, setInternalsOpen] = useState(false)
+  const [side, setSide] = useState<"right" | "left">("right")
   const [alt, setAlt] = useState(false)
   const [, bump] = useState(0)
 
@@ -365,6 +372,7 @@ export function Inspector({
   }, [])
   useEffect(() => onPinChange?.(pinned?.iframe ?? null), [pinned, onPinChange])
 
+  const isPinned = !!pinned
   useEffect(() => {
     const pick = (e: MouseEvent): Picked | null => {
       // Viewer UI (pins, notes, tour cards, comment bubbles, area titles…) is never a subject of inspection.
@@ -372,7 +380,23 @@ export function Inspector({
       const h = hit(e)
       return h ? { levels: levelsFor(h.el), iframe: h.iframe, ctx: h.ctx } : null
     }
-    const onMove = (e: MouseEvent) => setHover(pick(e))
+    const onMove = (e: MouseEvent) => {
+      // The panel is a fixed card in one corner over the frame, and it grows as
+      // it fills with whatever was hovered — from about 160px tall to most of
+      // the viewport. So the act of hovering something in that corner puts the
+      // panel under the pointer that summoned it: the hover reads fine, and the
+      // click that should pin it lands on the panel instead. Hence the dodge.
+      // It only runs while nothing is pinned; once something is, the panel is
+      // what the pointer is reaching for and it must hold still.
+      if (!isPinned && e.clientY < PANEL_INSET + window.innerHeight * PANEL_MAX_VH) {
+        const band = PANEL_WIDTH + PANEL_INSET * 2
+        if (e.clientX > window.innerWidth - band) setSide("left")
+        else if (e.clientX < band) setSide("right")
+        // Anything between the two bands leaves the panel where it is, so a
+        // pointer crossing the middle cannot make it oscillate.
+      }
+      setHover(pick(e))
+    }
     const onClick = (e: MouseEvent) => {
       const p = pick(e)
       if (!p) return
@@ -401,7 +425,7 @@ export function Inspector({
       window.removeEventListener("keydown", onKey)
       window.removeEventListener("keyup", onKey)
     }
-  }, [host, hit, onClose])
+  }, [host, hit, onClose, isPinned])
 
   const picked = pinned ?? hover
   const levels = picked?.levels ?? null
@@ -466,7 +490,17 @@ export function Inspector({
         document.body
       )}
       {createPortal(
-      <div className="ps ps-glass-strong fixed right-4 top-4 w-[360px] rounded-2xl overflow-hidden" style={{ zIndex: "var(--ps-z-chrome)" }}>
+      <div
+        className="ps ps-glass-strong ps-inspect-panel fixed rounded-2xl overflow-hidden"
+        data-side={side}
+        style={{
+          zIndex: "var(--ps-z-chrome)",
+          width: PANEL_WIDTH,
+          top: PANEL_INSET,
+          left: side === "left" ? PANEL_INSET : undefined,
+          right: side === "right" ? PANEL_INSET : undefined,
+        }}
+      >
         <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--ps-border)" }}>
           <Crosshair className="size-4" style={{ color: "var(--ps-muted)" }} />
           <span className="text-[13px] font-semibold">Inspect</span>

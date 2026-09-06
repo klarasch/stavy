@@ -396,6 +396,9 @@
 .ps-props dt { color: var(--ps-muted); } .ps-props dd { margin: 0; overflow-wrap: anywhere; }
 .ps-copy { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ps-border); background: transparent; color: var(--ps-muted); font: inherit; font-size: 10.5px; cursor: pointer; }
 .ps-copy:hover { color: var(--ps-fg); background: var(--ps-hover); }
+/* the inspect panel steps aside rather than covering the pointer that summoned it */
+.ps-inspect-panel { transition: left 120ms ease, right 120ms ease; }
+@media (prefers-reduced-motion: reduce) { .ps-inspect-panel { transition: none; } }
 .ps-comp-stack { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font-size: 11px; color: var(--ps-muted); }
 
 /* ---- canvas areas: named regions that read at any zoom ---- */

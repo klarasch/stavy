@@ -43,3 +43,56 @@ test("the inspector resolves the element under the pointer inside the frame", as
   await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height / 2)
   await expect(page.getByText("ApproveButton", { exact: true })).toBeVisible()
 })
+
+// The inspector panel and what it can tell you about the prototype under it
+// (SPEC §3, "Inspector"). These sit at the bottom of the file on purpose:
+// appending keeps them out of everyone else's way.
+test.describe("inspector", () => {
+  /** Centre of a target inside the frame, in host viewport coordinates. */
+  async function targetCentre(page: import("@playwright/test").Page, proto: string) {
+    const box = await page.frameLocator("iframe.ps-frame").locator(`[data-proto="${proto}"]`).boundingBox()
+    expect(box).not.toBeNull()
+    return { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 }
+  }
+
+  // The panel is fixed in a corner over the frame and grows as it fills, so
+  // hovering something in that corner used to put the panel under the pointer
+  // that summoned it — the hover read fine and the click landed on the panel.
+  test("clicking pins the selection, even where the panel would cover it", async ({ page }) => {
+    await page.goto("/stavy/?p=expense-detail&d_role=manager&d_lifecycle=submitted&i=1")
+    const panel = page.locator(".ps-inspect-panel")
+    await expect(panel).toBeVisible()
+    // A target in the panel's own corner: the case that used to fail.
+    const at = await targetCentre(page, "ApproveButton")
+    expect(at.x).toBeGreaterThan(page.viewportSize()!.width - 400)
+    await page.mouse.move(at.x, at.y)
+    await expect(page.getByText("ApproveButton", { exact: true })).toBeVisible()
+    await expect(panel).toHaveAttribute("data-side", "left") // stepped aside
+    await page.mouse.click(at.x, at.y)
+    await expect(panel.getByText("pinned", { exact: true })).toBeVisible()
+    // Pinned, the panel holds still — it is what the pointer is reaching for now.
+    await page.mouse.move(at.x - 4, at.y)
+    await expect(panel).toHaveAttribute("data-side", "left")
+  })
+
+  // The demo is a CSS-variables design system like any other: the token behind
+  // a value is read out of the frame's CSSOM, not guessed from a class name.
+  test("a pinned element reports its component, props and the token behind its background", async ({ page }) => {
+    await page.goto("/stavy/?p=expense-detail&d_role=manager&d_lifecycle=submitted&i=1")
+    const at = await targetCentre(page, "ApproveButton")
+    await page.mouse.move(at.x, at.y)
+    await page.mouse.click(at.x, at.y)
+    const panel = page.locator(".ps-inspect-panel")
+    await expect(panel.getByText("pinned", { exact: true })).toBeVisible()
+
+    // The React component, with the props its author wrote.
+    await expect(panel.locator(".ps-crumb", { hasText: /^Button$/ })).toBeVisible()
+    await expect(panel.locator("pre")).toContainText("<Button onClick=")
+
+    // Background: a real value, and the custom property it resolves to.
+    const background = panel.locator(".ps-kv div", { has: page.locator("dt", { hasText: /^background$/ }) })
+    await expect(background).toContainText(/#[0-9a-f]{6}/)
+    await expect(background).toContainText("var(--primary)")
+    await expect(background).toContainText("background-color ←")
+  })
+})
