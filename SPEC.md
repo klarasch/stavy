@@ -290,6 +290,47 @@ root, under a sub-path, or on GitHub Pages. Set `app` explicitly only when the
 prototype is genuinely served from somewhere other than the viewer's parent
 path (a different origin during local dev, say).
 
+**`viewer.inspect` — describing the design system to the inspector.** The
+inspector reads the frame's live CSSOM, so a value's token comes out of the
+cascade and its `var()` chain rather than from any knowledge of a particular
+kit. What it cannot work out on its own is which custom properties *count* as
+that kit's tokens, what its components are called, and what its type scale is.
+That is all data:
+
+```jsonc
+"viewer": {
+  "inspect": {
+    // Component libraries: how to recognise one, and how to name a component
+    // that is an anonymous `forwardRef` wrapper (capture group 1 is the name).
+    "kits": [{ "name": "Acme", "componentPrefix": "Ac", "classPattern": "^(Ac[A-Z]\\w*)-module_" }],
+    "tokenPattern": "^--acme-",        // where a var() chain stops: this is a design token
+    "privateTokenPattern": "^--acme-_", // …and this is a private primitive, never shown as a token
+    "spacingTokenPattern": "^--acme-spacing-",  // optional; defaults to tokenPattern
+    "typeScale": [{ "name": "body", "family": "Inter", "size": 14, "weight": 400, "lineHeight": 1.5 }],
+    "componentAttrs": ["data-slot"],
+    "module": "/stavy-inspect.js"      // optional escape hatch, see below
+  }
+}
+```
+
+Regex fields are strings, compiled once; an invalid one is warned about and
+ignored. `lineHeight` is a ratio (1.5) or px (21).
+
+Detection is per frame document and runs at inspect time, so a workspace whose
+pages come from more than one app gets the right answer per page. A document
+that declares a `tokenPattern` token on its root uses that configuration; one
+that declares the utility-class convention's semantic properties uses the
+built-in preset for those; anything else falls through to the generic path,
+which still reports computed values with the `var()` chain behind them. So
+`viewer.inspect` is genuinely optional — it makes the answers better, it is not
+what makes them exist.
+
+`module` is the escape hatch for what data cannot say: a same-origin ES module
+the viewer `import()`s at startup, default-exporting `{ framework?,
+designSystem? }` partials that are merged over the built-in adapter. The viewer
+is a static build, so a runtime import is the only plug there is. See
+`docs/INSPECT-ADAPTERS.md` for both recipes, with a worked example.
+
 ### 1.9 Prototypes (informational slices)
 
 A **prototype** names a subset of the workspace — purely informational, for
@@ -495,16 +536,34 @@ A conforming viewer SHOULD provide:
   never confused in a demo.
 - **Inspector**: dev mode, on the player and on canvas thumbnails while
   hovered. Works entirely through the frame (§2.3): for the focused element
-  it answers *which React component is this, with which props* (read from
-  the frame's fiber tree — needs `esbuild.keepNames` or equivalent in
-  production builds so component names survive minification), *which
-  classes/tokens produce what I see* (the element's classes, grouped,
-  copyable; type/spacing tokens derived from computed style), and *where does
-  this color come from* (the class on this element or the ancestor it
-  inherits from, and the token variable behind it). Plus the target's
-  identity, DOM attributes, the resolved prototype URL of the exact state,
-  and — in dev — links to the manifest and template source. Any level from
-  the exact element outward through every semantic ancestor is selectable.
+  it answers *which component is this, with which props* (read from the
+  frame's fiber tree — needs `esbuild.keepNames` or equivalent in production
+  builds so component names survive minification), *which classes/tokens
+  produce what I see* (the element's classes, grouped, copyable; type named
+  against the design system's own scale where one is declared), and *where
+  does this value come from* (the winning declaration in the frame's CSSOM,
+  followed through its `var()` chain to the design token, and the class on
+  this element or the ancestor it inherits from where the kit encodes tokens
+  in class names). Plus the target's identity, DOM attributes, the resolved
+  prototype URL of the exact state, and — in dev — links to the manifest and
+  template source. Any level from the exact element outward through every
+  semantic ancestor is selectable.
+- **The inspector is adapter-shaped, in two halves.** A *framework* half turns
+  a DOM node into components with props (the reference viewer ships React); a
+  *design system* half turns a computed value into the token, class or scale
+  entry behind it. Neither half may hardcode a particular design system: what
+  a viewer knows about one comes from `viewer.inspect` (§1.8) — data, no code
+  — with `viewer.inspect.module` as the escape hatch, and detection per frame
+  document so apps on different stacks coexist in one workspace. A viewer
+  SHOULD name a component that has no name of its own: a library whose
+  components are anonymous `forwardRef` wrappers still stamps a class on each
+  component's root node, and the fiber that *introduced* that class into the
+  tree (rather than merely passing it down) is the component. A viewer SHOULD
+  hide a design system's own internal components behind a toggle and select
+  the innermost user-facing one by default. A viewer MUST NOT report a name it
+  guessed from a value — an 8px padding is not evidence of any particular
+  utility class — and MUST read computed style and CSSOM through the frame's
+  own window.
 - **Comments** (optional, viewer-level, never in the manifest): conversation
   anchored to `page + dims + target + the exact element's child path`
   (position in % of that element, so bubbles survive browser zoom and
