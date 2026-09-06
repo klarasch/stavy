@@ -149,6 +149,8 @@ test("drift is detected and reset returns to the registered state with a live do
   // The reset was a real reload (not navigateFrame) — confirm the frame's
   // document came back live, not just that the drift chip cleared.
   await expect(page.frameLocator("iframe.ps-frame").locator('[data-proto="ViewQueueLink"]')).toBeVisible()
+})
+
 // The inspector panel and what it can tell you about the prototype under it
 // (SPEC §3, "Inspector"). These sit at the bottom of the file on purpose:
 // appending keeps them out of everyone else's way.
