@@ -31,7 +31,7 @@ import type { ToolbarAnchor } from "./types"
 import { CommentLayer } from "./comments/CommentLayer"
 import { CommentsPanel } from "./comments/CommentsPanel"
 import { useComments } from "./comments/store"
-import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt } from "./frame"
+import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt, navigateFrame } from "./frame"
 
 const ANCHORS: ToolbarAnchor[] = ["bottom", "top", "bottom-left", "bottom-right", "top-left", "top-right", "bar-bottom", "bar-top"]
 
@@ -106,7 +106,7 @@ export function PageView() {
     const m = cur ? matchAppUrl(cur) : null
     // Already showing this exact state (e.g. we just followed the frame there): don't reload.
     if (m && m.page.id === page.id && dimsEqual(m.dims, dims)) return
-    iframe.src = desired
+    navigateFrame(iframe, desired)
     setDrift(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [iframe, desired])
@@ -252,7 +252,11 @@ export function PageView() {
     <div className="h-screen relative">
       <div className="ps-viewport h-full relative" data-bar={isBar ? barSide : undefined}>
         <div className="ps-player">
-          <iframe ref={setIframe} className="ps-frame" title={page.label} src={desired ?? undefined} />
+          {/* No `src` prop: the effect above loads the first state and then drives
+              later ones through the frame's own router (navigateFrame). A React-
+              managed `src` would rewrite the attribute on every dims change, and
+              the browser treats that as a document load. */}
+          <iframe ref={setIframe} className="ps-frame" title={page.label} />
           {inspectOn && !hidden && <div ref={setShield} className="ps-shield" data-mode="inspect" />}
           <CommentLayer iframe={iframe} doc={doc} pageId={page.id} dims={dims} placing={placing} onPlaced={() => setPlacing(false)} openId={openCommentId} onOpenChange={(id) => setParam("c", id)} />
         </div>

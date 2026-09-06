@@ -17,7 +17,11 @@ test("switching a dimension rewrites the frame url", async ({ page }) => {
   await page.getByRole("button", { name: /Data state/ }).click()
   await page.getByRole("option", { name: "Empty" }).click()
   await expect(page).toHaveURL(/d_state=empty/)
-  await expect(page.locator("iframe.ps-frame")).toHaveAttribute("src", /state=empty/)
+  // The frame navigates client-side now (pushState, not a `src` rewrite — see
+  // navigateFrame in frame.ts), so the live URL is asserted through the frame's
+  // own window rather than the iframe element's `src` attribute.
+  const frame = page.locator("iframe.ps-frame")
+  await expect.poll(() => frame.evaluate((el: HTMLIFrameElement) => el.contentWindow?.location.href)).toContain("state=empty")
   await expect(page.frameLocator("iframe.ps-frame").getByText("No expenses yet", { exact: false })).toBeVisible()
 })
 
@@ -42,4 +46,28 @@ test("the inspector resolves the element under the pointer inside the frame", as
   expect(target).not.toBeNull()
   await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height / 2)
   await expect(page.getByText("ApproveButton", { exact: true })).toBeVisible()
+})
+
+// Item 1 (adopter feedback): tour steps used to rewrite the iframe's `src`,
+// which the browser treats as a document load — the frame re-bootstrapped on
+// every step and any state built up in the app was lost. navigateFrame()
+// (frame.ts) pushes into the frame's own history and dispatches a popstate
+// instead, for a same-origin frame with a live document.
+test("tour steps navigate the frame client-side, without reloading it", async ({ page }) => {
+  await page.goto("/stavy/?p=dashboard&tour=employee-submits&ts=0")
+  const frame = page.locator("iframe.ps-frame")
+  await frame.evaluate((el: HTMLIFrameElement) => {
+    ;(el.contentWindow as unknown as { __stamp?: number }).__stamp = 1
+  })
+  // employee-submits: dashboard -> submit-expense (details/receipt/review/done) -> expenses.
+  // Every step but the page itself changes; a real navigation anywhere in
+  // there would reset the stamp and add a navigation entry.
+  for (let i = 1; i <= 5; i++) {
+    await page.getByRole("button", { name: "Next" }).click()
+    await expect(page).toHaveURL(new RegExp(`[?&]ts=${i}(&|$)`))
+  }
+  const stamp = await frame.evaluate((el: HTMLIFrameElement) => (el.contentWindow as unknown as { __stamp?: number }).__stamp)
+  expect(stamp).toBe(1)
+  const navCount = await frame.evaluate((el: HTMLIFrameElement) => el.contentWindow?.performance.getEntriesByType("navigation").length)
+  expect(navCount).toBe(1)
 })
