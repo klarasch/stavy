@@ -16,7 +16,7 @@ const out = resolve(args[args.indexOf("--out") + 1] || "tests/scenarios")
 const m = JSON.parse(readFileSync("stavy.json", "utf8"))
 mkdirSync(out, { recursive: true })
 const page = new Map(m.pages.map((p) => [p.id, p]))
-const resolveDims = (p, o = {}) => Object.fromEntries(Object.keys(p.dimensions).map((d) => [d, o[d] ?? p.defaults?.[d] ?? p.dimensions[d][0]]))
+const resolveDims = (p, o = {}) => Object.fromEntries(Object.keys(p.dimensions ?? {}).map((d) => [d, o[d] ?? p.defaults?.[d] ?? p.dimensions[d][0]]))
 const appBase = (m.viewer?.app && !/^https?:/.test(m.viewer.app) ? m.viewer.app : "").replace(/\/+$/, "")
 const url = (pid, dims) => {
   const p = page.get(pid)
@@ -34,7 +34,7 @@ const stateRegex = (pid, dims) => {
   const [pathT, queryT = ""] = p.url.split("?")
   const q = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
   const path = q(`${appBase}${pathT.startsWith("/") ? "" : "/"}${pathT}`).replace(/\\\{([a-zA-Z0-9_-]+)\\\}/g, (_, d) => q(encodeURIComponent(dims[d] ?? "")))
-  const defaultOf = (d) => p.defaults?.[d] ?? p.dimensions[d]?.[0]
+  const defaultOf = (d) => p.defaults?.[d] ?? p.dimensions?.[d]?.[0]
   const params = [...new URLSearchParams(queryT)].map(([k, v]) => {
     const dm = v.match(/^\{([a-zA-Z0-9_-]+)\}$/)
     const val = q(encodeURIComponent(dm ? dims[dm[1]] ?? "" : v))

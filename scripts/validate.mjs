@@ -40,6 +40,10 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     /* ajv not installed — structural checks below still run */
   }
 
+  // `dimensions` is optional on a page (SPEC §1.3): a page with no axes is a
+  // normal page. Fill it in once so every check below can read it as an object.
+  for (const p of m.pages ?? []) if (!p.dimensions) p.dimensions = {}
+
   const dimIndex = new Map(m.dimensions.map((d) => [d.id, new Set(d.values.map((v) => v.id))]))
   // Workspace-scoped axes (SPEC §1.1): one value for the whole workspace, so a
   // page's own default never applies and a scenario cannot straddle two values.
@@ -84,7 +88,9 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     }
     checkDims(`${w} defaults`, page, page.defaults)
     ;(page.instances ?? []).forEach((inst, i) => checkDims(`${w} instances[${i}]`, page, inst.dims))
-    if (!page.instances?.length) warn(`${w}: no pinned instances — nothing will show on the canvas`)
+    // No warning for a page without dimensions or instances: one screen at its
+    // defaults is a page, and asking for more is what produced matrices nobody
+    // reviews (SPEC §1.3).
   }
 
   // ---- scenarios
@@ -98,6 +104,13 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
       const inSlice = !m.prototypes?.length || m.prototypes.some((p) => p.scenarios.includes(sc.id) && p.pages.includes(st.page))
       if (!inSlice) warn(`${w} step ${i + 1}: page "${st.page}" is not in any prototype that includes this scenario`)
     })
+    // End to end (SPEC §1.4): a walkthrough runs from the entry point to the
+    // outcome as the user would next see it. Steps that never leave one page
+    // are usually a flow that stopped at the last form step. A single-step
+    // scenario is a pointer at one state, not a walkthrough that stopped early.
+    const visited = new Set(sc.steps.map((st) => st.page))
+    if (sc.steps.length > 1 && visited.size === 1)
+      warn(`${w}: stays on page "${sc.steps[0].page}" for all ${sc.steps.length} steps — is it end to end (success plus the thing that changed)?`)
     // A scenario belongs to one world: if its steps pin two values of a
     // workspace axis, or a step's page excludes a value another step pins, the
     // walkthrough can never be shown whole.

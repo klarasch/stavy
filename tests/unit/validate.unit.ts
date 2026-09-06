@@ -227,11 +227,17 @@ describe("validate: pages", () => {
     expect(warnings.some((w) => w.includes('no default for dimension "role"'))).toBe(true)
   })
 
-  it("warns when a page has no pinned instances", async () => {
-    const { warnings } = await run((m) => {
-      m.pages[0].instances = []
+  it("accepts a page with no dimensions and no instances (SPEC 1.3)", async () => {
+    const { errors, warnings } = await run((m) => {
+      m.pages.push({
+        id: "policy",
+        label: "Policy",
+        url: "/policy",
+        fidelity: "static",
+      } as (typeof m.pages)[number])
     })
-    expect(warnings.some((w) => w.includes("no pinned instances"))).toBe(true)
+    expect(errors).toEqual([])
+    expect(warnings.filter((w) => w.includes('page "policy"'))).toEqual([])
   })
 
 })
@@ -257,6 +263,21 @@ describe("validate: scenarios", () => {
       delete m.scenarios[0].refs
     })
     expect(warnings.some((w) => w.includes("no refs"))).toBe(true)
+  })
+
+  it("warns when every step of a multi-step scenario stays on one page", async () => {
+    const { warnings } = await run((m) => {
+      m.scenarios[0].steps = [
+        { page: "simple-page", title: "Fill it in", dims: { role: "user" } },
+        { page: "simple-page", title: "Submit", target: "SubmitButton", dims: { role: "user" } },
+      ]
+    })
+    expect(warnings.some((w) => w.includes("stays on page \"simple-page\" for all 2 steps"))).toBe(true)
+  })
+
+  it("does not ask a single-step scenario to be end to end", async () => {
+    const { warnings } = await run()
+    expect(warnings.some((w) => w.includes("is it end to end"))).toBe(false)
   })
 
   it("warns when a scenario's page is not in any prototype that includes the scenario", async () => {

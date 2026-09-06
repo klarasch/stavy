@@ -63,7 +63,7 @@ for (const p of m.pages) {
   L.push(`| fidelity | ${p.fidelity ?? "static"} |`)
   L.push(`| module | \`${p.module ?? `src/demo/pages/${p.id}.tsx`}\` |`, "")
   L.push(`## Dimensions`, "")
-  for (const [d, vs] of Object.entries(p.dimensions)) L.push(`- **${dimLabel(d)}** (\`${d}\`): ${vs.map((v) => (v === p.defaults?.[d] ? `**${valLabel(d, v)}** (default)` : valLabel(d, v))).join(" · ")}`)
+  for (const [d, vs] of Object.entries(p.dimensions ?? {})) L.push(`- **${dimLabel(d)}** (\`${d}\`): ${vs.map((v) => (v === p.defaults?.[d] ? `**${valLabel(d, v)}** (default)` : valLabel(d, v))).join(" · ")}`)
   L.push("", `## Pinned states (${p.instances?.length ?? 0})`, "")
   for (const i of p.instances ?? []) L.push(`- ${Object.entries(i.dims).map(([d, v]) => `${dimLabel(d)}: ${valLabel(d, v)}`).join(", ") || "default"}${i.note ? ` — ${i.note}` : ""}`)
   L.push("", `## Semantic targets (\`data-proto\`)`, "")
