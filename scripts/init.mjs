@@ -128,7 +128,8 @@ if (added.length) {
 
 console.log(`
 Done (viewer ${version}). Nothing under src/ was touched. Next:
-  1. npm i -D playwright ajv ajv-formats && npx playwright install chromium   (scan needs a browser)
+  1. npm i -D playwright ajv@8.12.0 ajv-formats@2.1.1 && npx playwright install chromium   (scan needs a browser;
+     these ajv versions install cleanly on locked-down registries — a newer ajv pulls in fast-uri)
   2. npm run dev, then open  http://localhost:5173/${dir}/index.html          (the viewer, next to your app)
   3. Register your first real screens in public/stavy.json: one entry per page with its existing URL.
      Every dimension a page declares must appear in its url as {dim} — the app reads them as it likes.
