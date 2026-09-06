@@ -38,13 +38,15 @@ const dark = argv.includes("--dark")
 const TARGET_ATTRS = m.viewer?.targetAttrs?.length ? m.viewer.targetAttrs : ["data-proto", "data-testid"]
 
 /* ---------------- the same resolution rules as the viewer ---------------- */
-const resolveDims = (p, o = {}) => Object.fromEntries(Object.keys(p.dimensions).map((d) => [d, o[d] ?? p.defaults?.[d] ?? p.dimensions[d][0]]))
+// A page may omit `dimensions` entirely (SPEC §1.3: one screen, one card) — read it as {}.
+const dimsOf = (p) => p.dimensions ?? {}
+const resolveDims = (p, o = {}) => Object.fromEntries(Object.keys(dimsOf(p)).map((d) => [d, o[d] ?? p.defaults?.[d] ?? dimsOf(p)[d][0]]))
 const instanceKey = (pid, dims) =>
   `${pid}?${Object.entries(dims)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${k}=${v}`)
     .join("&")}`
-const fileFor = (p, dims) => `${p.id}__${Object.keys(p.dimensions).map((d) => `${d}=${dims[d]}`).join("__")}.png`
+const fileFor = (p, dims) => `${p.id}__${Object.keys(dimsOf(p)).map((d) => `${d}=${dims[d]}`).join("__")}.png`
 const appUrl = (p, dims) => {
   const filled = p.url.replace(/\{([a-zA-Z0-9_-]+)\}/g, (_, d) => encodeURIComponent(dims[d] ?? ""))
   if (/^[a-z]+:\/\//i.test(filled)) return filled
