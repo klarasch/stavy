@@ -558,7 +558,7 @@ export function CanvasPage() {
 
           {/* ---- Pages: one area per page, clustered by section ---- */}
           {sections.map((section) => (
-            <div key={section.group ?? " "} className="flex flex-col gap-5">
+            <div key={section.group ?? "ungrouped"} className="flex flex-col gap-5">
               {section.group && (
                 <div data-ps-ui>
                   <span className="ps-group-h">{section.group}</span>

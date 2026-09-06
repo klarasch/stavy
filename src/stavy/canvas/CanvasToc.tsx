@@ -46,7 +46,7 @@ export function CanvasToc({
           ))}
           {/* Sections (SPEC §1.3), in the same order the canvas lays them out. */}
           {groupPages(pages).map((section) => (
-            <div key={section.group ?? " "}>
+            <div key={section.group ?? "ungrouped"}>
               <div className="ps-toc-h">{section.group ?? "Pages"}</div>
               {section.pages.map((p) => (
                 <button key={p.id} className="ps-toc-item" onClick={() => onJump(`page:${p.id}`)} title={p.label}>

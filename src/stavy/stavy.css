@@ -415,7 +415,8 @@
 /* a fat invisible stroke so a 1.5px curve is hoverable; nodes paint above it, so they always win the click */
 .ps-map-wire .ps-map-hit { stroke: transparent; stroke-width: 16; pointer-events: stroke; }
 .ps-map-wire[data-on] path { stroke: var(--ps-fg); }
-.ps-map-node { display: flex; flex-direction: column; gap: 7px; text-align: left; }
+.ps-map-rows { pointer-events: none; }
+.ps-map-node { display: flex; flex-direction: column; gap: 7px; text-align: left; pointer-events: auto; }
 .ps-map-thumb {
   position: relative; display: block; border-radius: 8px; overflow: hidden; background: #fff;
   box-shadow: 0 0 0 1px var(--ps-border), 0 1px 2px rgba(0,0,0,.06); transition: box-shadow .12s, transform .12s;
