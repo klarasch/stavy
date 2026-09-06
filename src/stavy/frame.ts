@@ -202,10 +202,17 @@ export function bridgeFrameKeys(doc: Document | null): () => void {
     const consumed = !window.dispatchEvent(ev)
     if (consumed) e.preventDefault()
   }
-  doc.addEventListener("keydown", onKey)
-  doc.addEventListener("keyup", onKey)
+  // Capture phase, not bubble: a focused widget inside the prototype (a UI
+  // kit's listbox, roving-tabindex menu, modal focus trap — anything that
+  // manages its own arrow-key navigation) commonly calls stopPropagation() on
+  // its own keydown handling so it doesn't also trigger page-level shortcuts.
+  // That stops the event on its way *up* through bubble listeners, which is
+  // exactly where a bubble-phase listener here would sit. Capture runs first,
+  // on the way down from the document, before any such handler gets a chance.
+  doc.addEventListener("keydown", onKey, { capture: true })
+  doc.addEventListener("keyup", onKey, { capture: true })
   return () => {
-    doc.removeEventListener("keydown", onKey)
-    doc.removeEventListener("keyup", onKey)
+    doc.removeEventListener("keydown", onKey, { capture: true })
+    doc.removeEventListener("keyup", onKey, { capture: true })
   }
 }

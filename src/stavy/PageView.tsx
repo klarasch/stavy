@@ -64,8 +64,27 @@ export function PageView() {
   const [drift, setDrift] = useState<string | null>(null)
   const { countFor } = useComments()
 
-  const page = getPage(pageId)
-  const dims = useMemo(() => (page ? dimsFromParams(page, sp) : {}), [page, sp])
+  // Tour identity resolved before the page: a deep link straight into a tour
+  // step (SPEC §1.4) names its own page and dims, and that's the intent even
+  // when the URL's `p` disagrees (stale or hand-edited link) — a missing `ts`
+  // means step 0.
+  const tourId = sp.get("tour")
+  const tourStep = Number(sp.get("ts") ?? "0")
+  const scenario = tourId ? getScenario(tourId) : undefined
+  const step = scenario?.steps[tourStep]
+
+  const page = getPage(step?.page ?? pageId)
+  const dims = useMemo(() => {
+    if (!page) return {}
+    // No d_* param for any of this page's own axes yet: this is a fresh deep
+    // link into the tour step, not a URL the reviewer has already adjusted —
+    // show the step's own dims instead of the page defaults (Item 2). Once
+    // any axis is explicit in the URL (e.g. after Next writes the step's
+    // dims, or a manual edit), the URL wins as usual.
+    const explicit = Object.keys(page.dimensions).some((d) => !isWorkspaceDim(d) && sp.get(`d_${d}`) !== null)
+    if (step && step.page === page.id && !explicit) return resolveDims(page, step.dims)
+    return dimsFromParams(page, sp)
+  }, [page, sp, step])
   const wKey = workspaceKey(sp)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const wdims = useMemo(() => workspaceDimsFromParams(sp), [wKey])
@@ -88,9 +107,6 @@ export function PageView() {
   const inspectOn = sp.get("i") === "1"
   const commentsOpen = sp.get("comments") === "1"
   const openCommentId = sp.get("c")
-  const tourId = sp.get("tour")
-  const tourStep = Number(sp.get("ts") ?? "0")
-  const scenario = tourId ? getScenario(tourId) : undefined
 
   // Viewer mode flags to keep alive across every in-viewer navigation (SPEC.md §3).
   const carry: Record<string, string> = { ...wCarry }
