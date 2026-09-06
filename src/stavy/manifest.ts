@@ -57,6 +57,9 @@ export async function loadManifest(url?: string): Promise<Manifest> {
 
 /** Install a manifest object directly (tests, embedding). */
 export function setManifest(m: Manifest) {
+  // `dimensions` is optional in the manifest (SPEC §1.3) — a page with no axes
+  // is normal. Fill it in once here so every reader can treat it as an object.
+  for (const p of m.pages) if (!p.dimensions) p.dimensions = {}
   manifest = m
   if (m.viewer?.app !== undefined) appBase = m.viewer.app.replace(/\/+$/, "")
   workspaceDimensions = m.dimensions.filter((d) => d.scope === "workspace")
@@ -241,6 +244,59 @@ export function scenarioInWorkspace(sc: Scenario, wdims: Record<string, string>)
     if (!pageInWorkspace(page, wdims)) return false
     return Object.entries(wdims).every(([d, v]) => !st.dims?.[d] || st.dims[d] === v)
   })
+}
+
+/* ------------------------------------------------------------------ */
+/* Sections and varying axes (SPEC §1.3)                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Pages clustered by `group`, groups in first-appearance order, ungrouped
+ * last (as one trailing cluster with no label). The canvas and the table of
+ * contents both read this, so they never disagree about the order.
+ */
+export function groupPages<T extends PageDef>(pages: T[]): { group?: string; pages: T[] }[] {
+  const named = new Map<string, T[]>()
+  const rest: T[] = []
+  for (const p of pages) {
+    if (!p.group) rest.push(p)
+    else named.set(p.group, [...(named.get(p.group) ?? []), p])
+  }
+  const out: { group?: string; pages: T[] }[] = [...named.entries()].map(([group, ps]) => ({ group, pages: ps }))
+  if (rest.length) out.push({ pages: rest })
+  return out
+}
+
+/**
+ * The page-scoped dimensions that actually differ across a set of resolved
+ * instances, widest declared axis first. A card only ever labels these: a
+ * dimension every instance shares says nothing, and a page that varies
+ * nothing needs no label at all (the "row of dashes" problem).
+ * Workspace axes are fixed for the whole canvas, so they never count.
+ */
+export function varyingDims(page: PageDef, instances: Record<string, string>[]): string[] {
+  return Object.keys(page.dimensions)
+    .filter((d) => !isWorkspaceDim(d) && new Set(instances.map((i) => i[d])).size > 1)
+    .sort((a, b) => page.dimensions[b].length - page.dimensions[a].length)
+}
+
+/**
+ * The page-scoped dimensions whose value changes across a list of resolved
+ * assignments, in manifest order. Used for a scenario lane, where the cards
+ * sit on different pages: what moves between steps (a lifecycle advancing) is
+ * worth a chip, what holds still for the whole walkthrough is not.
+ */
+export function varyingAcross(assignments: Record<string, string>[]): string[] {
+  const seen = new Map<string, Set<string>>()
+  for (const a of assignments) {
+    for (const [d, v] of Object.entries(a)) {
+      if (isWorkspaceDim(d)) continue
+      const vs = seen.get(d) ?? new Set<string>()
+      vs.add(v)
+      seen.set(d, vs)
+    }
+  }
+  return manifest.dimensions.map((d) => d.id).filter((d) => (seen.get(d)?.size ?? 0) > 1)
 }
 
 /** Resolve the full dimension assignment for a page: overrides > defaults > first value. */

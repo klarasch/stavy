@@ -175,8 +175,7 @@
         "required": [
           "id",
           "label",
-          "url",
-          "dimensions"
+          "url"
         ],
         "additionalProperties": false,
         "properties": {
@@ -188,6 +187,10 @@
           },
           "description": {
             "type": "string"
+          },
+          "group": {
+            "type": "string",
+            "description": "Free-text section this page belongs to (\"Onboarding\", \"Approvals\"). The canvas clusters page areas by it, in first-appearance order; ungrouped pages come last."
           },
           "kind": {
             "enum": [
@@ -230,7 +233,8 @@
             ]
           },
           "dimensions": {
-            "$ref": "#/$defs/dimensionMap"
+            "$ref": "#/$defs/dimensionMap",
+            "description": "Dimension id -> supported value ids. Optional: a page with no axes is normal and shows one card on the canvas."
           },
           "defaults": {
             "$ref": "#/$defs/dims"

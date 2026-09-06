@@ -52,6 +52,15 @@ test.describe("Employee submits an expense", () => {
     await page.goto("/expenses?role=employee&state=loaded")
     const target = page.locator("[data-proto=\"ExpenseRow:exp-2101\"], [data-testid=\"ExpenseRow:exp-2101\"]").first()
     await expect(target, "The freshly submitted expense appears at the top of the employee's list.").toBeVisible()
+    await target.click()
+    // fidelity: navigable — next state: "Open the expense you filed"
+    await expect.soft(page).toHaveURL(new RegExp("/expenses/exp-2101\\/?(?:\\?(?=(?:(?:[^#]*&)?role=employee(?:&|#|$))|(?![^#]*(?:^|&)role=))(?=(?:(?:[^#]*&)?lifecycle=submitted(?:&|#|$))|(?![^#]*(?:^|&)lifecycle=))(?=(?:(?:[^#]*&)?locale=en-US(?:&|#|$))|(?![^#]*(?:^|&)locale=))(?=(?:(?:[^#]*&)?overlay=none(?:&|#|$))|(?![^#]*(?:^|&)overlay=))[^#]*)?(?:#.*)?$"))
+  })
+
+  test("7. Open the expense you filed", async ({ page }) => {
+    await page.goto("/expenses/exp-2101?role=employee&lifecycle=submitted&locale=en-US&overlay=none")
+    const target = page.locator("[data-proto=\"LifecycleTimeline\"], [data-testid=\"LifecycleTimeline\"]").first()
+    await expect(target, "Where the flow actually ends: the record exists, waiting on M. Novak. Everything the employee can still do lives here.").toBeVisible()
   })
 
 })

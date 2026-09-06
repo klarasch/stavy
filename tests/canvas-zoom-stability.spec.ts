@@ -20,7 +20,7 @@ for (const url of ["/stavy/?live=1", "/stavy/?live=1&d_locale=de-DE"]) {
     await page.goto(url)
     await expect(page.locator("[data-canvas-root]")).toBeVisible()
 
-    await page.getByRole("button", { name: "Expense detail" }).click()
+    await page.locator(".ps-toc-item", { hasText: "Expense detail" }).click()
     await page.waitForTimeout(1500)
     // Guard the guard: if nothing mounted, the test proves nothing.
     expect(await page.locator("iframe.ps-card-live").count()).toBeGreaterThan(2)

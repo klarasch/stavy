@@ -10,6 +10,8 @@ import { useComments } from "../comments/store"
 export const VIEWPORT_W = 1280
 export const VIEWPORT_H = 832
 
+const EMPTY_CHIPS: string[] = []
+
 interface PinPos extends AnnotationDef {
   leftPct: number
   topPct: number
@@ -35,7 +37,7 @@ export const InstanceCard = memo(function InstanceCard({
   showPins = false,
   scope = "pages",
   frame,
-  hideChips = false,
+  chips = EMPTY_CHIPS,
   wireframe = false,
 }: {
   pageId: string
@@ -47,7 +49,12 @@ export const InstanceCard = memo(function InstanceCard({
   showPins?: boolean
   scope?: "pages" | "scenarios"
   frame?: { width: number; height: number }
-  hideChips?: boolean
+  /**
+   * Dimension ids to label this card with. Only what distinguishes this card
+   * from its neighbours belongs here — a chip for an axis the page does not
+   * vary is noise on every card (SPEC §1.3). Default: none.
+   */
+  chips?: string[]
   /** Canvas wireframe mode: opened page should keep it on (SPEC.md §3 deep links). */
   wireframe?: boolean
 }) {
@@ -161,11 +168,11 @@ export const InstanceCard = memo(function InstanceCard({
           </span>
         ))}
       </div>
-      {!hideChips && (
+      {chips.length > 0 && (
         <div className="flex flex-wrap gap-1 px-0.5">
-          {Object.entries(dims).map(([d, v]) => (
+          {chips.map((d) => (
             <span key={d} className="ps-chip ps-chip-sm">
-              {valueLabel(d, v)}
+              {valueLabel(d, dims[d])}
             </span>
           ))}
         </div>
@@ -187,7 +194,7 @@ export const InstanceCard = memo(function InstanceCard({
   a.annotations === b.annotations &&
   a.showPins === b.showPins &&
   a.scope === b.scope &&
-  a.hideChips === b.hideChips &&
+  (a.chips ?? EMPTY_CHIPS).join("|") === (b.chips ?? EMPTY_CHIPS).join("|") &&
   a.wireframe === b.wireframe &&
   a.frame?.width === b.frame?.width &&
   a.frame?.height === b.frame?.height)

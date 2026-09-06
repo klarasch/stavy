@@ -1,13 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
-  ArrowRight, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play,
+  ArrowRight, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play, Waypoints,
 } from "../icons"
 import { cn } from "../cn"
 import {
   manifest, getPage, getTemplate, resolveDims, pageUrl, valueLabel, dimensionLabel,
   isWorkspaceDim, workspaceDimensions, workspaceDimsFromParams, workspaceCarry, workspaceKey,
-  workspaceOverridesFor, pageInWorkspace, scenarioInWorkspace,
+  workspaceOverridesFor, pageInWorkspace, scenarioInWorkspace, varyingDims, varyingAcross, groupPages, instanceKey,
 } from "../manifest"
 import { elementAt } from "../frame"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "./PanZoom"
@@ -16,6 +16,7 @@ import { InstanceCard, VIEWPORT_W } from "./InstanceCard"
 import { CanvasNotes } from "./CanvasNotes"
 import { AnatomyCard } from "./AnatomyCard"
 import { CanvasToc } from "./CanvasToc"
+import { SiteMap } from "./SiteMap"
 import { BoardCard } from "./BoardCard"
 import { CoverageBoard } from "./CoverageBoard"
 import { Inspector, type FrameHit } from "../overlays/Inspector"
@@ -70,8 +71,11 @@ function Area({
 }
 
 /* ------------------------------------------------------------------ */
-/* Coverage matrix: pinned instances laid out on the two most-varying  */
-/* dimensions, declared-but-unpinned cells shown as dashed placeholders */
+/* One page's cards. Two shapes, chosen by how much actually varies:   */
+/* a coverage matrix when two or more dimensions differ across the     */
+/* pinned instances (axes as row/column headers, declared-but-unpinned */
+/* cells as dashed placeholders), and otherwise a plain row of cards   */
+/* — one card, labelled with nothing, being the normal case (SPEC 1.3).*/
 /* ------------------------------------------------------------------ */
 
 const PageGroup = memo(function PageGroup({
@@ -99,27 +103,32 @@ const PageGroup = memo(function PageGroup({
     const instances = (page.instances ?? [{ dims: {} }])
       .filter((i) => Object.entries(wOver).every(([d, v]) => !i.dims[d] || i.dims[d] === v))
       .map((i) => ({ ...i, full: resolveDims(page, { ...i.dims, ...wOver }) }))
-    // A workspace axis is fixed here, so it never becomes a matrix axis.
-    const dimIds = Object.keys(page.dimensions).filter((d) => !isWorkspaceDim(d))
-    const varying = dimIds
-      .filter((d) => new Set(instances.map((i) => i.full[d])).size > 1)
-      .sort((a, b) => page.dimensions[b].length - page.dimensions[a].length)
-    const colDim = varying[0]
-    const rowDim = varying[1]
-    const extraVarying = varying.slice(2)
+    // Only what differs between these cards is worth drawing (a workspace axis
+    // is fixed for the whole canvas, so it never counts).
+    const varying = varyingDims(page, instances.map((i) => i.full))
+    // A matrix earns its headers only when there are two axes to cross.
+    const matrix = varying.length >= 2
+    const colDim = matrix ? varying[0] : undefined
+    const rowDim = matrix ? varying[1] : undefined
+    const extraVarying = matrix ? varying.slice(2) : []
     const groups = new Map<string, typeof instances>()
     for (const inst of instances) {
       const key = extraVarying.map((d) => `${d}=${inst.full[d]}`).join("|")
       if (!groups.has(key)) groups.set(key, [])
       groups.get(key)!.push(inst)
     }
-    return { instances, colDim, rowDim, extraVarying, groups }
+    // A single axis reads better as a row in its declared order than as a
+    // one-row matrix with a header over every column.
+    const one = varying[0]
+    const row = one
+      ? [...instances].sort((a, b) => page.dimensions[one].indexOf(a.full[one]) - page.dimensions[one].indexOf(b.full[one]))
+      : instances
+    return { instances, varying, matrix, colDim, rowDim, extraVarying, groups, row }
   }, [page, wOver])
 
-  const { colDim, rowDim, extraVarying, groups } = layout
+  const { varying, matrix, colDim, rowDim, extraVarying, groups, row } = layout
   const cols = colDim ? page.dimensions[colDim] : [null]
   const rows = rowDim ? page.dimensions[rowDim] : [null]
-  const hideChips = !!colDim
 
   return (
     <div>
@@ -146,7 +155,26 @@ const PageGroup = memo(function PageGroup({
       {page.description && <p className="ps-sub mb-4 max-w-2xl">{page.description}</p>}
 
       <div className="flex flex-col gap-8">
-        {[...groups.entries()].map(([groupKey, insts], gi) => {
+        {!matrix && (
+          <div className="flex flex-wrap items-start gap-5">
+            {row.map((inst) => (
+              <InstanceCard
+                key={instanceKey(page.id, inst.full)}
+                pageId={page.id}
+                dims={inst.full}
+                note={inst.note}
+                scale={scale}
+                frame={page.frame}
+                chips={varying}
+                annotations={page.annotations}
+                showPins={showNotes}
+                wireframe={wireframe}
+                href={pageUrl(page.id, inst.full, linkExtra)}
+              />
+            ))}
+          </div>
+        )}
+        {matrix && [...groups.entries()].map(([groupKey, insts], gi) => {
           const groupDims = Object.fromEntries(groupKey ? groupKey.split("|").map((kv) => kv.split("=")) : [])
           const find = (c: string | null, r: string | null) =>
             insts.find((i) => (!colDim || i.full[colDim] === c) && (!rowDim || i.full[rowDim] === r))
@@ -198,7 +226,6 @@ const PageGroup = memo(function PageGroup({
                     w={w}
                     h={h}
                     scale={scale}
-                    hideChips={hideChips}
                     showNotes={showNotes}
                     wireframe={wireframe}
                     wOver={wOver}
@@ -225,7 +252,7 @@ const PageGroup = memo(function PageGroup({
 })
 
 function RowFragment({
-  page, r, cols, colDim, rowDim, groupDims, find, w, h, scale, hideChips, showNotes, wireframe, wOver, linkExtra, onOpen,
+  page, r, cols, colDim, rowDim, groupDims, find, w, h, scale, showNotes, wireframe, wOver, linkExtra, onOpen,
 }: {
   page: PageDef
   r: string | null
@@ -237,7 +264,6 @@ function RowFragment({
   w: number
   h: number
   scale: number
-  hideChips: boolean
   showNotes: boolean
   wireframe: boolean
   wOver: Record<string, string>
@@ -264,7 +290,6 @@ function RowFragment({
               note={inst.note}
               scale={scale}
               frame={page.frame}
-              hideChips={hideChips}
               annotations={page.annotations}
               showPins={showNotes}
               wireframe={wireframe}
@@ -332,6 +357,7 @@ export function CanvasPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const wCarry = useMemo(() => workspaceCarry(sp), [wKey])
   const showNotes = sp.get("notes") === "1"
+  const showMap = sp.get("map") !== "0"
   const wireframe = sp.get("w") === "1"
   const inspect = sp.get("i") === "1"
   const liveMode = sp.get("live") === "1"
@@ -367,13 +393,13 @@ export function CanvasPage() {
   }, [])
 
   // Zoom the viewport to fit the chosen section.
-  const jumpTo = (tocId: string) => {
+  const jumpTo = useCallback((tocId: string) => {
     const el = contentEl?.querySelector<HTMLElement>(`[data-toc="${CSS.escape(tocId)}"]`)
     if (!el || !pz.current) return
     pz.current.fitTo(el, true)
     el.setAttribute("data-flash", "true")
     setTimeout(() => el.removeAttribute("data-flash"), 1200)
-  }
+  }, [contentEl])
 
   useHotkeys({
     n: () => setFlag("notes", !showNotes),
@@ -421,6 +447,8 @@ export function CanvasPage() {
   const outOfScopeCount = manifest.pages.length - inScope.length
   const pages = inScope.filter((p) => p.kind !== "component")
   const components = inScope.filter((p) => p.kind === "component")
+  // Sections (SPEC §1.3): page areas cluster by `group`, ungrouped last.
+  const sections = groupPages(pages)
   const scenarios = manifest.scenarios.filter((sc) => scenarioInWorkspace(sc, wdims))
 
   const setWorkspaceDim = (dimId: string, value: string) => {
@@ -441,6 +469,13 @@ export function CanvasPage() {
           data-canvas-root
           className={cn("ps flex flex-col items-start gap-14 p-12", wireframe && "proto-wireframe", inspect && "ps-inspect-on")}
         >
+          {/* ---- Site map: how the screens fit together (arrows from scenarios) ---- */}
+          {showMap && pages.length > 1 && (
+            <Area title="Site map" kind={`${pages.length} screens`} icon={<Waypoints />} tocId="area:map" className="self-start">
+              <SiteMap pages={pages} scenarios={scenarios} wdims={wdims} linkExtra={linkExtra} onJump={jumpTo} />
+            </Area>
+          )}
+
           {/* ---- Boards: supporting material, outside the contract ---- */}
           {((manifest.boards?.length ?? 0) > 0 || (manifest.requirements?.length ?? 0) > 0) && (
             <Area title="Boards" kind="supporting material" icon={<MapIcon />} tocId="area:boards" className="self-start">
@@ -462,7 +497,16 @@ export function CanvasPage() {
           {/* ---- Scenarios: one wide area, lanes stacked ---- */}
           <Area title="Scenarios" kind={`${scenarios.length} walkthrough${scenarios.length === 1 ? "" : "s"}`} icon={<BookOpen />} tocId="area:scenarios" className="self-start">
             <div className="flex flex-col gap-8">
-              {scenarios.map((sc) => (
+              {scenarios.map((sc) => {
+                // Every step resolved once: the lane labels only the axes that
+                // move between steps (a lifecycle advancing), never the ones
+                // that hold still for the whole walkthrough.
+                const stepDims = sc.steps.map((st) => {
+                  const p = getPage(st.page)
+                  return p ? resolveDims(p, { ...st.dims, ...workspaceOverridesFor(p, wdims) }) : {}
+                })
+                const laneDims = varyingAcross(stepDims)
+                return (
                 <div key={sc.id} data-toc={`scenario:${sc.id}`}>
                   <span className="ps-zl">
                     <div className="flex items-center gap-2 mb-1">
@@ -478,7 +522,7 @@ export function CanvasPage() {
                     {sc.steps.map((st, i) => {
                       const page = getPage(st.page)
                       if (!page) return null
-                      const dims = resolveDims(page, { ...st.dims, ...workspaceOverridesFor(page, wdims) })
+                      const dims = stepDims[i]
                       return (
                         <div key={i} className="flex items-start gap-3">
                           {i > 0 && <ArrowRight className="size-4 mt-14 shrink-0" style={{ color: "var(--ps-faint)" }} />}
@@ -498,6 +542,7 @@ export function CanvasPage() {
                               scale={page.kind === "component" ? cardScale(page) * 0.7 : 0.14}
                               frame={page.frame}
                               scope="scenarios"
+                              chips={laneDims.filter((d) => d in page.dimensions)}
                               href={pageUrl(st.page, dims, { tour: sc.id, ts: String(i), ...linkExtra })}
                             />
                           </div>
@@ -506,18 +551,28 @@ export function CanvasPage() {
                     })}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </Area>
 
-          {/* ---- Pages: one area per page, flowing left→right, wrapping ---- */}
-          <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
-            {pages.map((page) => (
-              <Area key={page.id} title={page.label} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
-                <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} />
-              </Area>
-            ))}
-          </div>
+          {/* ---- Pages: one area per page, clustered by section ---- */}
+          {sections.map((section) => (
+            <div key={section.group ?? "ungrouped"} className="flex flex-col gap-5">
+              {section.group && (
+                <div data-ps-ui>
+                  <span className="ps-group-h">{section.group}</span>
+                </div>
+              )}
+              <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
+                {section.pages.map((page) => (
+                  <Area key={page.id} title={page.label} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
+                    <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} />
+                  </Area>
+                ))}
+              </div>
+            </div>
+          ))}
 
           {/* ---- Components ---- */}
           {components.length > 0 && (
@@ -566,7 +621,7 @@ export function CanvasPage() {
             )}
           </div>
           <MockNotice className="absolute top-[58px] left-6 z-20" />
-          <CanvasToc className="absolute top-[84px] left-4 z-20" onJump={jumpTo} wdims={wdims} />
+          <CanvasToc className="absolute top-[84px] left-4 z-20" onJump={jumpTo} wdims={wdims} showMap={showMap} />
 
           <div className="ps ps-glass absolute top-4 right-4 z-20 rounded-2xl px-1.5 py-1 flex items-center gap-0.5">
             <PsButton active={showNotes} tip="Annotation pins and pointing notes" keys={["N"]} tipBelow onClick={() => setFlag("notes", !showNotes)}>

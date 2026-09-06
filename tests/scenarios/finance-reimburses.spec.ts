@@ -9,20 +9,20 @@ test.describe("Finance reimburses", () => {
     await expect(target, "Finance's list is pre-filtered to Approved — their inbox. Open one to work it.").toBeVisible()
     await target.click()
     // fidelity: navigable — next state: "Mark as reimbursed"
-    await expect.soft(page).toHaveURL(new RegExp("/expenses/exp-2102\\/?(?:\\?(?=(?:(?:[^#]*&)?role=finance(?:&|#|$)))(?=(?:(?:[^#]*&)?lifecycle=approved(?:&|#|$)))(?=(?:(?:[^#]*&)?density=comfortable(?:&|#|$))|(?![^#]*(?:^|&)density=))(?=(?:(?:[^#]*&)?locale=en-US(?:&|#|$))|(?![^#]*(?:^|&)locale=))(?=(?:(?:[^#]*&)?overlay=none(?:&|#|$))|(?![^#]*(?:^|&)overlay=))[^#]*)(?:#.*)?$"))
+    await expect.soft(page).toHaveURL(new RegExp("/expenses/exp-2102\\/?(?:\\?(?=(?:(?:[^#]*&)?role=finance(?:&|#|$)))(?=(?:(?:[^#]*&)?lifecycle=approved(?:&|#|$)))(?=(?:(?:[^#]*&)?locale=en-US(?:&|#|$))|(?![^#]*(?:^|&)locale=))(?=(?:(?:[^#]*&)?overlay=none(?:&|#|$))|(?![^#]*(?:^|&)overlay=))[^#]*)(?:#.*)?$"))
   })
 
   test("2. Mark as reimbursed", async ({ page }) => {
-    await page.goto("/expenses/exp-2102?role=finance&lifecycle=approved&density=comfortable&locale=en-US&overlay=none")
+    await page.goto("/expenses/exp-2102?role=finance&lifecycle=approved&locale=en-US&overlay=none")
     const target = page.locator("[data-proto=\"ReimburseButton\"], [data-testid=\"ReimburseButton\"]").first()
     await expect(target, "The only finance action at this stage. Payment itself happens in an external system.").toBeVisible()
     await target.click()
     // fidelity: interactive — next state: "Done — terminal state"
-    await expect(page).toHaveURL(new RegExp("/expenses/exp-2102\\/?(?:\\?(?=(?:(?:[^#]*&)?role=finance(?:&|#|$)))(?=(?:(?:[^#]*&)?lifecycle=reimbursed(?:&|#|$)))(?=(?:(?:[^#]*&)?density=comfortable(?:&|#|$))|(?![^#]*(?:^|&)density=))(?=(?:(?:[^#]*&)?locale=en-US(?:&|#|$))|(?![^#]*(?:^|&)locale=))(?=(?:(?:[^#]*&)?overlay=none(?:&|#|$))|(?![^#]*(?:^|&)overlay=))[^#]*)(?:#.*)?$"))
+    await expect(page).toHaveURL(new RegExp("/expenses/exp-2102\\/?(?:\\?(?=(?:(?:[^#]*&)?role=finance(?:&|#|$)))(?=(?:(?:[^#]*&)?lifecycle=reimbursed(?:&|#|$)))(?=(?:(?:[^#]*&)?locale=en-US(?:&|#|$))|(?![^#]*(?:^|&)locale=))(?=(?:(?:[^#]*&)?overlay=none(?:&|#|$))|(?![^#]*(?:^|&)overlay=))[^#]*)(?:#.*)?$"))
   })
 
   test("3. Done — terminal state", async ({ page }) => {
-    await page.goto("/expenses/exp-2102?role=finance&lifecycle=reimbursed&density=comfortable&locale=en-US&overlay=none")
+    await page.goto("/expenses/exp-2102?role=finance&lifecycle=reimbursed&locale=en-US&overlay=none")
     await expect(page.locator("body")).toBeVisible() // observe step
   })
 

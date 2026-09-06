@@ -60,6 +60,12 @@ export interface PageDef {
   label: string
   description?: string
   /**
+   * Free-text section ("Onboarding", "Approvals"). The canvas clusters page
+   * areas by it in first-appearance order, under a quiet heading; the table of
+   * contents groups by it too. Ungrouped pages come last, under no heading.
+   */
+  group?: string
+  /**
    * "page" (default) — a full screen rendered at the workspace viewport.
    * "component" — an organism rendered by a harness route in its own `frame`;
    * same contract, same dimensions/instances/annotations, smaller canvas cards.
@@ -82,7 +88,14 @@ export interface PageDef {
    * interactive = real local behaviour (only when a scenario needs it)
    */
   fidelity?: Fidelity
-  /** Dimension id -> value ids this page supports */
+  /**
+   * Dimension id -> value ids this page supports.
+   *
+   * Optional in the manifest JSON: a page with no axes is normal — it shows a
+   * single card at its defaults (SPEC §1.3). `setManifest()` fills in `{}` for
+   * a page that omits the key, so everything downstream can read it as an
+   * object; declare an axis only when a reviewer must compare its values.
+   */
   dimensions: Record<string, string[]>
   /** Default value per dimension */
   defaults?: Record<string, string>

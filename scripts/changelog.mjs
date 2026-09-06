@@ -64,10 +64,12 @@ total += section("Pages & components", base.pages, head.pages, (a, b) => {
   const d = []
   if (a.template !== b.template) d.push(`template ${a.template} → ${b.template}`)
   if (a.fidelity !== b.fidelity) d.push(`fidelity ${a.fidelity ?? "—"} → ${b.fidelity ?? "—"}`)
-  for (const k of new Set([...Object.keys(a.dimensions), ...Object.keys(b.dimensions)])) {
-    if (!a.dimensions[k]) d.push(`+ dimension ${k}`)
-    else if (!b.dimensions[k]) d.push(`− dimension ${k}`)
-    else if (!same(a.dimensions[k], b.dimensions[k])) d.push(`dimension ${k}: ${a.dimensions[k].length} → ${b.dimensions[k].length} values`)
+  if (a.group !== b.group) d.push(`group ${a.group ?? "—"} → ${b.group ?? "—"}`)
+  const ad = a.dimensions ?? {}, bd = b.dimensions ?? {}
+  for (const k of new Set([...Object.keys(ad), ...Object.keys(bd)])) {
+    if (!ad[k]) d.push(`+ dimension ${k}`)
+    else if (!bd[k]) d.push(`− dimension ${k}`)
+    else if (!same(ad[k], bd[k])) d.push(`dimension ${k}: ${ad[k].length} → ${bd[k].length} values`)
   }
   const ai = new Set((a.instances ?? []).map((i) => dimsStr(i.dims))), bi = new Set((b.instances ?? []).map((i) => dimsStr(i.dims)))
   const addedI = [...bi].filter((x) => !ai.has(x)), removedI = [...ai].filter((x) => !bi.has(x))

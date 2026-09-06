@@ -23,8 +23,10 @@ written to be read cold.
   the whole prototype is in — release phase, role, locale. See "Workspace
   axes" below; getting this wrong is the most common modelling mistake.
 - **Pages** declare a `url` template with `{dim}` placeholders (this IS the
-  binding contract — SPEC §2.1), which dimensions they support, defaults,
-  curated canvas `instances`, and `annotations`. Pages with `kind:
+  binding contract — SPEC §2.1), and optionally which dimensions they
+  support, defaults, curated canvas `instances`, `group` (the section it
+  belongs to), and `annotations`. **A page with no dimensions is normal** —
+  one screen, one card — and most pages should be one. Pages with `kind:
   "component"` are bespoke **organisms**, registered the same way but
   rendered through a harness route or story in their own `frame`.
 - **Scenarios** are executable step lists (page + dims + `target` + note)
@@ -66,7 +68,10 @@ Full text and rationale: `skill/RULES.md`. Summary:
    wire it (see "URL state recipes" below) — additively.
 4. Add target ids at the elements a scenario, annotation, or note will point
    at (rule 7).
-5. Add `dimensions`, `defaults`, 3–6 curated `instances`, and `annotations`.
+5. Add `group` (the section it belongs to), and — only where they earn it —
+   `dimensions`, `defaults`, 1–3 pinned `instances`, and `annotations`. See
+   "When to declare a dimension" below; the honest answer for many pages is
+   no dimensions at all.
 6. Run the scan (`npm run scan` / `stavy:scan`) against a running dev server,
    then `npm run validate` / `stavy:validate`. Fix errors; treat warnings
    (missing fidelity, no default, un-pinned note target) as prompts to
@@ -80,10 +85,13 @@ Full text and rationale: `skill/RULES.md`. Summary:
   helper that merges declared dimension ids over per-route defaults is
   usually all it takes (see `src/demo/app/dims.ts` in the Stavy repo for a
   worked example — not code to copy verbatim, a shape to imitate).
-- **Dataset as a dimension.** For data-heavy prototypes, prefer a named
-  dataset id (`?dataset=empty-org`) over per-field query params — one
-  `{dataset}` placeholder can stand in for a whole fixture, which keeps the
-  `url` template short even when a state depends on a dozen fields.
+- **One scene param, not a dozen seeds.** The recommended shape for anything
+  data-heavy: give the app one named scene (`?scene=empty-org`,
+  `?dataset=trial-expired`) where each name maps to a whole bundle of seeds,
+  and declare *that* as the dimension. The alternative — a placeholder per
+  seed param — is how manifests end up with nine axes whose combinations are
+  mostly meaningless. An app parameter does not have to become a dimension:
+  leave it out of the `url` template and it keeps its app-side default.
 - **Dialogs and overlays as a param.** Model an open modal/drawer as an
   `overlay` or `modal` dimension value (`?overlay=confirm-reject`) that the
   page reads to decide whether to render it open — not as something reached
@@ -112,6 +120,37 @@ Write steps as a real user path: one `target` per step, a note that says
 *why* this step matters, not just what it does. Verify each target exists
 under the step's dims (the scan does this for you — run it before declaring
 done). `refs` cites the requirement(s) the scenario demonstrates.
+
+**Run it to the end.** A scenario starts where the user really starts and
+ends at the outcome *as the user would next see it*: the success state **and**
+the thing that changed — the created record's own screen, or its row in the
+list it now appears in. "Create an expense" ends on the new expense, not on
+the last form step; "invite a teammate" ends on the pending invitation in the
+member list, not on the sent-confirmation toast. A walkthrough that stops at
+the form is the single most common gap in a generated manifest, and
+`validate` warns when every step of a scenario sits on one page.
+
+## When to declare a dimension
+
+The test is one question: **would a reviewer need to see these values side by
+side to judge the design?** If not, it is not a dimension — it is a parameter
+the app happens to read.
+
+- A page with **zero dimensions is normal**, and most pages are. One screen,
+  one card, done. `dimensions` and `instances` are both optional, and
+  `validate` will not ask you for either.
+- `empty`, `loading` and `error` are **designed states, not a checklist**.
+  Declare one when its design exists and someone will review it (an empty
+  state with real first-run copy, an error with agreed wording). Never
+  declare a skeleton next to a loaded screen just to have the axis covered.
+- **Never generate a matrix for the sake of coverage.** The canvas draws
+  row/column headers only where two axes genuinely vary; a page whose values
+  never differ shows one card, which is the honest picture.
+- **Pin 1–3 instances**, not the variant space. `dimensions` says what the
+  page can render; `instances` says what is worth looking at. They are not
+  supposed to match.
+- Sections beat axes for organisation: several plain pages under a `group`
+  read better than one page carrying an axis that switches between them.
 
 ## Fidelity ladder
 
@@ -196,9 +235,11 @@ How to model a phased prototype:
 - Do **not** model phases as forked pages, branches, or repos — all three
   hide the delta the canvas exists to show.
 
-**Many dimensions**: ten axes on one page is normal. Keep each axis small,
-pin instances for the combinations reviewers must see, and use `defaults` so
-scenario steps and links stay short.
+**Many dimensions**: keep each axis small, pin only the combinations
+reviewers must see, and use `defaults` so scenario steps and links stay
+short. If a page is heading past three or four axes, that is the signal to
+bundle seeds into one scene param (see "URL state recipes"), not to pin a
+bigger matrix.
 
 ## Style
 

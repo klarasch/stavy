@@ -132,9 +132,10 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
   "id": "expense-detail",
   "label": "Expense detail",
   "url": "/expenses/exp-2101?role={role}&lifecycle={lifecycle}",
+  "group": "Approvals",                 // optional section on the canvas
   "template": "detail-page",
   "fidelity": "interactive",
-  "dimensions": {                       // dimension id -> supported value ids
+  "dimensions": {                       // optional; dimension id -> value ids
     "role": ["employee", "manager", "finance"],
     "lifecycle": ["draft", "submitted", "approved"]
   },
@@ -159,6 +160,10 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
   defaults, instances, annotations, fidelity, `url`), render inside their own
   `frame: { width, height }`, and appear in their own canvas section. See §2.4
   for how their `url` resolves.
+- `group` (optional, free text) — the section this page belongs to
+  ("Onboarding", "Approvals"). The canvas clusters page areas by it, groups in
+  first-appearance order, under a quiet heading; ungrouped pages come last,
+  under none. It is presentation only — nothing resolves against it.
 - `template` (optional) — an informational grouping id (§1.2). Nothing reads
   it to decide how the page renders.
 - `fidelity` (optional: `static` | `navigable` | `interactive`) declares how
@@ -168,6 +173,14 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
 - The full variant space is `dimensions` (the cartesian product, addressable
   at runtime by editing the URL). `instances` is the *curated subset* shown
   on the canvas — coverage made visible without combinatorial explosion.
+- **`dimensions` and `instances` are both optional.** A page with no
+  dimensions is a first-class page: one screen, one card on the canvas, at its
+  defaults — the equivalent of a single frame in a design file. A page with
+  dimensions but no `instances` shows one card too, at its defaults. Declare
+  an axis when a reviewer must compare its values side by side, and pin the
+  handful of instances that are worth reviewing; a viewer MUST NOT treat a
+  page without dimensions or instances as incomplete, and a conforming
+  validator MUST NOT warn about either.
 - `defaults` fill in unspecified dimensions everywhere (instances, scenario
   steps, deep links).
 
@@ -207,6 +220,15 @@ should cite what it's for.
 Steps are declarative enough for a viewer to render them as (a) a guided tour
 overlay with highlights inside the player's frame, (b) a flow lane on the
 canvas, or (c) a written walkthrough. All three come from the same data.
+
+**A scenario runs end to end.** It starts at the entry point the user really
+starts from and ends at the outcome *as the user would next see it*: both the
+confirmation and the thing that changed — the created record's own screen, or
+its row in the list it now appears in. A create flow that stops at the last
+form step is not a walkthrough; it is a form. (Round trips are fine: a
+scenario may end where it began.) A validator SHOULD warn when a multi-step
+scenario never leaves one page, which is what that mistake looks like in the
+manifest.
 
 ### 1.5 Canvas notes ("pointing notes")
 
@@ -346,6 +368,14 @@ A relative `url` (starting with `/`) is resolved against `viewer.app`
 (§1.8); an absolute one (`https://…`) is used as-is, e.g. for a page served
 from a different origin.
 
+The contract runs both ways, which is what keeps dimension counts honest: an
+app parameter that is not a declared dimension simply stays out of the `url`
+template and keeps its app-side default. For data-heavy pages, bundle the
+seeds behind one named scene instead of promoting each of them to an axis —
+`?scene=empty-org` rather than `?users=0&teams=0&invites=0` — so the page
+declares the two or three axes a reviewer actually compares (see the skill's
+"Dataset as a dimension").
+
 ### 2.2 Targets
 
 Scenario steps, annotations, notes, and comments all point at a **target**:
@@ -465,15 +495,29 @@ A conforming viewer SHOULD provide:
   direct link into a value it does not support is marked rather than
   silently re-dimensioned.
 - **Dimension switcher**: flip any page-scoped dimension of the open page at
-  runtime — it rewrites the frame's URL (§2.1), nothing more. Pages may carry
-  many axes (ten is realistic); beyond a handful the switcher MUST degrade to
-  a panel rather than overflow (reference: inline pills up to 3 axes, then a
-  panel with segmented controls and a "changed from default" count).
-- **Coverage matrix**: on the canvas, a page's pinned instances are laid out
-  on its two most-varying dimensions with row/column headers; declared-but-
-  unpinned cells are shown as empty placeholders (still openable). Headers
-  and group titles stay legible when zoomed out (rendered at constant screen
-  size).
+  runtime — it rewrites the frame's URL (§2.1), nothing more. Most pages carry
+  one or two axes and many carry none; where a page does carry a handful the
+  switcher MUST degrade to a panel rather than overflow (reference: inline
+  pills up to 3 axes, then a panel with segmented controls and a "changed
+  from default" count).
+- **Site map**: an overview area showing every page as one node — a snapshot
+  thumbnail, its label, its section — with arrows derived from the scenarios
+  (consecutive steps on different pages; one arrow however many scenarios
+  walk it, naming them on hover). Clicking a node fits that page's area. It
+  answers the question a wall of variants cannot: how do these screens fit
+  together. Pages no scenario reaches are shown unconnected rather than
+  hidden — a couple of stand-alone screens is a legitimate workspace. Nodes
+  are static images: the map must not run the prototype.
+- **Sections**: page areas cluster by `pages[].group` under a quiet heading,
+  groups in first-appearance order, ungrouped pages last.
+- **Coverage matrix**: when two or more dimensions actually differ across a
+  page's pinned instances, its cards are laid out on the two most-varying
+  ones with row/column headers, and declared-but-unpinned cells show as empty
+  placeholders (still openable). With one varying dimension the cards are a
+  plain row labelled with that axis; with none they are simply cards. A card
+  MUST NOT be labelled with a dimension the page does not vary — a chip that
+  reads the same on every card is noise on all of them. Headers and group
+  titles stay legible when zoomed out (rendered at constant screen size).
 - **Anatomy as design annotation, scan-backed**: a page's `annotations`
   double as its anatomy — the canvas shows one instance with the annotated
   regions numbered and a legend of *what each part does*. The boxes come from
@@ -518,16 +562,16 @@ A conforming viewer SHOULD provide:
   (`/stavy/?p=<pageId>&d_<dim>=<value>&...`), so any state is shareable.
   Viewer modes are URL state too (`w=1` wireframe, `i=1` inspect,
   `tour=<id>&ts=<n>`), and the canvas persists its viewport (`v=x,y,zoom`)
-  and flags (`notes=1`, `w=1`, `live=1`) — a link reproduces exactly what the
-  sender saw.
+  and flags (`notes=1`, `w=1`, `live=1`, `map=0`) — a link reproduces exactly
+  what the sender saw.
 - **Honesty + hide UI**: the chrome carries a "Mock only — not a real
   product" label and a shortcut (⌘\ / Ctrl+\) that hides all viewer UI for
   clean demos and screenshots.
 - **Canvas zoom range** must reach far enough to read details inside
   thumbnails (the reference viewer allows 5%–1200%), and the canvas must stay
-  legible from orbit: content is organised into **named areas** (one per
-  page/component, plus scenarios and boards) whose titles render at constant
-  screen size, so the overview reads as a map rather than a scroll.
+  legible from orbit: content is organised into **named areas** (the site
+  map, scenarios, boards, and one per page/component) whose titles render at
+  constant screen size, so the overview reads as a map rather than a scroll.
 - **Headless mode**: `?ui=0` starts with all viewer chrome hidden, for
   snapshots, embeds, and screenshots in CI.
 - **Authoring in dev** (optional): a dev server MAY expose an endpoint that
@@ -634,3 +678,18 @@ And it adds: the `url` field (§2.1) as the entire binding contract, the
 player as a first-class mode distinct from the canvas, drift detection for
 in-frame navigation, and a scan step that is simultaneously the contract
 check and the source of the canvas's pins/anatomy/snapshots.
+
+Later in v0.2, after the first outside adopters reported manifests where every
+app parameter had become a dimension and every card wore a row of values that
+never changed:
+
+- `pages[].dimensions` is **optional** (§1.3), alongside `instances`. A page
+  with no axes is a first-class page: one screen, one card. Validators may no
+  longer warn about either.
+- `pages[].group` (§1.3): free-text sections, so a workspace can be organised
+  the way a design file is.
+- A card is labelled with what varies, and the coverage matrix appears only
+  when two or more dimensions actually vary (§3).
+- The **site map** area (§3), with arrows derived from the scenarios.
+- Scenarios must run **end to end** (§1.4), with a validator warning for the
+  walkthrough that never leaves one page.

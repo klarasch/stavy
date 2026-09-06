@@ -46,10 +46,6 @@
           "label": "Empty"
         },
         {
-          "id": "loading",
-          "label": "Loading"
-        },
-        {
           "id": "error",
           "label": "Error"
         }
@@ -122,21 +118,6 @@
         {
           "id": "done",
           "label": "4 · Done"
-        }
-      ]
-    },
-    {
-      "id": "density",
-      "label": "Density",
-      "kind": "preference",
-      "values": [
-        {
-          "id": "comfortable",
-          "label": "Comfortable"
-        },
-        {
-          "id": "compact",
-          "label": "Compact"
         }
       ]
     },
@@ -276,6 +257,7 @@
     {
       "id": "dashboard",
       "label": "Dashboard",
+      "group": "Overview",
       "description": "Landing page; content adapts to the viewer's role.",
       "url": "/?role={role}&state={state}",
       "template": "dashboard-page",
@@ -288,8 +270,7 @@
         ],
         "state": [
           "loaded",
-          "empty",
-          "loading"
+          "empty"
         ]
       },
       "defaults": {
@@ -323,12 +304,6 @@
             "state": "empty"
           },
           "note": "First-run experience"
-        },
-        {
-          "dims": {
-            "role": "employee",
-            "state": "loading"
-          }
         }
       ],
       "annotations": [
@@ -352,6 +327,7 @@
     {
       "id": "expenses",
       "label": "Expenses list",
+      "group": "Expenses",
       "description": "All expenses visible to the current role, with filters.",
       "url": "/expenses?role={role}&state={state}",
       "template": "list-page",
@@ -365,7 +341,6 @@
         "state": [
           "loaded",
           "empty",
-          "loading",
           "error"
         ]
       },
@@ -396,12 +371,6 @@
         {
           "dims": {
             "role": "employee",
-            "state": "loading"
-          }
-        },
-        {
-          "dims": {
-            "role": "employee",
             "state": "error"
           },
           "note": "API failure fallback with retry"
@@ -423,8 +392,9 @@
     {
       "id": "expense-detail",
       "label": "Expense detail",
+      "group": "Expenses",
       "description": "A single expense across its whole lifecycle; actions depend on role × lifecycle. Also varies by density, locale, and overlay (5 dimensions → the toolbar switches to a panel). Reject walks through a confirm-dialog overlay state.",
-      "url": "/expenses/{expense}?role={role}&lifecycle={lifecycle}&density={density}&locale={locale}&overlay={overlay}",
+      "url": "/expenses/{expense}?role={role}&lifecycle={lifecycle}&locale={locale}&overlay={overlay}",
       "template": "detail-page",
       "fidelity": "interactive",
       "dimensions": {
@@ -445,10 +415,6 @@
           "rejected",
           "reimbursed"
         ],
-        "density": [
-          "comfortable",
-          "compact"
-        ],
         "locale": [
           "en-US",
           "de-DE"
@@ -462,7 +428,6 @@
         "expense": "exp-2101",
         "role": "employee",
         "lifecycle": "submitted",
-        "density": "comfortable",
         "overlay": "none"
       },
       "instances": [
@@ -513,14 +478,6 @@
             "lifecycle": "reimbursed"
           },
           "note": "Terminal state"
-        },
-        {
-          "dims": {
-            "role": "manager",
-            "lifecycle": "submitted",
-            "density": "compact"
-          },
-          "note": "Compact density"
         }
       ],
       "annotations": [
@@ -544,6 +501,7 @@
     {
       "id": "submit-expense",
       "label": "Submit expense",
+      "group": "Submitting",
       "description": "Multi-step submission flow; each step is a value of the 'step' process dimension.",
       "url": "/submit?step={step}",
       "template": "form-flow-page",
@@ -594,6 +552,14 @@
           "note": "Upload is faked in the prototype; any interaction marks a receipt as attached."
         }
       ]
+    },
+    {
+      "id": "policy",
+      "label": "Expense policy",
+      "description": "Reference screen: the same content for every role, in every state. No dimensions, one card.",
+      "url": "/policy",
+      "fidelity": "static",
+      "dimensions": {}
     },
     {
       "id": "approval-actions",
@@ -740,8 +706,7 @@
         ],
         "state": [
           "loaded",
-          "empty",
-          "loading"
+          "empty"
         ]
       },
       "defaults": {
@@ -772,12 +737,6 @@
             "role": "manager",
             "state": "empty"
           }
-        },
-        {
-          "dims": {
-            "role": "manager",
-            "state": "loading"
-          }
         }
       ],
       "annotations": [
@@ -794,7 +753,7 @@
       "id": "employee-submits",
       "label": "Employee submits an expense",
       "persona": "employee",
-      "description": "The core happy path: from the dashboard through the 4-step flow to seeing the expense as Submitted in the list.",
+      "description": "The core happy path: from the dashboard through the 4-step flow to the submitted expense itself.",
       "refs": [
         "PRD-118 §2"
       ],
@@ -854,6 +813,17 @@
           "target": "ExpenseRow:exp-2101",
           "title": "It shows up as Submitted",
           "note": "The freshly submitted expense appears at the top of the employee's list."
+        },
+        {
+          "page": "expense-detail",
+          "dims": {
+            "expense": "exp-2101",
+            "role": "employee",
+            "lifecycle": "submitted"
+          },
+          "target": "LifecycleTimeline",
+          "title": "Open the expense you filed",
+          "note": "Where the flow actually ends: the record exists, waiting on M. Novak. Everything the employee can still do lives here."
         }
       ]
     },
@@ -964,7 +934,8 @@
         "submit-expense",
         "approval-actions",
         "flow-progress",
-        "work-queue"
+        "work-queue",
+        "policy"
       ],
       "scenarios": [
         "employee-submits",
@@ -980,7 +951,8 @@
         "dashboard",
         "submit-expense",
         "expenses",
-        "flow-progress"
+        "flow-progress",
+        "policy"
       ],
       "scenarios": [
         "employee-submits"

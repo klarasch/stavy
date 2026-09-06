@@ -56,16 +56,22 @@ for (const p of m.pages) {
   if (p.description) L.push(p.description, "")
   L.push(`| | |`, `|---|---|`)
   L.push(`| id | \`${p.id}\` |`)
-  L.push(`| template | \`${p.template}\` — \`${t?.source ?? "?"}\` |`)
+  if (p.group) L.push(`| section | ${p.group} |`)
+  if (p.template) L.push(`| template | \`${p.template}\` — \`${t?.source ?? "?"}\` |`)
   if (t?.uiKit?.length) L.push(`| UI-kit components | ${t.uiKit.join(", ")} |`)
   if (t?.organisms?.length) L.push(`| organisms | ${t.organisms.map((o) => `[${page.get(o)?.label ?? o}](./${o}.md)`).join(", ")} |`)
   if (p.frame) L.push(`| frame | ${p.frame.width} × ${p.frame.height} |`)
   L.push(`| fidelity | ${p.fidelity ?? "static"} |`)
   L.push(`| module | \`${p.module ?? `src/demo/pages/${p.id}.tsx`}\` |`, "")
   L.push(`## Dimensions`, "")
-  for (const [d, vs] of Object.entries(p.dimensions)) L.push(`- **${dimLabel(d)}** (\`${d}\`): ${vs.map((v) => (v === p.defaults?.[d] ? `**${valLabel(d, v)}** (default)` : valLabel(d, v))).join(" · ")}`)
-  L.push("", `## Pinned states (${p.instances?.length ?? 0})`, "")
-  for (const i of p.instances ?? []) L.push(`- ${Object.entries(i.dims).map(([d, v]) => `${dimLabel(d)}: ${valLabel(d, v)}`).join(", ") || "default"}${i.note ? ` — ${i.note}` : ""}`)
+  const dimEntries = Object.entries(p.dimensions ?? {})
+  // A page with no axes is a normal page (SPEC §1.3), not an unfinished one.
+  if (!dimEntries.length) L.push("_None — one screen, at one URL._")
+  for (const [d, vs] of dimEntries) L.push(`- **${dimLabel(d)}** (\`${d}\`): ${vs.map((v) => (v === p.defaults?.[d] ? `**${valLabel(d, v)}** (default)` : valLabel(d, v))).join(" · ")}`)
+  if (p.instances?.length || dimEntries.length) {
+    L.push("", `## Pinned states (${p.instances?.length ?? 0})`, "")
+    for (const i of p.instances ?? []) L.push(`- ${Object.entries(i.dims).map(([d, v]) => `${dimLabel(d)}: ${valLabel(d, v)}`).join(", ") || "default"}${i.note ? ` — ${i.note}` : ""}`)
+  }
   L.push("", `## Semantic targets (\`data-proto\`)`, "")
   if (targets.size === 0) L.push("_none found in source_")
   else for (const [id, meta] of targets) L.push(`- \`${id}\`${meta ? ` — ${meta}` : ""}`)
@@ -87,6 +93,6 @@ for (const p of m.pages) {
   writeFileSync(resolve(out, `${p.id}.md`), L.join("\n") + "\n")
   n++
 }
-const index = [`# Handoff — ${m.product.name}`, "", ...m.pages.map((p) => `- [${p.label}](./${p.id}.md)${p.kind === "component" ? " (component)" : ""} — ${p.fidelity ?? "static"}, ${p.instances?.length ?? 0} states`)]
+const index = [`# Handoff — ${m.product.name}`, "", ...m.pages.map((p) => `- [${p.label}](./${p.id}.md)${p.kind === "component" ? " (component)" : ""} — ${p.fidelity ?? "static"}, ${p.instances?.length ? `${p.instances.length} states` : "one state"}`)]
 writeFileSync(resolve(out, "README.md"), index.join("\n") + "\n")
 console.log(`${n} handoff sheet(s) written to ${out}`)
