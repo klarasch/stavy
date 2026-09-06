@@ -262,7 +262,7 @@ export function groupPages<T extends PageDef>(pages: T[]): { group?: string; pag
     if (!p.group) rest.push(p)
     else named.set(p.group, [...(named.get(p.group) ?? []), p])
   }
-  const out = [...named.entries()].map(([group, ps]) => ({ group, pages: ps }))
+  const out: { group?: string; pages: T[] }[] = [...named.entries()].map(([group, ps]) => ({ group, pages: ps }))
   if (rest.length) out.push({ pages: rest })
   return out
 }
@@ -278,6 +278,25 @@ export function varyingDims(page: PageDef, instances: Record<string, string>[]):
   return Object.keys(page.dimensions)
     .filter((d) => !isWorkspaceDim(d) && new Set(instances.map((i) => i[d])).size > 1)
     .sort((a, b) => page.dimensions[b].length - page.dimensions[a].length)
+}
+
+/**
+ * The page-scoped dimensions whose value changes across a list of resolved
+ * assignments, in manifest order. Used for a scenario lane, where the cards
+ * sit on different pages: what moves between steps (a lifecycle advancing) is
+ * worth a chip, what holds still for the whole walkthrough is not.
+ */
+export function varyingAcross(assignments: Record<string, string>[]): string[] {
+  const seen = new Map<string, Set<string>>()
+  for (const a of assignments) {
+    for (const [d, v] of Object.entries(a)) {
+      if (isWorkspaceDim(d)) continue
+      const vs = seen.get(d) ?? new Set<string>()
+      vs.add(v)
+      seen.set(d, vs)
+    }
+  }
+  return manifest.dimensions.map((d) => d.id).filter((d) => (seen.get(d)?.size ?? 0) > 1)
 }
 
 /** Resolve the full dimension assignment for a page: overrides > defaults > first value. */
