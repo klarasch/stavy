@@ -339,6 +339,10 @@
 .ps-crumb { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 6px; border: 1px solid var(--ps-border); background: transparent; color: var(--ps-muted); font: inherit; font-size: 11px; cursor: pointer; }
 .ps-crumb:hover { color: var(--ps-fg); background: var(--ps-hover); }
 .ps-crumb[data-on="true"] { background: var(--ps-accent); color: var(--ps-accent-fg); border-color: transparent; }
+/* a design system's own components: hidden until the internals chip is opened */
+.ps-crumb[data-internal="true"] { opacity: 0.55; border-style: dashed; }
+.ps-crumb[data-internal="true"][data-on="true"] { opacity: 0.85; }
+.ps-crumb-muted { border-style: dashed; color: var(--ps-faint); font-style: italic; }
 .ps-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--ps-border); vertical-align: -2px; margin-right: 6px; }
 .ps-kv { display: grid; grid-template-columns: 96px 1fr; gap: 3px 10px; font-size: 11.5px; }
 .ps-kv dt { color: var(--ps-muted); } .ps-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
@@ -387,6 +391,7 @@
 .ps-classes { display: flex; flex-wrap: wrap; gap: 3px; }
 .ps-classes span { font: 10.5px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 5px; border-radius: 4px; background: var(--ps-hover); color: var(--ps-fg); }
 .ps-classes span[data-kind="color"] { color: var(--ps-focus); }
+.ps-classes span[data-kind="kit"] { color: var(--ps-focus); font-weight: 600; }
 .ps-props { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ps-props dt { color: var(--ps-muted); } .ps-props dd { margin: 0; overflow-wrap: anywhere; }
 .ps-copy { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ps-border); background: transparent; color: var(--ps-muted); font: inherit; font-size: 10.5px; cursor: pointer; }

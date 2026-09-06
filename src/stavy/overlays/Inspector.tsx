@@ -1,11 +1,21 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { X, Crosshair, Copy, Check, ExternalLink } from "../icons"
 import { Chip, Kbd, Keys } from "../chrome"
 import type { PageDef, TemplateDef } from "../types"
 import { valueLabel, dimensionLabel, appUrl, manifest, appBase, ownTargetId } from "../manifest"
-import { adapter, frameToJsx, type CompFrame } from "../inspect-adapter"
-import { hostRect, withWireframeLifted } from "../frame"
+import {
+  componentStack as componentStackOf,
+  designSystemFor,
+  frameToJsx,
+  loadInspectModule,
+  computedStyleOf,
+  primaryFontFamily,
+  invalidateStyleCache,
+  type CompFrame,
+  type DesignSystemAdapter,
+} from "../inspect-adapter"
+import { hostRect, withWireframeLifted, frameDoc } from "../frame"
 
 /* ================================================================== */
 /* Selection model                                                     */
@@ -97,39 +107,6 @@ function copyKeyFor(el: Element): { key: string; locale: string } | null {
 /* Style provenance: classes, tokens, computed values                   */
 /* ================================================================== */
 
-const TOKEN_NAMES = adapter.tokenNames
-const PALETTE = adapter.paletteClass
-const TEXT_SIZE = /^text-(xs|sm|base|lg|xl|\dxl|\[.+\])$/
-const FONT = /^(font-(thin|light|normal|medium|semibold|bold|extrabold|black|sans|serif|mono)|leading-\S+|tracking-\S+|italic|uppercase|capitalize|tabular-nums|truncate|line-clamp-\d+)$/
-const SPACE = /^-?(p|px|py|pt|pr|pb|pl|m|mx|my|mt|mr|mb|ml|gap|gap-x|gap-y|space-x|space-y|w|h|size|min-w|max-w|min-h|max-h|rounded(-\w+)?|border(-\d)?|inset|top|left|right|bottom)(-\S+)?$/
-
-type ClassKind = "color" | "type" | "space" | "layout" | "other"
-
-function classifyClass(c: string): ClassKind {
-  const base = c.replace(/^[a-z-]+:/, "").replace(/!$/, "") // strip variants like hover:, md:
-  const m = base.match(/^(text|bg|border|ring|outline|fill|stroke|decoration|from|to|via)-(.+)$/)
-  if (m) {
-    const v = m[2].replace(/\/\d+$/, "")
-    if (TOKEN_NAMES.has(v) || PALETTE.test(v) || v.startsWith("[")) return "color"
-  }
-  if (TEXT_SIZE.test(base) || FONT.test(base)) return "type"
-  if (SPACE.test(base)) return "space"
-  if (/^(flex|grid|inline|block|hidden|items-|justify-|col-|row-|self-|shrink|grow|absolute|relative|fixed|sticky|overflow|z-)/.test(base)) return "layout"
-  return "other"
-}
-
-function colorSource(el: Element, prefix: "text" | "bg" | "border"): { cls: string; from: Element | null } | null {
-  const stop = el.ownerDocument.body
-  let cur: Element | null = el
-  while (cur && cur !== stop) {
-    const cls = adapter.colorClass(cur.getAttribute("class") ?? "", prefix)
-    if (cls) return { cls, from: cur === el ? null : cur }
-    if (prefix !== "text") break // background/border don't inherit
-    cur = cur.parentElement
-  }
-  return null
-}
-
 /* ---- color parsing: Chrome reports computed colors as oklch/rgb/color(srgb) ---- */
 function clamp01(x: number) {
   return Math.min(1, Math.max(0, x))
@@ -177,23 +154,15 @@ function cssColorToHex(str: string): { hex: string; alpha: number } | null {
   return { hex: str, alpha: 1 }
 }
 
-const TEXT_SCALE: Array<[number, string]> = [
-  [12, "text-xs"], [14, "text-sm"], [16, "text-base"], [18, "text-lg"], [20, "text-xl"], [24, "text-2xl"], [30, "text-3xl"], [36, "text-4xl"],
-]
-const WEIGHTS: Record<string, string> = { "400": "font-normal", "500": "font-medium", "600": "font-semibold", "700": "font-bold" }
 const px = (v: string) => Math.round(parseFloat(v || "0") * 100) / 100
-const sp = (n: number) => (n === 0 ? "0" : n === 1 ? "px" : Number.isInteger(n / 2) ? String(n / 4) : "")
 
-function boxShorthand(cs: CSSStyleDeclaration, prop: "padding" | "margin", p: string) {
+/** The four sides of a box as CSS writes them: one value, two, or four. */
+function boxShorthand(cs: CSSStyleDeclaration, prop: "padding" | "margin"): { value: string; top: number } | null {
   const t = px(cs.getPropertyValue(`${prop}-top`)), r = px(cs.getPropertyValue(`${prop}-right`))
   const b = px(cs.getPropertyValue(`${prop}-bottom`)), l = px(cs.getPropertyValue(`${prop}-left`))
   if ([t, r, b, l].every((n) => n === 0)) return null
-  let token = ""
-  if (t === r && r === b && b === l) token = sp(t) && `${p}-${sp(t)}`
-  else if (t === b && l === r) token = [sp(l) && `${p}x-${sp(l)}`, sp(t) && `${p}y-${sp(t)}`].filter(Boolean).join(" ")
-  else token = [`${p}t-${sp(t)}`, `${p}r-${sp(r)}`, `${p}b-${sp(b)}`, `${p}l-${sp(l)}`].join(" ")
   const value = t === r && r === b && b === l ? `${t}px` : t === b && l === r ? `${t}px ${r}px` : `${t}px ${r}px ${b}px ${l}px`
-  return { value, token }
+  return { value, top: t }
 }
 
 interface StyleRow {
@@ -204,13 +173,20 @@ interface StyleRow {
   note?: string
 }
 
-/** Read computed style (from the frame's own window) with the wireframe stylesheet temporarily lifted, so values describe the design, not the filter. */
-function computedWithoutWireframe(el: Element): { cs: CSSStyleDeclaration; wireframed: boolean } {
+/**
+ * Read computed style with the wireframe stylesheet temporarily lifted, so
+ * values describe the design and not the filter over it.
+ *
+ * `getComputedStyle` must come from the element's *own* window: asking the
+ * host window about an element in the frame's document returns empty strings
+ * for everything, which is how an inspector ends up reporting no styles at all.
+ */
+function computedWithoutWireframe(el: Element): { cs: CSSStyleDeclaration | null; wireframed: boolean } {
   const doc = el.ownerDocument
-  const win = doc.defaultView ?? window
   const { value, lifted } = withWireframeLifted(doc, () => {
-    const snapshot = win.getComputedStyle(el)
-    // Copy the few properties we read before the stylesheet comes back (the declaration is live).
+    const snapshot = computedStyleOf(el)
+    if (!snapshot) return null
+    // Copy the properties we read before the stylesheet comes back (the declaration is live).
     const keys = ["fontSize", "lineHeight", "fontFamily", "fontWeight", "letterSpacing", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
       "marginTop", "marginRight", "marginBottom", "marginLeft", "gap", "borderTopLeftRadius", "borderTopWidth", "borderTopStyle", "width", "height",
       "color", "backgroundColor", "borderTopColor"] as const
@@ -223,47 +199,103 @@ function computedWithoutWireframe(el: Element): { cs: CSSStyleDeclaration; wiref
   return { cs: value, wireframed: lifted }
 }
 
-function stylesFor(el: Element) {
+/**
+ * Resolved styles with provenance, for whichever design system styles this
+ * document. Every name shown here is evidence, never a guess: a token comes
+ * from following the winning declaration's `var()` chain through the frame's
+ * CSSOM, and a class is only named when that class is actually on the element.
+ */
+function stylesFor(el: Element, ds: DesignSystemAdapter) {
   const { cs, wireframed } = computedWithoutWireframe(el)
+  if (!cs) return null
+  const doc = el.ownerDocument
+
+  const prov = (prop: string) => {
+    try {
+      return ds.provenance(el, prop)
+    } catch {
+      return null
+    }
+  }
+  const cls = (prop: string) => {
+    try {
+      return ds.classSource(el, prop)
+    } catch {
+      return null
+    }
+  }
+  /** The token/class behind one property, and the chain that got us there. */
+  const source = (prop: string) => {
+    const p = prov(prop)
+    const c = cls(prop)
+    const notes: string[] = []
+    const from = p?.inheritedFrom ?? c?.from ?? null
+    if (from) notes.push(`inherited from ${elementLabel(from)}`)
+    if (p?.chain.length) notes.push([prop, ...p.chain].join(" ← "))
+    if (p?.note) notes.push(p.note)
+    if (c?.note) notes.push(c.note)
+    const fallback = p?.chain.length ? p.chain[p.chain.length - 1].replace(/^var\(|\)$/g, "") : undefined
+    return { token: c?.cls ?? p?.token ?? fallback, note: notes.length ? notes.join(" · ") : undefined }
+  }
+
   const size = px(cs.fontSize)
-  const lh = cs.lineHeight === "normal" ? "normal" : `${px(cs.lineHeight)}px`
+  const lhPx = cs.lineHeight === "normal" ? null : px(cs.lineHeight)
+  const family = primaryFontFamily(cs.fontFamily)
+  const weight = parseInt(cs.fontWeight, 10)
   const type: StyleRow[] = [
-    { k: "font", v: cs.fontFamily.split(",")[0].replace(/"/g, ""), token: /mono/i.test(cs.fontFamily) ? "font-mono" : "font-sans" },
-    { k: "size / line", v: `${size}px / ${lh}`, token: TEXT_SCALE.find(([p]) => p === size)?.[1] },
-    { k: "weight", v: cs.fontWeight, token: WEIGHTS[cs.fontWeight] },
+    { k: "font", v: family, ...source("font-family") },
+    { k: "size / line", v: `${size}px / ${lhPx === null ? "normal" : `${lhPx}px`}`, ...source("font-size") },
+    { k: "weight", v: cs.fontWeight, ...source("font-weight") },
   ]
-  if (cs.letterSpacing !== "normal") type.push({ k: "tracking", v: cs.letterSpacing })
+  let scale: string | null = null
+  try {
+    scale = ds.typeScaleName({ family, size, weight, lineHeight: lhPx }, el)
+  } catch {
+    scale = null
+  }
+  if (scale) type.push({ k: "scale", v: scale })
+  if (cs.letterSpacing !== "normal") type.push({ k: "tracking", v: cs.letterSpacing, ...source("letter-spacing") })
+
+  /** A spacing name: the token behind the declaration, the class that set it, or a token of the same size. */
+  const spaceSource = (prop: string, valuePx: number) => {
+    const s = source(prop)
+    if (s.token) return s
+    try {
+      const t = ds.spacingToken(doc, valuePx)
+      if (t) return { token: t, note: undefined as string | undefined }
+    } catch {
+      /* no scale to match against */
+    }
+    return s
+  }
 
   const space: StyleRow[] = []
-  const pad = boxShorthand(cs, "padding", "p")
-  if (pad) space.push({ k: "padding", v: pad.value, token: pad.token })
-  const mar = boxShorthand(cs, "margin", "m")
-  if (mar) space.push({ k: "margin", v: mar.value, token: mar.token })
+  const pad = boxShorthand(cs, "padding")
+  if (pad) space.push({ k: "padding", v: pad.value, ...spaceSource("padding-top", pad.top) })
+  const mar = boxShorthand(cs, "margin")
+  if (mar) space.push({ k: "margin", v: mar.value, ...spaceSource("margin-top", mar.top) })
   const gap = px(cs.gap || "0")
-  if (gap > 0) space.push({ k: "gap", v: `${gap}px`, token: sp(gap) && `gap-${sp(gap)}` })
+  if (gap > 0) space.push({ k: "gap", v: `${gap}px`, ...spaceSource("gap", gap) })
   const radius = px(cs.borderTopLeftRadius)
-  if (radius > 0) space.push({ k: "radius", v: `${radius}px` })
+  if (radius > 0) space.push({ k: "radius", v: `${radius}px`, ...spaceSource("border-top-left-radius", radius) })
   const bw = px(cs.borderTopWidth)
-  if (bw > 0) space.push({ k: "border", v: `${bw}px ${cs.borderTopStyle}` })
+  if (bw > 0) space.push({ k: "border", v: `${bw}px ${cs.borderTopStyle}`, ...spaceSource("border-top-width", bw) })
   space.push({ k: "size", v: `${px(cs.width)} × ${px(cs.height)}` })
 
   const color: StyleRow[] = []
-  const add = (k: string, raw: string, prefix: "text" | "bg" | "border") => {
+  const add = (k: string, raw: string, prop: string) => {
     const parsed = cssColorToHex(raw)
     if (!parsed) return
-    const src = colorSource(el, prefix)
-    const row: StyleRow = { k, v: parsed.alpha < 1 ? `${parsed.hex} ${Math.round(parsed.alpha * 100)}%` : parsed.hex, swatch: raw }
-    if (src) {
-      const v = src.cls.replace(/^[a-z-]+:/, "").replace(/^(text|bg|border)-/, "").replace(/\/\d+$/, "")
-      row.token = src.cls
-      row.note = TOKEN_NAMES.has(v) ? `var(--${v})` : PALETTE.test(v) ? "tailwind palette" : undefined
-      if (src.from) row.note = `inherited from ${elementLabel(src.from)}${row.note ? " · " + row.note : ""}`
-    }
-    color.push(row)
+    color.push({
+      k,
+      v: parsed.alpha < 1 ? `${parsed.hex} ${Math.round(parsed.alpha * 100)}%` : parsed.hex,
+      swatch: raw,
+      ...source(prop),
+    })
   }
-  add("text", cs.color, "text")
-  add("background", cs.backgroundColor, "bg")
-  if (bw > 0) add("border", cs.borderTopColor, "border")
+  add("text", cs.color, "color")
+  add("background", cs.backgroundColor, "background-color")
+  if (bw > 0) add("border", cs.borderTopColor, "border-top-color")
   return { type, space, color, wireframed }
 }
 
@@ -315,11 +347,22 @@ export function Inspector({
   const [hover, setHover] = useState<Picked | null>(null)
   const [pinned, setPinned] = useState<Picked | null>(null)
   const [levelIdx, setLevelIdx] = useState<number | null>(null)
-  const [compIdx, setCompIdx] = useState(0)
+  const [compIdx, setCompIdx] = useState<number | null>(null)
+  const [internalsOpen, setInternalsOpen] = useState(false)
   const [alt, setAlt] = useState(false)
   const [, bump] = useState(0)
 
   useEffect(() => loadCopyCatalog(() => bump((n) => n + 1)), [])
+  // A workspace may ship a code adapter; it lands after the first render, so re-render when it does.
+  useEffect(() => {
+    let live = true
+    loadInspectModule().then((changed) => {
+      if (changed && live) bump((n) => n + 1)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
   useEffect(() => onPinChange?.(pinned?.iframe ?? null), [pinned, onPinChange])
 
   useEffect(() => {
@@ -335,9 +378,14 @@ export function Inspector({
       if (!p) return
       e.preventDefault()
       e.stopPropagation()
+      // Once per pick, never per hover: rebuild this frame's flattened stylesheets
+      // so provenance for the pinned selection reflects the document as it is now.
+      const doc = frameDoc(p.iframe)
+      if (doc) invalidateStyleCache(doc)
       setPinned(p)
       setLevelIdx(null)
-      setCompIdx(0)
+      setCompIdx(null)
+      setInternalsOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       setAlt(e.altKey)
@@ -361,14 +409,18 @@ export function Inspector({
   const defaultIdx = levels ? (alt ? Math.max(0, levels.findIndex((l) => l.kind === "proto")) : 0) : 0
   const idx = levelIdx ?? defaultIdx
   const focus = levels?.[Math.min(idx, (levels?.length ?? 1) - 1)] ?? null
-  const stack = useMemo<CompFrame[]>(() => (focus ? adapter.componentStack(focus.el, "") : []), [focus])
-  const comp = stack[Math.min(compIdx, Math.max(0, stack.length - 1))]
+  const stack = useMemo<CompFrame[]>(() => (focus ? componentStackOf(focus.el) : []), [focus])
+  const internalCount = stack.filter((c) => c.internal).length
+  // A design system's own internals are rarely what you meant to inspect first.
+  const compIdxResolved = compIdx ?? Math.max(0, stack.findIndex((c) => !c.internal))
+  const comp = stack[Math.min(compIdxResolved, Math.max(0, stack.length - 1))]
   // Choosing a parent component re-targets everything (outline, element, styles) to that
   // component's own root node — not the node that was clicked.
-  const subject: Element | null = compIdx > 0 && comp?.host ? comp.host : (focus?.el ?? null)
+  const subject: Element | null = compIdxResolved > 0 && comp?.host ? comp.host : (focus?.el ?? null)
   const rect: Rect | null = subject && picked && subject.isConnected ? hostRect(subject, picked.iframe) : null
   const ctx = picked?.ctx ?? null
-  const styles = useMemo(() => (subject ? stylesFor(subject) : null), [subject])
+  const ds = useMemo(() => (subject?.ownerDocument ? designSystemFor(subject.ownerDocument) : null), [subject])
+  const styles = useMemo(() => (subject && ds ? stylesFor(subject, ds) : null), [subject, ds])
   const classes = subject ? Array.from(subject.classList) : []
   const copyKey = subject ? copyKeyFor(subject) : null
   const attrs = subject
@@ -431,7 +483,7 @@ export function Inspector({
             {levels ? (
               <div className="flex flex-wrap gap-1">
                 {levels.map((l, i) => (
-                  <button key={i} className={l.kind === "exact" ? "ps-crumb ps-mono" : "ps-crumb"} data-on={i === idx ? "true" : undefined} onClick={() => { setLevelIdx(i); setCompIdx(0) }}>
+                  <button key={i} className={l.kind === "exact" ? "ps-crumb ps-mono" : "ps-crumb"} data-on={i === idx ? "true" : undefined} onClick={() => { setLevelIdx(i); setCompIdx(null) }}>
                     {l.label}
                   </button>
                 ))}
@@ -457,14 +509,34 @@ export function Inspector({
               ) : (
                 <>
                   <div className="ps-comp-stack mb-2">
-                    {stack.map((c, i) => (
-                      <span key={i} className="contents">
-                        {i > 0 && <span style={{ color: "var(--ps-faint)" }}>‹</span>}
-                        <button className="ps-crumb" data-on={i === compIdx ? "true" : undefined} onClick={() => setCompIdx(i)}>
-                          {c.name}
+                    {stack.map((c, i) =>
+                      c.internal && !internalsOpen ? null : (
+                        <span key={i} className="contents">
+                          {i > 0 && <span style={{ color: "var(--ps-faint)" }}>‹</span>}
+                          <button
+                            className="ps-crumb"
+                            data-on={i === compIdxResolved ? "true" : undefined}
+                            data-internal={c.internal ? "true" : undefined}
+                            title={c.internal ? `${c.name} — internal to ${c.kit ?? "the design system"}` : undefined}
+                            onClick={() => setCompIdx(i)}
+                          >
+                            {c.name}
+                          </button>
+                        </span>
+                      )
+                    )}
+                    {internalCount > 0 && (
+                      <span className="contents">
+                        <span style={{ color: "var(--ps-faint)" }}>‹</span>
+                        <button
+                          className="ps-crumb ps-crumb-muted"
+                          onClick={() => setInternalsOpen(!internalsOpen)}
+                          title={internalsOpen ? "Hide the design system's own components" : "Show the design system's own components"}
+                        >
+                          {internalsOpen ? "hide internals" : `+${internalCount} internals`}
                         </button>
                       </span>
-                    ))}
+                    )}
                   </div>
                   {comp && (
                     <pre className="rounded-lg p-2.5 ps-mono text-[11.5px] leading-relaxed whitespace-pre-wrap" style={{ background: "var(--ps-hover)", margin: 0 }}>
@@ -504,12 +576,17 @@ export function Inspector({
 
           {/* ---- 4. DOM element: classes & attributes ---- */}
           {subject && (
-            <Section title={`Element <${subject.tagName.toLowerCase()}>${compIdx > 0 && comp?.host ? ` (root of ${comp.name})` : ""}`} right={classes.length > 0 ? <CopyButton text={classes.join(" ")} label="copy classes" /> : null}>
+            <Section title={`Element <${subject.tagName.toLowerCase()}>${compIdxResolved > 0 && comp?.host ? ` (root of ${comp.name})` : ""}`} right={classes.length > 0 ? <CopyButton text={classes.join(" ")} label="copy classes" /> : null}>
               {classes.length > 0 ? (
                 <div className="ps-classes">
-                  {classes.map((c) => (
-                    <span key={c} data-kind={classifyClass(c)}>{c}</span>
-                  ))}
+                  {classes.map((c) => {
+                    const { label, kind, title } = ds ? ds.classLabel(c) : { label: c, kind: "other" as const, title: undefined }
+                    return (
+                      <span key={c} data-kind={kind} title={title}>
+                        {label}
+                      </span>
+                    )
+                  })}
                 </div>
               ) : (
                 <span style={{ color: "var(--ps-muted)" }}>no classes</span>
@@ -542,7 +619,7 @@ export function Inspector({
                 <Rows rows={styles.space} />
               </Section>
               {styles.color.length > 0 && (
-                <Section title="Color: value, and the class that sets it">
+                <Section title="Color: value, and where it comes from">
                   <Rows rows={styles.color} />
                 </Section>
               )}
