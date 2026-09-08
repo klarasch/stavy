@@ -1,14 +1,11 @@
 import { memo, useContext, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { CanvasInspectContext, useLiveWhenVisible } from "./visibility"
-import { getPage, pageUrl, appUrl, valueLabel, instanceKey, snapshotUrl, snapshotEntry } from "../manifest"
+import { getPage, pageUrl, appUrl, valueLabel, instanceKey, snapshotUrl, snapshotEntry, pageViewport } from "../manifest"
 import { frameDoc, setWireframe } from "../frame"
 import type { AnnotationDef } from "../types"
 import { cn } from "../cn"
 import { useComments } from "../comments/store"
-
-export const VIEWPORT_W = 1280
-export const VIEWPORT_H = 832
 
 const EMPTY_CHIPS: string[] = []
 
@@ -58,8 +55,9 @@ export const InstanceCard = memo(function InstanceCard({
   /** Canvas wireframe mode: opened page should keep it on (SPEC.md §3 deep links). */
   wireframe?: boolean
 }) {
-  const FW = frame?.width ?? VIEWPORT_W
-  const FH = frame?.height ?? VIEWPORT_H
+  const vp = frame ?? pageViewport()
+  const FW = vp.width
+  const FH = vp.height
   const { countFor } = useComments()
   const commentCount = countFor(pageId, dims)
   const navigate = useNavigate()

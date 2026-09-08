@@ -235,6 +235,12 @@ export interface ViewerDefaults {
   app?: string
   /** Attributes a bare target id is looked up in, in order. Default ["data-proto", "data-testid"]. */
   targetAttrs?: string[]
+  /**
+   * The workspace page viewport: the size every `kind: "page"` state is
+   * rendered and captured at. Default 1920 × 1080, dpr 1. `pages[].frame`
+   * still overrides this per page (mainly for components).
+   */
+  viewport?: { width: number; height: number; dpr?: number }
   /** What the inspector should know about this workspace's design system. */
   inspect?: InspectSettings
 }
@@ -273,6 +279,8 @@ export interface SnapshotEntry {
   file: string
   width: number
   height: number
+  /** Device scale factor the capture ran at (SPEC §1.8 viewer.viewport.dpr; default 1). */
+  dpr?: number
   /** Every target referenced for this instance that was found, with its box */
   targets: Record<string, TargetBox>
   /** Required targets (scenario steps, notes) that were not found in the rendered page — the contract broke */

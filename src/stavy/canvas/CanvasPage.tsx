@@ -8,11 +8,12 @@ import {
   manifest, getPage, getTemplate, resolveDims, pageUrl, valueLabel, dimensionLabel,
   isWorkspaceDim, workspaceDimensions, workspaceDimsFromParams, workspaceCarry, workspaceKey,
   workspaceOverridesFor, pageInWorkspace, scenarioInWorkspace, varyingDims, varyingAcross, groupPages, instanceKey,
+  pageViewport, frameOf,
 } from "../manifest"
 import { elementAt } from "../frame"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "./PanZoom"
 import { CanvasInspectContext, CanvasViewportContext, type CanvasInspect, type CanvasViewport } from "./visibility"
-import { InstanceCard, VIEWPORT_W } from "./InstanceCard"
+import { InstanceCard } from "./InstanceCard"
 import { CanvasNotes } from "./CanvasNotes"
 import { AnatomyCard } from "./AnatomyCard"
 import { CanvasToc } from "./CanvasToc"
@@ -40,9 +41,15 @@ function parseView(v: string | null): Transform | null {
   return { x, y, k: clampK(k) }
 }
 
+// Target on-canvas widths, pinned to what they've always rendered at the
+// legacy 1280-wide default viewport, so widening `viewer.viewport` scales
+// every card down to match rather than growing it 1.5×.
+const CARD_TARGET_W = 256
+const LANE_CARD_TARGET_W = 179.2
+const ANATOMY_CARD_TARGET_W = 384
+
 function cardScale(page: PageDef) {
-  if (page.kind === "component" && page.frame) return Math.min(0.6, 256 / page.frame.width)
-  return 0.2
+  return Math.min(0.6, CARD_TARGET_W / frameOf(page).width)
 }
 
 /** A named region of the canvas. The title pill scales with 1/zoom so it reads from orbit. */
@@ -92,8 +99,9 @@ const PageGroup = memo(function PageGroup({
   const navigate = useNavigate()
   const template = getTemplate(page.template)
   const scale = cardScale(page)
-  const w = Math.round((page.frame?.width ?? VIEWPORT_W) * scale)
-  const h = Math.round((page.frame?.height ?? 832) * scale)
+  const fr = frameOf(page)
+  const w = Math.round(fr.width * scale)
+  const h = Math.round(fr.height * scale)
 
   const wOver = useMemo(() => workspaceOverridesFor(page, wdims), [page, wdims])
 
@@ -243,7 +251,7 @@ const PageGroup = memo(function PageGroup({
               <span className="ps-zl"><span className="ps-chip ps-chip-sm">Anatomy</span></span>
               what each part of the screen does
             </div>
-            <AnatomyCard page={page} overrides={wOver} scale={page.kind === "component" ? Math.min(0.8, 420 / (page.frame?.width ?? VIEWPORT_W)) : 0.3} />
+            <AnatomyCard page={page} overrides={wOver} scale={page.kind === "component" ? Math.min(0.8, 420 / frameOf(page).width) : ANATOMY_CARD_TARGET_W / pageViewport().width} />
           </div>
         )}
       </div>
@@ -539,7 +547,7 @@ export function CanvasPage() {
                             <InstanceCard
                               pageId={st.page}
                               dims={dims}
-                              scale={page.kind === "component" ? cardScale(page) * 0.7 : 0.14}
+                              scale={page.kind === "component" ? cardScale(page) * 0.7 : LANE_CARD_TARGET_W / pageViewport().width}
                               frame={page.frame}
                               scope="scenarios"
                               chips={laneDims.filter((d) => d in page.dimensions)}

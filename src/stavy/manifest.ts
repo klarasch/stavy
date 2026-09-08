@@ -67,6 +67,25 @@ export function setManifest(m: Manifest) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Viewport (SPEC §1.8)                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The workspace page viewport: the size every `kind: "page"` state renders
+ * and is captured at. Manifest `viewer.viewport`, else 1920 × 1080 @ dpr 1 —
+ * the single source of truth the canvas, scan and validate all read.
+ */
+export function pageViewport(): { width: number; height: number; dpr: number } {
+  const v = manifest.viewer?.viewport
+  return { width: v?.width ?? 1920, height: v?.height ?? 1080, dpr: v?.dpr ?? 1 }
+}
+
+/** Render size for a page or component: its own `frame` override, or the workspace page viewport. */
+export function frameOf(page: PageDef): { width: number; height: number } {
+  return page.frame ?? pageViewport()
+}
+
+/* ------------------------------------------------------------------ */
 /* URLs                                                                */
 /* ------------------------------------------------------------------ */
 
