@@ -562,8 +562,61 @@
           "width": {
             "type": "integer",
             "minimum": 100
+          },
+          "page": {
+            "$ref": "#/$defs/id",
+            "description": "Anchors the board to a page: it renders inside that page's canvas area as a figure instead of in the Boards area."
+          },
+          "callouts": {
+            "type": "array",
+            "description": "Numbered callouts over an image board, as fractions (0..1) of the image. `kind: \"image\"` only.",
+            "items": {
+              "type": "object",
+              "required": [
+                "x",
+                "y",
+                "title"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "x": {
+                  "$ref": "#/$defs/fraction"
+                },
+                "y": {
+                  "$ref": "#/$defs/fraction"
+                },
+                "w": {
+                  "$ref": "#/$defs/fraction"
+                },
+                "h": {
+                  "$ref": "#/$defs/fraction"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                }
+              }
+            }
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "callouts"
+              ]
+            },
+            "then": {
+              "properties": {
+                "kind": {
+                  "const": "image"
+                }
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -576,6 +629,12 @@
     "valueId": {
       "type": "string",
       "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+    },
+    "fraction": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "A fraction (0..1) of the frame it is measured against."
     },
     "target": {
       "type": "string",

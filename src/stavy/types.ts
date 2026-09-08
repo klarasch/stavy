@@ -148,6 +148,21 @@ export interface PrototypeSlice {
 }
 
 /**
+ * A numbered callout on an `image` board, in the same visual language as a
+ * page's anatomy. Coordinates are fractions (0..1) of the image, like
+ * `TargetBox` — the image is the frame of reference, so a figure keeps its
+ * numbering at any rendered width. Omit `w`/`h` for a point pin.
+ */
+export interface BoardCallout {
+  x: number
+  y: number
+  w?: number
+  h?: number
+  title: string
+  note?: string
+}
+
+/**
  * A board is supporting material on the canvas that is NOT part of the
  * coverage contract: information architecture, flow diagrams, a moodboard
  * image, a note. The viewer renders it without caring what it means.
@@ -159,8 +174,17 @@ export interface BoardDef {
   kind: "mermaid" | "image" | "text"
   /** Mermaid source, image URL, or plain text */
   source: string
-  /** Rendered width on the canvas (px); default 720 */
+  /** Rendered width on the canvas (px); default 720, or 360 for a figure anchored to a page */
   width?: number
+  /**
+   * A page id (SPEC §1.7). An anchored board is a *figure*: it renders inside
+   * that page's canvas area, after the cards and the anatomy, so a crop of a
+   * menu or a hover state sits next to the screen it explains. Unanchored
+   * boards live in the Boards area.
+   */
+  page?: string
+  /** Numbered callouts over the image, with a legend. `kind: "image"` only. */
+  callouts?: BoardCallout[]
 }
 
 /**
