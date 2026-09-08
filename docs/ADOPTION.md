@@ -142,6 +142,16 @@ Snapshots are generated artifacts. Commit them if reviewers should see the
 canvas on a static host without CI; otherwise ignore `public/snapshots/` and
 let CI produce them.
 
+**Snapshot resolution.** `scan` captures every `kind: "page"` state at
+`1920 × 1080` by default; set `"viewer": { "viewport": { "width": …, "height":
+…, "dpr": … } }` in the manifest to change it (`--width`/`--height`/`--dpr`
+override it per invocation; a page's own `frame` always wins, e.g. a
+`kind: "component"` harness route). `dpr` trades bytes for sharpness: `1` is
+fine at arm's length on the canvas, `2` gives crisp thumbnails when a reviewer
+zooms in on a retina display but roughly quadruples every PNG's size — worth
+it for a small workspace, not for hundreds of states. Changed the knob without
+rescanning? `npm run validate` warns which snapshots are now stale.
+
 ---
 
 ## B3. Comments without a server (GitHub Pages + Slack)

@@ -198,6 +198,9 @@ with a reply: write `comments-resolved.json` with the same comments plus
   page or the manifest, not the scan.
 - **After any manifest edit**: `npm run validate`. Static only — schema,
   cross-refs, the URL contract, the last scan's `missing` list.
+- **Changed `viewer.viewport`** (screenshot size, default 1920×1080, SPEC
+  §1.8): re-run `npm run scan` — `validate` only warns that snapshots are
+  stale, it doesn't refresh them.
 - **Changelog**: `npm run changelog [base-ref]` — a Markdown diff of the
   manifest (states added, scenarios changed, fidelity bumps, requirement
   coverage). Run it after every change that touches the manifest and paste
