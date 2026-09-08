@@ -52,6 +52,7 @@ function baseManifest() {
         url: "/components/organism",
         fidelity: "static",
         dimensions: {},
+        frame: { width: 400, height: 300 },
         instances: [{ dims: {} }],
       },
     ],
@@ -152,6 +153,19 @@ describe("validate: last scan results", () => {
       m.pages[0].instances = [{ dims: { role: "user" } }, { dims: { role: "admin" } }]
     })
     expect(warnings.some((w) => w.includes("1 pinned instance(s) have no snapshot yet"))).toBe(true)
+  })
+
+  it("warns when a snapshot's captured size no longer matches the page's viewport", async () => {
+    const { warnings } = await run((m) => {
+      // @ts-expect-error the fixture's viewer map is narrowed to the base shape
+      m.viewer = { viewport: { width: 1280, height: 832 } }
+    })
+    expect(warnings.some((w) => w.includes("snapshot for simple-page?role=user was captured at 1920×1080, page viewport is 1280×832 — run scan"))).toBe(true)
+  })
+
+  it("does not warn when the snapshot size matches the page's current viewport", async () => {
+    const { warnings } = await run()
+    expect(warnings.some((w) => w.includes("— run scan"))).toBe(false)
   })
 })
 

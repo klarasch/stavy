@@ -1,6 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { groupPages, pageUrl, resolveDims, snapshotUrl, workspaceOverridesFor } from "../manifest"
+import { groupPages, pageUrl, resolveDims, snapshotUrl, workspaceOverridesFor, pageViewport } from "../manifest"
 import type { PageDef, Scenario } from "../types"
 
 /**
@@ -193,7 +193,7 @@ export const SiteMap = memo(function SiteMap({
                       else onJump(`page:${page.id}`)
                     }}
                   >
-                    <span className="ps-map-thumb" style={{ height: Math.round((NODE_W * 832) / 1280) }}>
+                    <span className="ps-map-thumb" style={{ height: Math.round((NODE_W * pageViewport().height) / pageViewport().width) }}>
                       <span className="ps-map-thumb-label" aria-hidden>{page.label}</span>
                       <img src={snapshotUrl(page, dims)} alt="" draggable={false} onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
                     </span>

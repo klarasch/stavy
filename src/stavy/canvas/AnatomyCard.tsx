@@ -1,6 +1,5 @@
 import { memo, useState } from "react"
-import { resolveDims, snapshotEntry, snapshotUrl } from "../manifest"
-import { VIEWPORT_W, VIEWPORT_H } from "./InstanceCard"
+import { resolveDims, snapshotEntry, snapshotUrl, frameOf } from "../manifest"
 import type { PageDef } from "../types"
 
 /**
@@ -22,8 +21,7 @@ export const AnatomyCard = memo(function AnatomyCard({
 }) {
   const annotations = page.annotations ?? []
   const dims = resolveDims(page, { ...page.instances?.[0]?.dims, ...overrides })
-  const FW = page.frame?.width ?? VIEWPORT_W
-  const FH = page.frame?.height ?? VIEWPORT_H
+  const { width: FW, height: FH } = frameOf(page)
   const w = Math.round(FW * scale)
   const h = Math.round(FH * scale)
   const entry = snapshotEntry(page, dims)

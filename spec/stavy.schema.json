@@ -72,6 +72,27 @@
           },
           "description": "Attributes a bare target id is looked up in, in order. Default [\"data-proto\",\"data-testid\"]. Any target that is not a bare id is used as a CSS selector as-is."
         },
+        "viewport": {
+          "type": "object",
+          "required": ["width", "height"],
+          "additionalProperties": false,
+          "description": "The workspace page viewport: the size every kind:\"page\" state is rendered and captured at. Default 1920x1080, dpr 1. pages[].frame still overrides this per page.",
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "dpr": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Device scale factor for the scan capture. Default 1."
+            }
+          }
+        },
         "inspect": {
           "type": "object",
           "additionalProperties": false,

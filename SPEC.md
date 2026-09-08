@@ -302,7 +302,8 @@ keeps a local source file the served JSON is built from).
                                // docked bar (prototype viewport shrinks, nothing is covered): bar-bottom | bar-top
   "base": "/stavy",           // path prefix the viewer is served under. Default: derived from the viewer's own location.
   "app": "/",                 // where the prototype is served (origin or path prefix). Default: the viewer's origin at the parent of `base`.
-  "targetAttrs": ["data-proto", "data-testid"]   // attributes a bare target id is looked up in, in order
+  "targetAttrs": ["data-proto", "data-testid"],  // attributes a bare target id is looked up in, in order
+  "viewport": { "width": 1920, "height": 1080, "dpr": 1 }  // the workspace page viewport (below)
 }
 ```
 
@@ -311,6 +312,19 @@ derives them from wherever it was opened, so the same build works at the
 root, under a sub-path, or on GitHub Pages. Set `app` explicitly only when the
 prototype is genuinely served from somewhere other than the viewer's parent
 path (a different origin during local dev, say).
+
+**`viewer.viewport` — the workspace page viewport.** The size every
+`kind: "page"` state is rendered and captured at: `scripts/scan.mjs` launches
+the browser at this size before screenshotting, and the canvas assumes it for
+every card that doesn't declare its own `frame`. Default when the key is
+absent: `1920 × 1080` at `dpr: 1`. `pages[].frame` (§1.3) still overrides this
+per page — the usual reason is a `kind: "component"` page rendered by its own
+harness route, smaller than a full screen. `dpr` (optional, default 1) is the
+device scale factor the scan captures at; it does not change `width`/`height`,
+only the pixel density of the resulting PNG. Changing `viewport` without
+re-running `npm run scan` leaves the canvas showing the old capture scaled to
+fit — `npm run validate` warns when a snapshot's captured size no longer
+matches the page's current viewport (§3b).
 
 **`viewer.inspect` — describing the design system to the inspector.** The
 inspector reads the frame's live CSSOM, so a value's token comes out of the
@@ -649,17 +663,23 @@ A workspace SHOULD ship:
   the state's first required target into view first if it's outside the
   viewport (so a target below the fold still shows as selected in the
   thumbnail), measures each found target's box as a fraction of the frame,
-  and screenshots the state. Writes `public/snapshots/index.json` (instanceKey
-  → `{ file, width, height, targets, missing, scrolled }`) and one PNG per
-  state. Exits 1 when a target is missing or a state fails to load — that is
-  the contract breaking, made visible in CI.
+  and screenshots the state at the page viewport (`viewer.viewport`, §1.8; a
+  page's own `frame` wins; `--width`/`--height`/`--dpr` override the manifest).
+  Writes `public/snapshots/index.json` (instanceKey → `{ file, width, height,
+  dpr, targets, missing, scrolled }`) and one PNG per state. Exits 1 when a
+  target is missing or a state fails to load — that is the contract breaking,
+  made visible in CI.
 - **`validate`** (`scripts/validate.mjs`, `npm run validate`) — static
   checks only, never reads the prototype's source: manifest shape against
   `spec/stavy.schema.json`, cross-references (templates, scenario pages,
   requirement refs, note targets), the URL contract (§2.1, every declared
   dimension is a placeholder and vice versa), and the last scan's `missing`
-  targets. Also prints a coverage summary (`--coverage`) and can cross-check
-  scenario refs against a requirements document's text (`--refs <doc>`).
+  targets. It also warns when a snapshot's captured `width`/`height` no longer
+  matches the page's current viewport (the `viewport` knob or a page's `frame`
+  changed since the last scan) — a real mismatch, not a failure: the canvas
+  still shows the old capture scaled to fit. Also prints a coverage summary
+  (`--coverage`) and can cross-check scenario refs against a requirements
+  document's text (`--refs <doc>`).
 - Three more generators follow from the manifest alone: a **changelog**
   between two manifest versions (`changelog.mjs`), **handoff sheets** per
   page (`handoff.mjs`), and **acceptance-test skeletons** from scenarios

@@ -10,7 +10,12 @@
 //   <out>/index.json                         instanceKey → { file, width, height, targets, missing, scrolled }
 //
 //   node scripts/scan.mjs [stavy.json] [--url http://localhost:5173] [--app /base] [--out public/snapshots]
-//                         [--only <pageId>] [--dpr 1] [--dark]
+//                         [--only <pageId>] [--width 1920] [--height 1080] [--dpr 1] [--dark]
+//
+// The page viewport (every kind:"page" state) is manifest `viewer.viewport`,
+// else 1920x1080 @ dpr 1 — the same default the viewer assumes (SPEC §1.8).
+// --width/--height/--dpr override the manifest; a page's own `frame` always
+// wins over both (components, mainly).
 //
 // Requires `playwright` + Chromium (`npx playwright install chromium`) and a
 // running dev/preview server at --url. Exit code 1 when a referenced target is
@@ -33,7 +38,11 @@ const url = opt("--url", "http://localhost:5173").replace(/\/$/, "")
 const appBase = (opt("--app", m.viewer?.app && !/^https?:/.test(m.viewer.app) ? m.viewer.app : "") ?? "").replace(/\/+$/, "")
 const out = resolve(opt("--out", root === process.cwd() ? "public/snapshots" : resolve(root, "snapshots")))
 const only = opt("--only", null)
-const dpr = Number(opt("--dpr", "1"))
+// Manifest viewer.viewport is the default page viewport (SPEC §1.8); CLI flags override it.
+const mViewport = m.viewer?.viewport ?? {}
+const defaultW = Number(opt("--width", mViewport.width ?? 1920))
+const defaultH = Number(opt("--height", mViewport.height ?? 1080))
+const dpr = Number(opt("--dpr", mViewport.dpr ?? 1))
 const dark = argv.includes("--dark")
 const TARGET_ATTRS = m.viewer?.targetAttrs?.length ? m.viewer.targetAttrs : ["data-proto", "data-testid"]
 
@@ -109,8 +118,8 @@ let n = 0
 const startedAt = Date.now()
 for (const [key, s] of states) {
   const { page: p, dims } = s
-  const W = p.frame?.width ?? 1280
-  const H = p.frame?.height ?? 832
+  const W = p.frame?.width ?? defaultW
+  const H = p.frame?.height ?? defaultH
   await page.setViewportSize({ width: W, height: H })
   const href = appUrl(p, dims)
   consoleErrors.length = 0
@@ -177,7 +186,7 @@ for (const [key, s] of states) {
   n++
   const missing = boxes.missing.filter((t) => required.includes(t))
   const absent = boxes.missing.filter((t) => !required.includes(t))
-  index[key] = { file, width: W, height: H, targets: boxes.out, ...(missing.length ? { missing } : {}), ...(absent.length ? { absent } : {}), ...(scrolled ? { scrolled: true } : {}), at: new Date().toISOString() }
+  index[key] = { file, width: W, height: H, dpr, targets: boxes.out, ...(missing.length ? { missing } : {}), ...(absent.length ? { absent } : {}), ...(scrolled ? { scrolled: true } : {}), at: new Date().toISOString() }
   const bad = missing.length > 0 || (status && status >= 400)
   if (bad) failures++
   const mark = bad ? "✗" : "✓"
