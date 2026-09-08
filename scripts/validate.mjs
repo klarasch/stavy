@@ -203,10 +203,21 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   const indexPath = resolve(snapDir, "index.json")
   if (existsSync(indexPath)) {
     const index = JSON.parse(readFileSync(indexPath, "utf8"))
+    // The page viewport a fresh scan would use right now (SPEC §1.8): a
+    // page's own frame, else manifest viewer.viewport, else the 1920x1080
+    // default the viewer itself falls back to.
+    const mViewport = m.viewer?.viewport ?? {}
+    const currentViewport = (page) => ({ width: page?.frame?.width ?? mViewport.width ?? 1920, height: page?.frame?.height ?? mViewport.height ?? 1080 })
     let scanned = 0
     for (const [key, entry] of Object.entries(index)) {
       scanned++
       for (const t of entry.missing ?? []) err(`scan: ${key}: target "${t}" was not found in the rendered prototype`)
+      // The adopter changed the viewport knob (or a page's frame) without
+      // rescanning: the canvas still shows the old capture, scaled to fit.
+      const page = pageIndex.get(key.split("?")[0])
+      const cur = currentViewport(page)
+      if (entry.width != null && entry.height != null && (entry.width !== cur.width || entry.height !== cur.height))
+        warn(`scan: snapshot for ${key} was captured at ${entry.width}×${entry.height}, page viewport is ${cur.width}×${cur.height} — run scan`)
     }
     const pinned = m.pages.flatMap((p) => (p.instances ?? [{ dims: {} }]).map((inst) => {
       const dims = Object.fromEntries(Object.keys(p.dimensions).map((d) => [d, inst.dims[d] ?? p.defaults?.[d] ?? p.dimensions[d][0]]))
