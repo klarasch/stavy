@@ -20,7 +20,7 @@
 // Requires `playwright` + Chromium (`npx playwright install chromium`) and a
 // running dev/preview server at --url. Exit code 1 when a referenced target is
 // missing or a state fails to load — that is the contract breaking.
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs"
 import { resolve, dirname } from "node:path"
 import { chromium } from "playwright"
 import { isOutsideViewport } from "./lib/viewport.mjs"
@@ -197,6 +197,18 @@ for (const [key, s] of states) {
   for (const e of consoleErrors.slice(0, 3)) console.log(`      console: ${e.slice(0, 160)}`)
 }
 await browser.close()
+// A full scan owns the whole folder: states the manifest no longer wants
+// (a dropped dimension value, a removed instance) would otherwise linger in
+// the index with their old size and trip validate's mismatch check forever.
+// `--only` scans a slice, so it must not prune what it did not visit.
+if (!only) {
+  for (const key of Object.keys(index)) {
+    if (states.has(key)) continue
+    const stale = index[key]?.file
+    if (stale && existsSync(resolve(out, stale))) rmSync(resolve(out, stale))
+    delete index[key]
+  }
+}
 writeFileSync(indexPath, JSON.stringify(index, null, 1) + "\n")
 console.log(`\n${n} state(s) scanned in ${((Date.now() - startedAt) / 1000).toFixed(1)}s → ${out}${failures ? `\n${failures} state(s) FAILED the contract` : ""}`)
 process.exit(failures ? 1 : 0)
