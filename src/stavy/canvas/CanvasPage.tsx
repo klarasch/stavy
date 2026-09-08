@@ -242,9 +242,13 @@ const PageGroup = memo(function PageGroup({
         })}
         {(page.annotations?.length ?? 0) > 0 && (
           <div>
-            <div className="ps-sub mb-3 flex items-center gap-2">
-              <span className="ps-zl"><span className="ps-chip ps-chip-sm">Anatomy</span></span>
-              what each part of the screen does
+            {/* The whole label scales with 1/zoom, not only the chip: scaling
+                the chip alone slides it over the words next to it. */}
+            <div className="ps-sub mb-3">
+              <span className="ps-zl inline-flex items-center gap-2">
+                <span className="ps-chip ps-chip-sm">Anatomy</span>
+                what each part of the screen does
+              </span>
             </div>
             <AnatomyCard page={page} overrides={wOver} scale={page.kind === "component" ? Math.min(0.8, 420 / (page.frame?.width ?? VIEWPORT_W)) : 0.3} />
           </div>
@@ -253,9 +257,11 @@ const PageGroup = memo(function PageGroup({
             the screen that never earn a URL of their own (SPEC §1.7). */}
         {figures.length > 0 && (
           <div>
-            <div className="ps-sub mb-3 flex items-center gap-2">
-              <span className="ps-zl"><span className="ps-chip ps-chip-sm">{figures.length === 1 ? "Figure" : "Figures"}</span></span>
-              states of this screen that have no URL of their own
+            <div className="ps-sub mb-3">
+              <span className="ps-zl inline-flex items-center gap-2">
+                <span className="ps-chip ps-chip-sm">{figures.length === 1 ? "Figure" : "Figures"}</span>
+                parts of this screen that have no URL of their own
+              </span>
             </div>
             <div className="flex flex-wrap items-start gap-10">
               {figures.map((b) => (

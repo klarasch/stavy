@@ -35,6 +35,29 @@ test("site map arrows are hoverable and a node fits that page's area", async ({ 
     .not.toBe(before)
 })
 
+// A figure (a board anchored to a page, SPEC §1.7) belongs to its page's area,
+// not to the Boards area: that is the whole point of anchoring one.
+test("an anchored board renders inside its page area, with its callouts", async ({ page }) => {
+  await page.goto("/stavy/?ui=0")
+  const figure = page.locator('[data-toc="page:expenses"] [data-toc="board:status-filter-menu"]')
+  await expect(figure).toHaveCount(1)
+  await expect(figure.locator("img")).toHaveAttribute("src", "/figures/status-filter-menu.png")
+  // Three callouts: numbered over the image, and the same three in the legend.
+  await expect(figure.locator(".ps-figure .ps-anat-tag")).toHaveCount(3)
+  await expect(figure.locator(".ps-figure .ps-anat-box")).toHaveCount(2) // the third is a point pin
+  await expect(figure.getByText("Current value")).toBeVisible()
+  // …and it is not in the Boards area, nor listed under Boards.
+  await expect(page.locator('[data-toc="area:boards"] [data-toc="board:status-filter-menu"]')).toHaveCount(0)
+})
+
+test("the contents list a figure under its page, not under Boards", async ({ page }) => {
+  await page.goto("/stavy/")
+  const item = page.locator(".ps-toc-item", { hasText: "Status filter menu" })
+  await expect(item).toHaveClass(/ps-toc-sub/)
+  await item.click()
+  await expect(page.locator('[data-toc="board:status-filter-menu"][data-flash]')).toHaveCount(1)
+})
+
 test("?map=0 leaves the map out of the canvas and the contents list", async ({ page }) => {
   await page.goto("/stavy/?map=0")
   await expect(page.locator('[data-toc="area:map"]')).toHaveCount(0)

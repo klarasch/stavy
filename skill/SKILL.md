@@ -101,6 +101,27 @@ Full text and rationale: `skill/RULES.md`. Summary:
   value yet) and say so. Never rewrite the page's logic just to expose a URL
   hook — that's rule 2.
 
+## Figures next to a page
+
+For the parts of a screen that will never earn a URL — an open menu, a
+hover state, a tooltip, a crop of the old design for comparison — add a
+**figure**: a board with `page: "<page id>"`, which the canvas renders inside
+that page's area, right after its anatomy (SPEC §1.7).
+
+- Produce the crop yourself against the running prototype with Playwright:
+  open the state's URL, click the thing open, then screenshot clipped to the
+  element's bounding box (`deviceScaleFactor: 2`, no padding, so no
+  background noise creeps into the crop).
+- Save it under `public/figures/<name>.png` and commit it — figures are
+  hand-made, unlike `public/snapshots/`, which the scan regenerates.
+- Point `source` at the URL the app serves it from (`/figures/<name>.png`),
+  keep `width` modest (~300–400) so the figure does not dwarf the page's
+  cards, and number the parts with `callouts` — `x`/`y` (`w`/`h` optional,
+  omit them for a point pin) as **fractions 0..1 of the image**, measured
+  from the same Playwright run, never guessed.
+- If a scenario step has to point at it, it is not a figure: make it a real
+  URL state instead ("Dialogs and overlays as a param" above).
+
 ## Harness routes for organisms
 
 A bespoke organism gets its own page entry with `kind: "component"` and a
