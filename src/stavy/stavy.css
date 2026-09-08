@@ -130,14 +130,20 @@
    renders as a native system button). :where() keeps specificity at zero so
    every component class still wins, and `:not(.ps-proto-content *)` keeps the
    reset out of rendered page content — the host kit's own buttons inside
-   thumbnails must never be touched. */
-:where(.ps, .ps *, [data-ps-ui], [data-ps-ui] *):where(:not(.ps-proto-content, .ps-proto-content *)) {
-  box-sizing: border-box;
-}
-:where(.ps button, [data-ps-ui] button):where(:not(.ps-proto-content *)) {
-  appearance: none; -webkit-appearance: none;
-  background: none; border: 0; margin: 0; padding: 0;
-  font: inherit; color: inherit; text-align: inherit; cursor: pointer;
+   thumbnails must never be touched.
+   It lives in Tailwind's `base` layer on purpose: an UNLAYERED rule beats every
+   layered one regardless of specificity, so an unlayered `margin: 0` here used
+   to silently cancel utilities like `ml-auto` on chrome buttons (the tour
+   card's close button sat next to the step counter instead of in the corner). */
+@layer base {
+  :where(.ps, .ps *, [data-ps-ui], [data-ps-ui] *):where(:not(.ps-proto-content, .ps-proto-content *)) {
+    box-sizing: border-box;
+  }
+  :where(.ps button, [data-ps-ui] button):where(:not(.ps-proto-content *)) {
+    appearance: none; -webkit-appearance: none;
+    background: none; border: 0; margin: 0; padding: 0;
+    font: inherit; color: inherit; text-align: inherit; cursor: pointer;
+  }
 }
 /* Portal root for floating Stavy chrome (tooltips, tour cards, sheets).
    Appended last to <body>; children re-enable pointer events themselves.
