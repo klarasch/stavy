@@ -10,7 +10,6 @@ A single expense across its whole lifecycle; actions depend on role × lifecycle
 | UI-kit components | Card, Badge, Button, Separator, Avatar |
 | organisms | [Approval actions](./approval-actions.md) |
 | fidelity | interactive |
-| module | `src/demo/pages/expense-detail.tsx` |
 
 ## Dimensions
 

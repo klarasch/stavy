@@ -9,7 +9,6 @@ Bespoke organism: step header driven by the process dimension.
 | UI-kit components | Progress |
 | frame | 720 × 160 |
 | fidelity | static |
-| module | `src/demo/pages/flow-progress.tsx` |
 
 ## Dimensions
 

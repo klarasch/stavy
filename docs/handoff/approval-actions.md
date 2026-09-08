@@ -9,7 +9,6 @@ Bespoke organism: the decision panel, reviewable on its own.
 | UI-kit components | Card, Button |
 | frame | 560 × 340 |
 | fidelity | navigable |
-| module | `src/demo/pages/approval-actions.tsx` |
 
 ## Dimensions
 

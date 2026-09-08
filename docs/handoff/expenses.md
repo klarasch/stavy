@@ -9,7 +9,6 @@ All expenses visible to the current role, with filters.
 | template | `list-page` — `src/demo/templates/ListTemplate.tsx` |
 | UI-kit components | Input, Select, Table, Badge, Button, Skeleton, Alert |
 | fidelity | navigable |
-| module | `src/demo/pages/expenses.tsx` |
 
 ## Dimensions
 
@@ -45,6 +44,18 @@ All expenses visible to the current role, with filters.
   2. Open the submitted expense → `ExpenseRow:exp-2101` (role=manager, state=loaded)
 - **Finance reimburses** — PRD-118 §4
   1. Open an approved expense → `ExpenseRow:exp-2102` (role=finance, state=loaded)
+
+## Figures (1)
+
+### Status filter menu
+
+Cropped from the running list at role=employee. The menu is component state, not a URL, so it lives here as a figure rather than as a pinned instance.
+
+![Status filter menu](../../public/figures/status-filter-menu.png)
+
+1. **All statuses** — The default for employees and managers: the list hides nothing until someone chooses to.
+2. **Current value** — The check marks the active filter; the trigger behind the menu reads the same label.
+3. **Approved** — Finance opens the list already filtered to Approved, which is their actual work queue.
 
 ## Canvas notes
 

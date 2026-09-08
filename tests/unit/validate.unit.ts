@@ -392,6 +392,54 @@ describe("validate: boards", () => {
   })
 })
 
+// Figures: boards anchored to a page, with their own callouts (SPEC §1.7).
+const figure = (over: Record<string, unknown> = {}) => ({
+  id: "menu-figure",
+  title: "Menu",
+  kind: "image",
+  page: "simple-page",
+  source: "/figures/menu.png",
+  callouts: [{ x: 0.1, y: 0.2, w: 0.5, h: 0.1, title: "An option", note: "what it does" }],
+  ...over,
+})
+
+describe("validate: figures (boards anchored to a page)", () => {
+  it("accepts a figure anchored to a real page", async () => {
+    const { errors } = await run((m) => {
+      m.boards.push(figure())
+    })
+    expect(errors).toEqual([])
+  })
+
+  it("errors when a figure is anchored to an unknown page", async () => {
+    const { errors } = await run((m) => {
+      m.boards.push(figure({ page: "missing-page" }))
+    })
+    expect(errors.some((e) => e.includes('board "menu-figure": page "missing-page" is not a registered page'))).toBe(true)
+  })
+
+  it("errors when callouts are put on a board that is not an image", async () => {
+    const { errors } = await run((m) => {
+      m.boards.push(figure({ kind: "text", source: "not an image" }))
+    })
+    expect(errors.some((e) => e.includes('board "menu-figure": callouts are only for kind "image"'))).toBe(true)
+  })
+
+  it("errors on a callout coordinate that is not a fraction of the image", async () => {
+    const { errors } = await run((m) => {
+      m.boards.push(figure({ callouts: [{ x: 120, y: 0.2, title: "Pixels, not fractions" }] }))
+    })
+    expect(errors.some((e) => e.includes("board \"menu-figure\" callout 1: x must be a fraction of the image between 0 and 1 (got 120)"))).toBe(true)
+  })
+
+  it("accepts a point pin — a callout with no width or height", async () => {
+    const { errors } = await run((m) => {
+      m.boards.push(figure({ callouts: [{ x: 0.5, y: 0.5, title: "Current value" }] }))
+    })
+    expect(errors).toEqual([])
+  })
+})
+
 describe("validate: requirements <-> scenario refs", () => {
   it("warns when a requirement is not demonstrated by any scenario", async () => {
     const { warnings } = await run((m) => {
