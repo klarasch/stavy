@@ -1051,6 +1051,39 @@
       "kind": "text",
       "width": 420,
       "source": "1. Static first — every state is a pinned instance before it is a handler.\n2. Roles change what you see, never where you are.\n3. The lifecycle is the product; make each stage unmistakable.\n4. Mock loudly: anything faked says so in an annotation."
+    },
+    {
+      "id": "status-filter-menu",
+      "title": "Status filter menu",
+      "description": "Cropped from the running list at role=employee. The menu is component state, not a URL, so it lives here as a figure rather than as a pinned instance.",
+      "kind": "image",
+      "page": "expenses",
+      "width": 300,
+      "source": "/figures/status-filter-menu.png",
+      "callouts": [
+        {
+          "x": 0.031,
+          "y": 0.025,
+          "w": 0.938,
+          "h": 0.158,
+          "title": "All statuses",
+          "note": "The default for employees and managers: the list hides nothing until someone chooses to."
+        },
+        {
+          "x": 0.79,
+          "y": 0.104,
+          "title": "Current value",
+          "note": "The check marks the active filter; the trigger behind the menu reads the same label."
+        },
+        {
+          "x": 0.031,
+          "y": 0.5,
+          "w": 0.938,
+          "h": 0.158,
+          "title": "Approved",
+          "note": "Finance opens the list already filtered to Approved, which is their actual work queue."
+        }
+      ]
     }
   ],
   "requirements": [

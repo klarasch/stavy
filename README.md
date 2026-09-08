@@ -84,6 +84,11 @@ cd ../my-prototype-repo && npm run dev
   table of contents to jump around.
 - **Boards** — IA, flow and state diagrams (Mermaid), images, notes:
   supporting material next to the prototype, explicitly outside the contract.
+- **Figures** — a board anchored to a page sits *inside* that page's area,
+  after its anatomy: the cropped menu, hover state or old design you would
+  paste next to a screen in a design file, with its own numbered callouts.
+  For what never earns a URL of its own; anything a scenario points at is a
+  real state instead.
 - **Coverage matrix — only where there is coverage to show** — when two
   dimensions actually vary, the pinned variants are laid out on them with
   labels that stay legible when zoomed out and unpinned cells showing as

@@ -278,7 +278,38 @@ must be covered. A viewer renders boards without interpreting them:
 ```
 
 Boards are deliberately not referenced by scenarios, slices, or refs; the
-validator only checks ids and kinds.
+validator only checks ids, kinds, and the two fields below.
+
+**Figures: a board anchored to a page.** `page` names a page id; the board
+then renders *inside that page's area* on the canvas — after the cards and
+the anatomy — instead of in the Boards area. An `image` board may carry
+`callouts`, drawn as the same numbered callouts and legend as the anatomy
+(§3), so a crop of a menu can number its options and say what each one does:
+
+```jsonc
+{ "id": "status-filter-menu", "page": "expenses", "kind": "image",
+  "title": "Status filter menu", "description": "Opened from the filter button.",
+  "source": "/figures/status-filter-menu.png", "width": 320,
+  "callouts": [
+    { "x": 0.06, "y": 0.20, "w": 0.88, "h": 0.13, "title": "All",
+      "note": "The default for everyone except finance." },
+    { "x": 0.5,  "y": 0.62, "title": "Approved" }          // no w/h → a point pin
+  ] }
+```
+
+Callout coordinates are **fractions (0..1) of the image**, the same
+convention as the scan's measured target boxes (§3b) — so a figure keeps its
+numbering at any rendered width. `w`/`h` are optional: with them the callout
+is a box, without them a numbered point pin. `callouts` are allowed on
+`kind: "image"` only.
+
+**A figure is not a state.** Use one for something that does not earn a URL:
+a hover state, an open menu or tooltip, a cropped comparison against the old
+design, a redline. The moment a scenario step must point at it — or a
+reviewer must be able to open it — it is a state, and it belongs in the
+prototype at a real URL (§2.1, and "Dialogs and overlays as a param" in the
+skill), not in a PNG. Figures are supporting material: they are never
+scanned, never covered, never linked to.
 
 ### 1.7b Copy catalog (optional)
 
@@ -581,6 +612,13 @@ A conforming viewer SHOULD provide:
   leader lines on the canvas costs nothing at view time — no live DOM is
   read. (Which components implement a part is the inspector's job, reached
   by opening the player.)
+- **Figures next to the screen they explain**: a board anchored to a page
+  (`boards[].page`, §1.7) renders inside that page's area, after the cards
+  and the anatomy, and an image figure's `callouts` are drawn in the same
+  numbered-callout-plus-legend language as the anatomy — one composition, not
+  a second visual vocabulary. A figure of a page hidden by a workspace axis
+  is hidden with it, and the table of contents lists it under its page rather
+  than under Boards.
 - **Table of contents**: the canvas grows; a viewer SHOULD offer a jump list
   of scenarios, pages and components.
 - **Tour player**: play scenarios as overlay-guided walkthroughs inside the
@@ -772,3 +810,6 @@ never changed:
 - The **site map** area (§3), with arrows derived from the scenarios.
 - Scenarios must run **end to end** (§1.4), with a validator warning for the
   walkthrough that never leaves one page.
+- **Figures** (§1.7): `boards[].page` anchors a board inside a page's area,
+  and an image board may carry its own numbered `callouts` — the way a design
+  file pastes a menu crop next to the screen it opens from.

@@ -7,7 +7,7 @@
 // dimensions and defaults, pinned states, scenarios that pass through, the
 // semantic targets (data-proto ids) and what they do, design annotations, fidelity.
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs"
-import { resolve, dirname } from "node:path"
+import { resolve, dirname, relative } from "node:path"
 
 const args = process.argv.slice(2)
 const out = resolve(args[args.indexOf("--out") + 1] || "docs/handoff")
@@ -32,8 +32,10 @@ function readAll(entry, depth = 2, seen = new Set()) {
   return seen
 }
 function targetsIn(p) {
+  // The template's `source` is the only file the manifest points at: v0.2 has
+  // no per-page module (SPEC "Changes from v0.1").
   const t = tpl.get(p.template)
-  const entries = [t?.source, p.module ?? `src/demo/pages/${p.id}.tsx`].filter(Boolean)
+  const entries = [t?.source].filter(Boolean)
   const files = new Set()
   entries.forEach((e) => readAll(e, 2, files))
   const found = new Map()
@@ -44,6 +46,14 @@ function targetsIn(p) {
     }
   }
   return found
+}
+
+// A figure's `source` is a URL the app serves ("/figures/x.png"). These sheets
+// are read in the repo, so point at the file that URL is served from when we
+// can find it; otherwise leave the URL alone (it may be remote).
+function figureSrc(source) {
+  const local = source.startsWith("/") ? resolve(`public${source}`) : null
+  return local && existsSync(local) ? relative(out, local) : source
 }
 
 let n = 0
@@ -61,8 +71,7 @@ for (const p of m.pages) {
   if (t?.uiKit?.length) L.push(`| UI-kit components | ${t.uiKit.join(", ")} |`)
   if (t?.organisms?.length) L.push(`| organisms | ${t.organisms.map((o) => `[${page.get(o)?.label ?? o}](./${o}.md)`).join(", ")} |`)
   if (p.frame) L.push(`| frame | ${p.frame.width} × ${p.frame.height} |`)
-  L.push(`| fidelity | ${p.fidelity ?? "static"} |`)
-  L.push(`| module | \`${p.module ?? `src/demo/pages/${p.id}.tsx`}\` |`, "")
+  L.push(`| fidelity | ${p.fidelity ?? "static"} |`, "")
   L.push(`## Dimensions`, "")
   const dimEntries = Object.entries(p.dimensions ?? {})
   // A page with no axes is a normal page (SPEC §1.3), not an unfinished one.
@@ -83,6 +92,18 @@ for (const p of m.pages) {
   for (const s of scs) {
     L.push(`- **${s.label}**${s.refs?.length ? ` — ${s.refs.join(", ")}` : ""}`)
     s.steps.forEach((st, i) => { if (st.page === p.id) L.push(`  ${i + 1}. ${st.title}${st.target ? ` → \`${st.target}\`` : ""}${st.dims ? ` (${Object.entries(st.dims).map(([d, v]) => `${d}=${v}`).join(", ")})` : ""}`) })
+  }
+  // Figures: boards anchored to this page (SPEC §1.7) — the menus, hover
+  // states and comparisons that never became a URL, with their callouts.
+  const figures = (m.boards ?? []).filter((b) => b.page === p.id)
+  if (figures.length) {
+    L.push("", `## Figures (${figures.length})`, "")
+    for (const f of figures) {
+      L.push(`### ${f.title}`, "")
+      if (f.description) L.push(f.description, "")
+      if (f.kind === "image") L.push(`![${f.title}](${figureSrc(f.source)})`, "")
+      f.callouts?.forEach((c, i) => L.push(`${i + 1}. **${c.title}**${c.note ? ` — ${c.note}` : ""}`))
+    }
   }
   const notes = (m.notes ?? []).filter((x) => x.page === p.id)
   if (notes.length) {

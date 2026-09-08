@@ -10,7 +10,6 @@ Landing page; content adapts to the viewer's role.
 | UI-kit components | Card, Badge, Button, Skeleton, Avatar, Separator |
 | organisms | [Work queue](./work-queue.md) |
 | fidelity | navigable |
-| module | `src/demo/pages/dashboard.tsx` |
 
 ## Dimensions
 

@@ -6,7 +6,6 @@ Reference screen: the same content for every role, in every state. No dimensions
 |---|---|
 | id | `policy` |
 | fidelity | static |
-| module | `src/demo/pages/policy.tsx` |
 
 ## Dimensions
 

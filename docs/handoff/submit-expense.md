@@ -10,7 +10,6 @@ Multi-step submission flow; each step is a value of the 'step' process dimension
 | UI-kit components | Card, Progress, Input, Label, Select, Textarea, Button |
 | organisms | [Flow progress](./flow-progress.md) |
 | fidelity | interactive |
-| module | `src/demo/pages/submit-expense.tsx` |
 
 ## Dimensions
 

@@ -230,13 +230,26 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     warn(`scan: no ${relative(root, indexPath)} yet — run \`npm run scan\` against the dev server to check targets and render the canvas`)
   }
 
-  // ---- boards
+  // ---- boards (and figures: boards anchored to a page, SPEC §1.7)
   const boardIds = new Set()
+  const pageIds = new Set(m.pages.map((p) => p.id))
   for (const b of m.boards ?? []) {
     if (boardIds.has(b.id)) err(`board "${b.id}": duplicate id`)
     boardIds.add(b.id)
     if (!["mermaid", "image", "text"].includes(b.kind)) err(`board "${b.id}": unknown kind "${b.kind}"`)
     if (!b.source) err(`board "${b.id}": empty source`)
+    if (b.page !== undefined && !pageIds.has(b.page)) err(`board "${b.id}": page "${b.page}" is not a registered page`)
+    if (b.callouts !== undefined && b.kind !== "image") err(`board "${b.id}": callouts are only for kind "image" (this one is "${b.kind}")`)
+    // Coordinates are fractions of the image, like the scan's target boxes —
+    // pixel values would silently place every callout in the top-left corner.
+    ;(b.callouts ?? []).forEach((c, i) => {
+      for (const k of ["x", "y", "w", "h"]) {
+        const v = c[k]
+        if (v === undefined) continue
+        if (typeof v !== "number" || !(v >= 0 && v <= 1)) err(`board "${b.id}" callout ${i + 1}: ${k} must be a fraction of the image between 0 and 1 (got ${JSON.stringify(v)})`)
+      }
+      if (!c.title) err(`board "${b.id}" callout ${i + 1}: missing title`)
+    })
   }
 
   // ---- requirements ↔ scenario refs (the in-manifest contract)
