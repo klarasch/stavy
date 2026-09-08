@@ -40,3 +40,20 @@ test("?map=0 leaves the map out of the canvas and the contents list", async ({ p
   await expect(page.locator('[data-toc="area:map"]')).toHaveCount(0)
   await expect(page.locator(".ps-toc-item", { hasText: "Site map" })).toHaveCount(0)
 })
+
+// `is-panning` on <html> drops every glass panel to a solid fill for the
+// duration of a gesture. A wheel gesture ends on a 160 ms timer; opening a
+// card during trackpad momentum used to unmount the canvas with the timer
+// cleared and the class left behind, so the player rendered with no blur at
+// all until the next canvas gesture.
+test("opening the player mid-gesture never leaves the glass solid", async ({ page }) => {
+  await page.goto("/stavy/")
+  await expect(page.locator("[data-canvas-root]")).toBeVisible()
+  await page.mouse.move(640, 400)
+  await page.mouse.wheel(0, 120)
+  await expect(page.locator("html.is-panning")).toHaveCount(1)
+  await page.locator('[data-instance="expenses?role=employee&state=loaded"] .ps-card-shield').first().dispatchEvent("click")
+  await expect(page).toHaveURL(/[?&]p=expenses(?:&|$)/)
+  await page.waitForTimeout(250)
+  await expect(page.locator("html.is-panning")).toHaveCount(0)
+})

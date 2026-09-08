@@ -63,11 +63,17 @@ export const PanZoom = forwardRef<PanZoomHandle, {
     if (raf.current == null) raf.current = requestAnimationFrame(paint)
   }, [paint])
 
+  // `is-panning` on <html> is what drops backdrop blur and shadows for the
+  // duration of a gesture (stavy.css). It is global, so it must never outlive
+  // the canvas: every exit path below (unmount, a pointer that is cancelled
+  // or released over an iframe, a lost capture) clears it, otherwise the
+  // player opens with every glass panel painted solid.
   const beginGesture = () => document.documentElement.classList.add("is-panning")
   const endGesture = useCallback(() => {
     document.documentElement.classList.remove("is-panning")
     onCommit({ ...live.current })
   }, [onCommit])
+  useEffect(() => () => document.documentElement.classList.remove("is-panning"), [])
 
   const setSmooth = (on: boolean) => {
     const el = content.current
@@ -161,7 +167,11 @@ export const PanZoom = forwardRef<PanZoomHandle, {
     if (e.button !== 0) return
     drag.current = { px: e.clientX, py: e.clientY, moved: false }
     setDragging(true)
-    ;(e.target as HTMLElement).setPointerCapture?.(e.pointerId)
+    // Capture on the viewport, not on e.target: a card under the pointer may be
+    // evicted or re-rendered mid-drag (visibility.tsx), and a capture held by a
+    // removed node is released silently, so pointerup would never reach us
+    // when the button is let go over a live iframe.
+    e.currentTarget.setPointerCapture?.(e.pointerId)
   }
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag.current) return
@@ -189,6 +199,14 @@ export const PanZoom = forwardRef<PanZoomHandle, {
     drag.current = null
     setDragging(false)
   }
+  // pointercancel (touch/trackpad gestures taken over by the OS or browser) and
+  // lostpointercapture (the captured node went away) end a drag without a
+  // pointerup; treat them the same, minus the click suppression.
+  const onPointerAbort = () => {
+    if (drag.current?.moved) endGesture()
+    drag.current = null
+    setDragging(false)
+  }
   const onDoubleClick = (e: React.MouseEvent) => {
     const area = (e.target as HTMLElement).closest("[data-toc]")
     if (!area || (e.target as HTMLElement).closest("[data-instance]")) return
@@ -208,6 +226,8 @@ export const PanZoom = forwardRef<PanZoomHandle, {
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
+      onPointerCancel={onPointerAbort}
+      onLostPointerCapture={onPointerAbort}
       onDoubleClick={onDoubleClick}
     >
       <div
