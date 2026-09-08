@@ -1,4 +1,4 @@
-import type { Dimension, Manifest, PageDef, Scenario, SnapshotEntry, SnapshotIndex } from "./types"
+import type { BoardDef, Dimension, Manifest, PageDef, Scenario, SnapshotEntry, SnapshotIndex } from "./types"
 
 /* ------------------------------------------------------------------ */
 /* Where things are                                                    */
@@ -38,6 +38,11 @@ export let manifest: Manifest = {
 /** instanceKey → snapshot entry, written by scripts/scan.mjs. Empty until loaded / when absent. */
 export let snapshotIndex: SnapshotIndex = {}
 
+/** page id → its figures (boards anchored to it, SPEC §1.7); filled by `setManifest`. */
+let figuresByPage = new Map<string, BoardDef[]>()
+/** Boards that belong to no page — the Boards area's own content. */
+export let standaloneBoards: BoardDef[] = []
+
 export const DEFAULT_TARGET_ATTRS = ["data-proto", "data-testid"]
 
 /** Load the manifest (and the optional snapshot index). Call once before rendering. */
@@ -64,6 +69,11 @@ export function setManifest(m: Manifest) {
   if (m.viewer?.app !== undefined) appBase = m.viewer.app.replace(/\/+$/, "")
   workspaceDimensions = m.dimensions.filter((d) => d.scope === "workspace")
   workspaceDimIds = new Set(workspaceDimensions.map((d) => d.id))
+  // Boards split once, into figures (anchored to a page) and the Boards area's
+  // own material, so the canvas can hand a memoized array to each page.
+  figuresByPage = new Map()
+  for (const b of m.boards ?? []) if (b.page) figuresByPage.set(b.page, [...(figuresByPage.get(b.page) ?? []), b])
+  standaloneBoards = (m.boards ?? []).filter((b) => !b.page)
 }
 
 /* ------------------------------------------------------------------ */
@@ -162,6 +172,18 @@ export function getScenario(id: string): Scenario | undefined {
 
 export function getTemplate(id: string | undefined) {
   return id ? manifest.templates?.find((t) => t.id === id) : undefined
+}
+
+const NO_FIGURES: BoardDef[] = []
+
+/**
+ * Figures: boards anchored to a page (SPEC §1.7). They render inside that
+ * page's area, so they inherit its visibility — a figure of a page the
+ * workspace axis hides is hidden with it, for free. The array is stable per
+ * manifest, so a memoized page area does not re-render for it.
+ */
+export function pageFigures(pageId: string): BoardDef[] {
+  return figuresByPage.get(pageId) ?? NO_FIGURES
 }
 
 export function dimensionLabel(dimId: string): string {

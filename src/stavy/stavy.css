@@ -384,6 +384,8 @@
 }
 .ps-toc-item:hover { background: var(--ps-hover); color: var(--ps-fg); }
 .ps-toc-item .ps-toc-count { margin-left: auto; color: var(--ps-faint); font-size: 10.5px; }
+/* a figure sits under the page it is anchored to (SPEC §1.7) */
+.ps-toc-sub { height: 23px; padding-left: 22px; font-size: 11.5px; color: var(--ps-faint); }
 /* ---- shortcuts sheet ---- */
 .ps-sheet { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.12); }
 .ps-sheet-grid { display: grid; grid-template-columns: 1fr auto; gap: 6px 18px; font-size: 12.5px; align-items: center; }
@@ -437,6 +439,9 @@
 .ps-board { background: var(--ps-glass-strong); border: 1px solid var(--ps-border); border-radius: 16px; padding: 18px 20px; box-shadow: var(--ps-shadow); }
 .ps-board svg { max-width: 100%; height: auto; }
 .ps-board pre { white-space: pre-wrap; font: inherit; line-height: 1.55; margin: 0; }
+/* an image board: the positioning frame its callouts are fractions of */
+.ps-figure { position: relative; display: block; line-height: 0; }
+.ps-figure img { display: block; width: 100%; height: auto; border-radius: 8px; user-select: none; }
 
 /* ---- performance: cheap layers during gestures, offscreen cards skip work ---- */
 .ps-grid {

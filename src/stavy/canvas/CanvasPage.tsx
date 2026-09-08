@@ -8,6 +8,7 @@ import {
   manifest, getPage, getTemplate, resolveDims, pageUrl, valueLabel, dimensionLabel,
   isWorkspaceDim, workspaceDimensions, workspaceDimsFromParams, workspaceCarry, workspaceKey,
   workspaceOverridesFor, pageInWorkspace, scenarioInWorkspace, varyingDims, varyingAcross, groupPages, instanceKey,
+  pageFigures, standaloneBoards,
 } from "../manifest"
 import { elementAt } from "../frame"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "./PanZoom"
@@ -23,7 +24,7 @@ import { Inspector, type FrameHit } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
 import { useComments } from "../comments/store"
 import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "../chrome"
-import type { PageDef } from "../types"
+import type { BoardDef, PageDef } from "../types"
 
 const INITIAL: Transform = { x: 300, y: 110, k: 0.55 }
 
@@ -79,7 +80,7 @@ function Area({
 /* ------------------------------------------------------------------ */
 
 const PageGroup = memo(function PageGroup({
-  page, showNotes, wireframe, wdims, linkExtra,
+  page, showNotes, wireframe, wdims, linkExtra, figures,
 }: {
   page: PageDef
   showNotes: boolean
@@ -88,6 +89,8 @@ const PageGroup = memo(function PageGroup({
   wdims: Record<string, string>
   /** Query params every link out of the canvas must carry */
   linkExtra: Record<string, string>
+  /** Boards anchored to this page (SPEC §1.7) */
+  figures: BoardDef[]
 }) {
   const navigate = useNavigate()
   const template = getTemplate(page.template)
@@ -244,6 +247,23 @@ const PageGroup = memo(function PageGroup({
               what each part of the screen does
             </div>
             <AnatomyCard page={page} overrides={wOver} scale={page.kind === "component" ? Math.min(0.8, 420 / (page.frame?.width ?? VIEWPORT_W)) : 0.3} />
+          </div>
+        )}
+        {/* Figures last: the same composition as the anatomy, for the parts of
+            the screen that never earn a URL of their own (SPEC §1.7). */}
+        {figures.length > 0 && (
+          <div>
+            <div className="ps-sub mb-3 flex items-center gap-2">
+              <span className="ps-zl"><span className="ps-chip ps-chip-sm">{figures.length === 1 ? "Figure" : "Figures"}</span></span>
+              states of this screen that have no URL of their own
+            </div>
+            <div className="flex flex-wrap items-start gap-10">
+              {figures.map((b) => (
+                <div key={b.id} data-toc={`board:${b.id}`}>
+                  <BoardCard board={b} figure />
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -477,7 +497,7 @@ export function CanvasPage() {
           )}
 
           {/* ---- Boards: supporting material, outside the contract ---- */}
-          {((manifest.boards?.length ?? 0) > 0 || (manifest.requirements?.length ?? 0) > 0) && (
+          {(standaloneBoards.length > 0 || (manifest.requirements?.length ?? 0) > 0) && (
             <Area title="Boards" kind="supporting material" icon={<MapIcon />} tocId="area:boards" className="self-start">
               <div className="flex flex-wrap items-start gap-10">
                 {(manifest.requirements?.length ?? 0) > 0 && (
@@ -485,7 +505,7 @@ export function CanvasPage() {
                     <CoverageBoard wireframe={wireframe} linkExtra={wCarry} wdims={wdims} />
                   </div>
                 )}
-                {(manifest.boards ?? []).map((b) => (
+                {standaloneBoards.map((b) => (
                   <div key={b.id} data-toc={`board:${b.id}`}>
                     <BoardCard board={b} />
                   </div>
@@ -567,7 +587,7 @@ export function CanvasPage() {
               <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
                 {section.pages.map((page) => (
                   <Area key={page.id} title={page.label} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
-                    <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} />
+                    <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} figures={pageFigures(page.id)} />
                   </Area>
                 ))}
               </div>
@@ -579,7 +599,7 @@ export function CanvasPage() {
             <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
               {components.map((page) => (
                 <Area key={page.id} title={page.label} kind="component" icon={<Boxes />} tocId={`page:${page.id}`}>
-                  <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} />
+                  <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} figures={pageFigures(page.id)} />
                 </Area>
               ))}
             </div>

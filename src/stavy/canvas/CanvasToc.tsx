@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { ChevronDown, ChevronRight, List } from "../icons"
-import { groupPages, manifest, pageInWorkspace, scenarioInWorkspace } from "../manifest"
+import { groupPages, manifest, pageFigures, pageInWorkspace, scenarioInWorkspace, standaloneBoards } from "../manifest"
 import { cn } from "../cn"
 
 /** Table of contents for the canvas: jump to any scenario, page, or component. */
@@ -49,14 +49,22 @@ export function CanvasToc({
             <div key={section.group ?? "ungrouped"}>
               <div className="ps-toc-h">{section.group ?? "Pages"}</div>
               {section.pages.map((p) => (
-                <button key={p.id} className="ps-toc-item" onClick={() => onJump(`page:${p.id}`)} title={p.label}>
-                  <span className="truncate">{p.label}</span>
-                  <span className="ps-toc-count">{p.instances?.length ?? 1}</span>
-                </button>
+                <div key={p.id}>
+                  <button className="ps-toc-item" onClick={() => onJump(`page:${p.id}`)} title={p.label}>
+                    <span className="truncate">{p.label}</span>
+                    <span className="ps-toc-count">{p.instances?.length ?? 1}</span>
+                  </button>
+                  {/* Figures render inside the page's area, so they are listed under it. */}
+                  {pageFigures(p.id).map((b) => (
+                    <button key={b.id} className="ps-toc-item ps-toc-sub" onClick={() => onJump(`board:${b.id}`)} title={b.title}>
+                      <span className="truncate">{b.title}</span>
+                    </button>
+                  ))}
+                </div>
               ))}
             </div>
           ))}
-          {((manifest.boards?.length ?? 0) > 0 || (manifest.requirements?.length ?? 0) > 0) && (
+          {(standaloneBoards.length > 0 || (manifest.requirements?.length ?? 0) > 0) && (
             <>
               <div className="ps-toc-h">Boards</div>
               {(manifest.requirements?.length ?? 0) > 0 && (
@@ -64,7 +72,7 @@ export function CanvasToc({
                   <span className="truncate">Requirement coverage</span>
                 </button>
               )}
-              {(manifest.boards ?? []).map((b) => (
+              {standaloneBoards.map((b) => (
                 <button key={b.id} className="ps-toc-item" onClick={() => onJump(`board:${b.id}`)} title={b.title}>
                   <span className="truncate">{b.title}</span>
                 </button>
