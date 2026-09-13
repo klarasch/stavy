@@ -147,7 +147,10 @@ node scripts/init.mjs ../that-repo
 This builds the viewer and copies it to `<repo>/public/stavy/`, copies the
 validator/scan scripts and schema into `<repo>/scripts/stavy/`, the skill
 into `<repo>/.claude/skills/stavy/`, and `skill/RULES.md` to `<repo>/STAVY.md`
-for your agent's CLAUDE.md/AGENTS.md to reference. You then register a page
+for your agent's CLAUDE.md/AGENTS.md to reference. Run it again to **update**:
+files Stavy owns are replaced, files you edited are skipped and named, and
+your own conventions live in a local layer the update composes in rather
+than overwrites (`.stavy/SKILL.local.md`, `.stavy/RULES.local.md`). You then register a page
 by writing its `url` (SPEC §2.1) and run the scan — no route to mount, no
 binding-contract hooks to implement.
 
@@ -156,7 +159,9 @@ binding-contract hooks to implement.
   without touching page code, CI, and comments without a server
 - [`docs/MONDAY.md`](docs/MONDAY.md) — a half-day trial on a branch of an
   existing prototype, step by step
-- [`scripts/init.mjs`](scripts/init.mjs) — the installer above
+- [`docs/UPDATING.md`](docs/UPDATING.md) — taking updates: who owns which
+  file, the local layer for your skill and rules, `--check` for CI
+- [`scripts/init.mjs`](scripts/init.mjs) — the installer and updater above
 
 ### (c) The demo — Orbit
 
@@ -187,13 +192,14 @@ mode) or label placeholders instead of snapshots.
 | `skill/RULES.md` | Additive-only rules for an existing prototype repo, copied to `STAVY.md` by `init` |
 | `docs/ADOPTION.md` | Hands-on guide: adopting on an existing prototype, URL-addressable states, CI |
 | `docs/MONDAY.md` | A half-day trial plan on a branch of an existing prototype |
+| `docs/UPDATING.md` | Taking updates in an adopting repo: ownership, the local layer, the lock |
 | `scripts/validate.mjs` | `npm run validate` — manifest ↔ schema/cross-ref validation, `--refs` PRD check, coverage summary |
 | `scripts/scan.mjs` | `npm run scan` — the contract check (targets exist) + canvas snapshots, via Playwright |
 | `scripts/changelog.mjs` | `npm run changelog [ref]` — Markdown diff of the manifest for PRs |
 | `scripts/handoff.mjs` | `npm run handoff` — a handoff sheet per page/component |
 | `scripts/gen-tests.mjs` | `npm run test:scenarios` — Playwright specs generated from scenarios |
 | `scripts/strings.mjs` | `npm run strings` — copy review document (Markdown + CSV) from the catalog |
-| `scripts/init.mjs` | `node scripts/init.mjs ../other-repo` — installs the built viewer + skill into any repo |
+| `scripts/init.mjs` | `node scripts/init.mjs ../other-repo` — installs or updates the built viewer + skill in any repo (logic in `scripts/lib/install.mjs`) |
 | `docs/PRD-118.md` | Mock PRD the `--refs` check runs against |
 | `src/stavy/` | Reference viewer (canvas, player, tours, annotations, inspector) |
 | `vite.viewer.config.ts` | Builds `src/stavy/` alone as the redistributable `dist-viewer/` |

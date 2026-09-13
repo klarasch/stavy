@@ -18,7 +18,7 @@
     },
     "version": {
       "type": "string",
-      "pattern": "^0\\.1"
+      "pattern": "^0\\.[12]"
     },
     "product": {
       "type": "object",

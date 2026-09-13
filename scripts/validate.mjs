@@ -67,6 +67,10 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   // `dimensions` is optional on a page (SPEC §1.3): a page with no axes is a
   // normal page. Fill it in once so every check below can read it as an object.
   for (const p of m.pages ?? []) if (!p.dimensions) p.dimensions = {}
+  // Required by the schema; defaulted here so a manifest missing them gets the schema error, not a crash.
+  m.dimensions ??= []
+  m.pages ??= []
+  m.scenarios ??= []
 
   const dimIndex = new Map(m.dimensions.map((d) => [d.id, new Set(d.values.map((v) => v.id))]))
   // Workspace-scoped axes (SPEC §1.1): one value for the whole workspace, so a

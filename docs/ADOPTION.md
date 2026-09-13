@@ -30,13 +30,17 @@ paths) and copies:
 |---|---|
 | `public/stavy/` | the viewer, a static page (+ `VERSION`) |
 | `public/stavy.json` | a starter manifest (only if absent) |
-| `scripts/stavy/{validate,scan,gen-tests}.mjs`, `stavy.schema.json` | the checks |
+| `scripts/stavy/{validate,scan,gen-tests}.mjs`, `lib/`, `stavy.schema.json` | the checks |
 | `.claude/skills/stavy/SKILL.md` | the agent skill |
 | `STAVY.md` | the rules for agents in this repo — add `@STAVY.md` to your CLAUDE.md |
-| `docs/STAVY-SPEC.md` | the spec |
+| `docs/STAVY-SPEC.md`, `docs/STAVY-UPDATING.md` | the spec, and how updates work |
+| `.stavy/lock.json` | which of these Stavy owns, with hashes — commit it |
 
-and adds `stavy:validate`, `stavy:scan`, `stavy:tests` to `package.json`
-when absent. Then, in order:
+and adds `stavy:validate`, `stavy:scan`, `stavy:tests`, `stavy:update` to
+`package.json` when absent. Everything except `public/stavy.json` and
+`package.json` is Stavy's and replaced by updates; your own additions go in
+the local layer (`.stavy/SKILL.local.md`, `.stavy/RULES.local.md` —
+[`UPDATING.md`](UPDATING.md) §2). Then, in order:
 
 1. **Level 0 — register what exists.** `npm run dev`, open
    `http://localhost:5173/stavy/index.html`. In `public/stavy.json`, add one
@@ -198,14 +202,16 @@ instead of searching the repo.
 
 ## B5. Maintenance: the viewer is a folder in `public/`
 
-- **Upgrade:** pull the reference repo and re-run
-  `node ../stavy/scripts/init.mjs . --rebuild`. It overwrites `public/stavy/`
-  and `scripts/stavy/`, leaves `public/stavy.json`, `STAVY.md` and everything
-  else alone. `public/stavy/VERSION` records the Stavy commit you are on.
+- **Upgrade:** pull the reference repo, then `npm run stavy:update` (the same
+  `init.mjs`). It shows the Stavy log since your last update, replaces the
+  files Stavy owns, prunes the ones it no longer ships, and **skips any owned
+  file you edited** — naming it and exiting 1. `.stavy/lock.json` records the
+  commit and hashes. Full model, the local layer, and the flags in
+  [`UPDATING.md`](UPDATING.md); `init --check` in CI keeps owned files unedited.
 - **Bugs** found while adopting are fixed in the reference repo, never by
-  patching the built viewer — the next init overwrites it.
-- **Removing Stavy** is `rm -r public/stavy public/stavy.json scripts/stavy
-  STAVY.md`. The app never knew.
+  patching an installed file — the update would skip it and you'd stop
+  getting fixes for that file.
+- **Removing Stavy:** [`UPDATING.md`](UPDATING.md) §6. The app never knew.
 
 ---
 
