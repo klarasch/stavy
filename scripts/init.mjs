@@ -26,7 +26,21 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import { dirname, relative, resolve, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { apply, detectEdits, git, gitShow, LOCK, plan, readLock, RULES_LOCAL, SKILL_LOCAL, walk } from "./lib/install.mjs"
+import {
+  apply,
+  changelogBetween,
+  compareVersions,
+  detectEdits,
+  git,
+  gitShow,
+  LOCK,
+  plan,
+  readLock,
+  readRelease,
+  RULES_LOCAL,
+  SKILL_LOCAL,
+  walk,
+} from "./lib/install.mjs"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const src = resolve(here, "..")
@@ -62,15 +76,22 @@ const dir = (opt("--dir") ?? lock?.dir ?? "stavy").replace(/^\/+|\/+$/g, "")
 const legacy = !lock && existsSync(join(target, `public/${dir}/VERSION`))
 
 // ---- which Stavy is this ---------------------------------------------------
-const pkgVersion = JSON.parse(readFileSync(join(src, "package.json"), "utf8")).version
-const commit = git(src, "rev-parse", "HEAD")
-const upDirty = commit ? !!git(src, "status", "--porcelain", "--untracked-files=no") : false
+// An unpacked release (RELEASE.json) is used as is: prebuilt, no git, no npm.
+// A git checkout is where Stavy is developed, and builds its viewer.
+const release = readRelease(src)
+const pkgVersion = release?.version ?? JSON.parse(readFileSync(join(src, "package.json"), "utf8")).version
+const commit = release ? release.commit : git(src, "rev-parse", "HEAD")
+const upDirty = !release && commit ? !!git(src, "status", "--porcelain", "--untracked-files=no") : false
+if (!release && !commit && !check) {
+  die(`${src} is neither a Stavy release (no RELEASE.json) nor a git checkout. Download a release:
+https://github.com/klarasch/stavy/releases/latest/download/stavy.tgz`)
+}
 if (upDirty && !flag("--allow-dirty") && !check) {
   die(`the Stavy checkout at ${src} has uncommitted changes. There is no commit to record,
 so the next update couldn't show what changed. Commit first, or pass --allow-dirty.`)
 }
-const short = commit ? commit.slice(0, 12) + (upDirty ? "-dirty" : "") : `v${pkgVersion}`
-const upstream = { version: pkgVersion, commit: commit ? commit + (upDirty ? "-dirty" : "") : null }
+const short = release ? `${pkgVersion} (${commit.slice(0, 12)})` : commit.slice(0, 12) + (upDirty ? "-dirty" : "")
+const upstream = { version: pkgVersion, commit: commit + (upDirty ? "-dirty" : ""), ...(release ? { release: true } : {}) }
 
 say(`${lock || legacy ? "Updating" : "Installing"} Stavy in ${target}`)
 say(`  from ${src} @ ${short}${lock?.upstream?.commit ? ` (last taken: ${lock.upstream.commit.slice(0, 12)})` : ""}`)
@@ -80,7 +101,19 @@ if (!check && git(target, "status", "--porcelain", "--untracked-files=no")) {
 }
 
 const last = lock?.upstream?.commit?.replace(/-dirty$/, "")
-if (!check && last && commit && last !== commit) {
+if (!check && release && lock && last !== commit && existsSync(join(src, "CHANGELOG.md"))) {
+  const since = lock.upstream?.version
+  const sections = changelogBetween(readFileSync(join(src, "CHANGELOG.md"), "utf8"), since, pkgVersion)
+  if (since && compareVersions(pkgVersion, since) < 0) say(`\n  Note: ${pkgVersion} is OLDER than the ${since} you last took.`)
+  else if (sections.length) {
+    say(`\n  Stavy changes since ${since ?? "your last update"}:`)
+    for (const s of sections) {
+      say(`\n    ${s.heading}`)
+      for (const l of s.body.split("\n")) say(`    ${l}`)
+    }
+    say("\n  Some of these may let you delete something local: a workaround Stavy has since absorbed.")
+  }
+} else if (!check && !release && last && last !== commit) {
   const log = git(src, "log", "--oneline", "--no-merges", `${last}..HEAD`)
   say(`\n  Stavy changes since ${last.slice(0, 12)}:`)
   if (log == null) say("    (can't reach that commit from this checkout — was it rewritten?)")
@@ -96,7 +129,7 @@ if (!check && last && commit && last !== commit) {
 const dist = join(src, "dist-viewer")
 const stamp = join(src, "dist-viewer.commit")
 const built = existsSync(stamp) ? readFileSync(stamp, "utf8").trim() : null
-if (!check && (flag("--rebuild") || !existsSync(join(dist, "index.html")) || !commit || upDirty || built !== commit)) {
+if (!check && !release && (flag("--rebuild") || !existsSync(join(dist, "index.html")) || upDirty || built !== commit)) {
   if (existsSync(join(src, "node_modules"))) {
     say("\n  building the viewer (vite build -c vite.viewer.config.ts)…")
     execFileSync("npx", ["vite", "build", "-c", "vite.viewer.config.ts", "--logLevel", "error"], { cwd: src, stdio: "inherit" })
@@ -114,7 +147,8 @@ const edits = detectEdits({
   lock,
   want: p.files,
   dir,
-  legacyShow: commit ? (c, path) => gitShow(src, c, path) : null,
+  legacyShow: release ? null : (c, path) => gitShow(src, c, path),
+  known: release && existsSync(join(src, "known-hashes.json")) ? JSON.parse(readFileSync(join(src, "known-hashes.json"), "utf8")) : null,
 })
 
 const whereItGoes = () => {

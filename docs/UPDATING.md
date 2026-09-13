@@ -89,25 +89,32 @@ to the viewer or the scripts is the one thing an update can't carry for you.
 
 ## 3. Take an update
 
-Keep a Stavy checkout next to your repo:
+**From a release (recommended).** A release is one file with the viewer
+prebuilt. It needs no `npm install`, no build and no git, so it works behind
+a locked-down registry. From your repo:
 
 ```bash
-git clone https://github.com/klarasch/stavy.git ../stavy
-```
-
-Then, from your repo:
-
-```bash
-git -C ../stavy pull && (cd ../stavy && npm install)
+curl -fL -o /tmp/stavy.tgz https://github.com/klarasch/stavy/releases/latest/download/stavy.tgz
+rm -rf ../stavy && mkdir ../stavy && tar -xzf /tmp/stavy.tgz -C ../stavy --strip-components=1
 npm run stavy:update            # = node ../stavy/scripts/init.mjs .
 ```
 
-What it does, in order:
+Always unpack to the same place (`../stavy`), so `stavy:update` keeps pointing
+at it. If `curl` can't reach GitHub, download `stavy.tgz` from the Releases page
+in a browser. For one exact version, use `releases/download/v0.2.0/stavy.tgz`.
 
-1. **Shows what changed** in Stavy since the commit you last took (from the
-   lock). Read it: some changes let you delete a local workaround.
-2. **Rebuilds the viewer** if `dist-viewer/` in the checkout wasn't built from
-   this commit.
+**From a checkout** (if you work on Stavy itself): `git clone
+https://github.com/klarasch/stavy.git ../stavy && (cd ../stavy && npm install)`,
+then `git -C ../stavy pull` before each update. The checkout builds the viewer
+itself, so it needs the whole npm dependency tree.
+
+What an update does, in order:
+
+1. **Shows what changed** since the release you last took: the release's
+   `CHANGELOG.md` sections, or the git log for a checkout. Read it: some
+   changes let you delete a local workaround.
+2. **Rebuilds the viewer** (checkout only) if `dist-viewer/` wasn't built from
+   this commit. A release is already built.
 3. **Checks your repo for edits** to Stavy's files, comparing each against the
    hash the last install recorded.
 4. **Copies.** Files you haven't edited are replaced. Files an older release
@@ -131,8 +138,8 @@ Useful flags:
 | `--dry-run` | report what would change, write nothing |
 | `--check` | only list Stavy's files that you've edited; exits 1 if any. Cheap enough for CI or a pre-commit hook |
 | `--force` | take Stavy's copy of edited files too, discarding your edits |
-| `--rebuild` | rebuild the viewer even if it looks current |
-| `--allow-dirty` | take from a Stavy checkout with uncommitted changes (the lock then can't name an exact commit) |
+| `--rebuild` | checkout only: rebuild the viewer even if it looks current |
+| `--allow-dirty` | checkout only: take from uncommitted changes (the lock then can't name an exact commit) |
 | `--dir <name>` | viewer folder under `public/`; remembered in the lock |
 
 ## 4. "NOT taken — edited in this repo"
@@ -154,10 +161,10 @@ An older `init` wrote no lock, so there's no record of what it installed. The
 first update handles that:
 
 - **The built viewer** is replaced. It was never meant to be edited.
-- **Everything else** is compared against the Stavy commit named in
-  `public/stavy/VERSION`, if the checkout can reach it. Edits are then found
-  exactly, as in §4.
-- **If it can't** (the VERSION says `-dirty`, or the commit is gone), any file
+- **Everything else** is checked exactly, as in §4. A release carries the
+  hashes of every version each file has ever had, and a checkout compares
+  against the commit named in `public/stavy/VERSION`.
+- **If a checkout can't** (the VERSION says `-dirty`, or the commit is gone), any file
   that differs from the new release is listed and nothing is written. Review
   them, move local changes into the local layer, then re-run with `--force`.
 

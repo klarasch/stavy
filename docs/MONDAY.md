@@ -12,17 +12,15 @@ folder; you have Claude Code; Node 22+.
 
 ## 0. The night before (5 min)
 
-Push the reference repo so the work clone has the current viewer and scripts:
-
-```bash
-cd ~/Code/prototyping/stavy && git push
-```
+Check that the latest release on GitHub has what you want to demo. The work
+machine downloads it; it never builds Stavy.
 
 ## 1. Install (15 min)
 
 ```bash
 cd ~/work/prototype && git checkout -b stavy
-git clone <stavy repo> ../stavy && (cd ../stavy && npm install)
+curl -fL -o /tmp/stavy.tgz https://github.com/klarasch/stavy/releases/latest/download/stavy.tgz
+mkdir -p ../stavy && tar -xzf /tmp/stavy.tgz -C ../stavy --strip-components=1
 node ../stavy/scripts/init.mjs .
 npm i -D playwright ajv@8.12.0 ajv-formats@2.1.1 && npx playwright install chromium
 ```

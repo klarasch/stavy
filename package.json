@@ -1,7 +1,7 @@
 {
   "name": "stavy",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:scenarios": "node scripts/gen-tests.mjs && playwright test",
-    "strings": "node scripts/strings.mjs"
+    "strings": "node scripts/strings.mjs",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",

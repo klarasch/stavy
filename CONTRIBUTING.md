@@ -67,3 +67,20 @@ adopting belongs in this repo (see `docs/ADOPTION.md` §B5).
 
 CI diffs the committed generated files against a fresh run and fails on
 drift, then builds, scans and validates the demo before deploying it.
+
+## Releasing
+
+Adopters install from a release, never from a checkout, so a fix reaches
+them when it ships in one.
+
+1. Bump `version` in `package.json` (and `npm install` so the lock follows).
+2. Add a `## <version> — <date>` section at the top of `CHANGELOG.md`, written for
+   someone updating a prototype repo: what they get, and what they must do.
+   `init` prints it to them during the update.
+3. `npm run release` locally: it builds the viewer, stages the tarball, installs
+   it into a scratch repo, updates it again, and packs `release/stavy.tgz`.
+4. Commit, then `git tag v<version> && git push origin main v<version>`. The
+   `release` workflow repeats step 3 and publishes the GitHub Release with
+   `stavy.tgz` attached. That file name is fixed, so
+   `releases/latest/download/stavy.tgz` always serves the newest release.
+

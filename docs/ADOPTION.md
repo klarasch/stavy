@@ -15,16 +15,18 @@ work regardless.
 
 ## A. An afternoon: from nothing to a canvas of what you already have
 
-Clone the reference repo next to the prototype repo and run init from there:
+Download a release next to the prototype repo and run its init. A release has
+the viewer prebuilt and no npm dependencies, so this works behind a
+locked-down registry:
 
 ```bash
-git clone https://github.com/klarasch/stavy ../stavy
-cd ../stavy && npm install && cd -
+curl -fL -o /tmp/stavy.tgz https://github.com/klarasch/stavy/releases/latest/download/stavy.tgz
+mkdir -p ../stavy && tar -xzf /tmp/stavy.tgz -C ../stavy --strip-components=1
 node ../stavy/scripts/init.mjs .
 ```
 
-Init builds the viewer once (`dist-viewer/`, self-contained, relative asset
-paths) and copies:
+(A git checkout of the reference repo works too, after `npm install` there. It
+builds the viewer itself.) Init copies:
 
 | Into your repo | What it is |
 |---|---|
@@ -225,6 +227,12 @@ cleanly through a strict corporate registry/artifactory:
 ```bash
 npm i -D ajv@8.12.0 ajv-formats@2.1.1
 ```
+
+Stavy itself needs nothing from your registry: a release (§A) is prebuilt and
+dependency-free. What the prototype repo installs is only this pair and
+`playwright` for the scan. Playwright downloads Chromium from its own CDN, so
+behind a proxy set `PLAYWRIGHT_DOWNLOAD_HOST` to your internal mirror before
+`npx playwright install chromium`.
 
 Newer `ajv` releases pull in `fast-uri`, which some artifactories block by
 policy, and the install fails or falls back to a stale cached version. If

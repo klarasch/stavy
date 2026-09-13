@@ -1,0 +1,24 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 } # full history: known-hashes.json covers every past version
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npm test
+      # Builds the viewer, stages the release, installs it into a scratch repo
+      # and updates it again, then packs release/stavy.tgz. Fails on a tag that
+      # doesn't match package.json or a version missing from CHANGELOG.md.
+      - run: node scripts/release.mjs
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/stavy.tgz --title "Stavy ${GITHUB_REF_NAME#v}" --notes-file release/NOTES.md

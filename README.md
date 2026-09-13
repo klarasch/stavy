@@ -21,13 +21,13 @@ https://your-app/stavy.json  → the manifest
 ## Three lines to try it on something you already have
 
 ```bash
-node /path/to/stavy/scripts/init.mjs ../my-prototype-repo
-cd ../my-prototype-repo && npm run dev
-# register a page's URL in stavy.json, then open http://localhost:5173/stavy/
+curl -fL https://github.com/klarasch/stavy/releases/latest/download/stavy.tgz | tar -xz   # → ./stavy, no npm install
+node stavy/scripts/init.mjs ../my-prototype-repo
+# register a page's URL in public/stavy.json, run its dev server, open http://localhost:5173/stavy/
 ```
 
-`init` builds the viewer as a self-contained static folder and drops it into
-`public/stavy/`. No bundler plugin, no imports, no required router or UI kit
+`init` drops the prebuilt viewer, a self-contained static folder, into
+`public/stavy/`. Run it again to update. No bundler plugin, no imports, no required router or UI kit
 — see [`docs/ADOPTION.md`](docs/ADOPTION.md) for the full walkthrough and
 [`docs/MONDAY.md`](docs/MONDAY.md) for a half-day trial plan.
 
@@ -193,6 +193,8 @@ mode) or label placeholders instead of snapshots.
 | `docs/ADOPTION.md` | Hands-on guide: adopting on an existing prototype, URL-addressable states, CI |
 | `docs/MONDAY.md` | A half-day trial plan on a branch of an existing prototype |
 | `docs/UPDATING.md` | Taking updates in an adopting repo: ownership, the local layer, the lock |
+| `CHANGELOG.md` | What changed per release, written for adopters (`init` prints the new sections) |
+| `scripts/release.mjs` | `npm run release` — packs `release/stavy.tgz` and self-tests it; CI runs it on a `v*` tag |
 | `scripts/validate.mjs` | `npm run validate` — manifest ↔ schema/cross-ref validation, `--refs` PRD check, coverage summary |
 | `scripts/scan.mjs` | `npm run scan` — the contract check (targets exist) + canvas snapshots, via Playwright |
 | `scripts/changelog.mjs` | `npm run changelog [ref]` — Markdown diff of the manifest for PRs |

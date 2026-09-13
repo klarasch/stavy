@@ -245,3 +245,30 @@ describe("install and update", () => {
     expect(existsSync(join(target, "STAVY.md"))).toBe(false)
   })
 })
+
+describe("releases", () => {
+  it("checks a pre-lock install exactly against known hashes, without git", async () => {
+    const { sha } = await import("../../scripts/lib/install.mjs")
+    put(target, "public/stavy/VERSION", "anything\n")
+    put(target, "STAVY.md", "rules from some older release")
+    put(target, "docs/STAVY-SPEC.md", "spec, locally edited")
+    put(target, "scripts/stavy/scan.mjs", "scan never released")
+    const known = {
+      "skill/RULES.md": [sha(Buffer.from("rules from some older release"))],
+      "SPEC.md": [sha(Buffer.from("spec as released"))],
+      "scripts/scan.mjs": [],
+    }
+    const p = plan({ src, target, dist, dir: "stavy", version: "v" })
+    const edits = detectEdits({ target, lock: null, want: p.files, dir: "stavy", legacyShow: null, known })
+    expect(edits.edited.sort()).toEqual(["docs/STAVY-SPEC.md", "scripts/stavy/scan.mjs"])
+    expect(edits.unknown).toEqual([])
+  })
+
+  it("reads changelog sections between two versions", async () => {
+    const { changelogBetween, changelogSection } = await import("../../scripts/lib/install.mjs")
+    const text = "# Changelog\n\nIntro.\n\n## 0.3.0 — later\n\n- c\n\n## 0.2.1\n\n- b\n\n## 0.2.0 — first\n\n- a\n"
+    expect(changelogBetween(text, "0.2.0", "0.3.0").map((s: { version: string }) => s.version)).toEqual(["0.3.0", "0.2.1"])
+    expect(changelogBetween(text, "0.2.1", "0.2.1")).toEqual([])
+    expect(changelogSection(text, "0.2.1")).toBe("- b")
+  })
+})

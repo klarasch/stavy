@@ -165,8 +165,12 @@ export function readLock(target) {
  * older init can still be checked exactly when its public/<dir>/VERSION names a
  * clean commit the Stavy checkout can reach; otherwise differing files are
  * reported as `unknown` and nothing is overwritten without --force.
+ *
+ * A release has no git, so it carries `known`: for each source path, the
+ * hashes of every version that path has ever had. An installed file matching
+ * one of them is an unedited older release; one matching none was edited.
  */
-export function detectEdits({ target, lock, want, dir, legacyShow }) {
+export function detectEdits({ target, lock, want, dir, legacyShow, known }) {
   const edited = []
   const unknown = []
   if (lock) {
@@ -193,6 +197,11 @@ export function detectEdits({ target, lock, want, dir, legacyShow }) {
     if (!existsSync(p)) continue
     const have = readFileSync(p)
     if (have.equals(buf)) continue
+    const history = sources[rel] && known?.[sources[rel]]
+    if (history) {
+      if (!history.includes(sha(have))) edited.push(rel)
+      continue
+    }
     const old = legacyVersion && sources[rel] && legacyShow ? legacyShow(legacyVersion, sources[rel]) : null
     if (old == null) unknown.push(rel)
     else if (!have.equals(old)) edited.push(rel)
@@ -293,4 +302,56 @@ export function gitShow(cwd, commit, path) {
   } catch {
     return null
   }
+}
+
+/* ---------------- releases (no git: a tarball carries RELEASE.json + CHANGELOG.md) ---------------- */
+
+/** The RELEASE.json of an unpacked release, or null for a git checkout. */
+/** Source path → the hashes of every version it has had (a release's known-hashes.json). */
+export function knownHashes({ src, paths, since }) {
+  const out = {}
+  for (const path of paths) {
+    const range = since ? [`${since}^..HEAD`] : ["HEAD"]
+    const log = git(src, "log", "--format=%H", ...range, "--", path)
+    const hashes = new Set()
+    for (const c of (log ?? "").split("\n").filter(Boolean)) {
+      const buf = gitShow(src, c, path)
+      if (buf) hashes.add(sha(buf))
+    }
+    out[path] = [...hashes]
+  }
+  return out
+}
+
+export function readRelease(src) {
+  const p = join(src, "RELEASE.json")
+  return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null
+}
+
+const semver = (v) => (String(v ?? "").match(/^(\d+)\.(\d+)\.(\d+)/) ?? []).slice(1).map(Number)
+export function compareVersions(a, b) {
+  const [x, y] = [semver(a), semver(b)]
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0)
+  return 0
+}
+
+/** CHANGELOG.md split into `## <version>` sections, newest first as written. */
+export function changelogSections(text) {
+  const out = []
+  for (const part of text.split(/^(?=## \d+\.\d+\.\d+)/m)) {
+    const m = /^## (\d+\.\d+\.\d+)[^\n]*\n/.exec(part)
+    if (m) out.push({ version: m[1], heading: m[0].trim(), body: part.slice(m[0].length).trim() })
+  }
+  return out
+}
+
+export function changelogSection(text, version) {
+  return changelogSections(text).find((s) => s.version === version)?.body ?? null
+}
+
+/** Sections newer than `since`, up to and including `upTo`. */
+export function changelogBetween(text, since, upTo) {
+  return changelogSections(text).filter(
+    (s) => compareVersions(s.version, upTo) <= 0 && (!since || compareVersions(s.version, since) > 0),
+  )
 }
