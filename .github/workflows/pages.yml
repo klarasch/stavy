@@ -25,11 +25,14 @@ jobs:
       - run: git diff --exit-code -- src/stavy/icons.tsx tests/scenarios
       # 1) build the prototype + viewer, 2) scan it (targets + snapshots), 3) validate, 4) rebuild with the snapshots
       - run: npx playwright install --with-deps chromium
-      - run: BASE_PATH=/stavy/ npx vite build
+      # Scan a root-path build: under BASE_PATH=/stavy/ the preview server resolves
+      # /stavy/ to the viewer's own stavy/ folder instead of the app, and every
+      # target "goes missing". Snapshots don't depend on the base; the deploy build does.
+      - run: npx vite build
       - run: |
           npx vite preview --port 4173 --strictPort &
           for i in $(seq 1 30); do curl -sf http://localhost:4173/stavy/ >/dev/null && break; sleep 1; done
-      - run: node scripts/scan.mjs --url http://localhost:4173 --app /stavy
+      - run: node scripts/scan.mjs --url http://localhost:4173
       - run: npm run check
       - run: BASE_PATH=/stavy/ npx vite build
       - run: cp dist/index.html dist/404.html   # SPA fallback for deep links on Pages
