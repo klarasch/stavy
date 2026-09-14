@@ -40,6 +40,43 @@ test("a tour highlights the step target inside the frame", async ({ page }) => {
   expect(halo && target && Math.abs(halo.x + 6 - target.x) < 3).toBe(true)
 })
 
+// The tour card header packs a scenario chip, a step counter and a close
+// button into one row (TourOverlay.tsx). A long scenario label used to have
+// nowhere to shrink: the chip stayed at its full nowrap width, squeezing the
+// counter down to a few px where "1 / 5" wrapped into "1 / / / 5" and shoving
+// the close button against the edge of the card.
+test("a long scenario label truncates instead of squeezing the step counter or close button", async ({ page }) => {
+  const longLabel = "Employee submits a very unusually long expense report scenario label"
+  await page.route("**/stavy.json", async (route) => {
+    const manifest = await (await route.fetch()).json()
+    const scenario = manifest.scenarios.find((s: { id: string }) => s.id === "manager-approves")
+    scenario.label = longLabel
+    await route.fulfill({ json: manifest })
+  })
+
+  await page.goto("/stavy/?p=dashboard&d_role=manager&d_state=loaded&tour=manager-approves&ts=0")
+  const card = page.locator(".ps-glass-strong")
+  await expect(card).toBeVisible()
+
+  const counter = page.getByText(/^\d+ \/ \d+$/)
+  await expect(counter).toBeVisible()
+  await expect(counter).toHaveText(/^1 \/ \d+$/)
+  const counterBox = await counter.boundingBox()
+  expect(counterBox).not.toBeNull()
+  expect(counterBox!.height).toBeLessThan(24)
+
+  const closeButton = page.getByTitle("Exit tour")
+  const closeBox = await closeButton.boundingBox()
+  const cardBox = await card.boundingBox()
+  expect(closeBox).not.toBeNull()
+  expect(cardBox).not.toBeNull()
+  expect(closeBox!.x).toBeGreaterThanOrEqual(cardBox!.x)
+  expect(closeBox!.x + closeBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 0.5)
+
+  // The truncated chip still carries the full label for hover discovery.
+  await expect(page.locator(".ps-chip", { hasText: /^Employee/ })).toHaveAttribute("title", longLabel)
+})
+
 test("the inspector resolves the element under the pointer inside the frame", async ({ page }) => {
   await page.goto("/stavy/?p=expense-detail&d_role=manager&d_lifecycle=submitted&i=1")
   const target = await page.frameLocator("iframe.ps-frame").locator('[data-proto="ApproveButton"]').boundingBox()

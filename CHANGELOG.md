@@ -5,6 +5,18 @@ prints the sections between the release a repo last took and the one it is
 taking, so write each entry for that reader: what they get, and what, if
 anything, they have to do.
 
+## 0.2.2 — 2026-09-14
+
+Tour fixes from adopting 0.2.1. Nothing to do on your side.
+
+- **No more false "target not found" banner.** A tour started from the Play
+  menu could warn that a step's target was missing, and keep warning, when the
+  target rendered a moment late. The tour now keeps looking until the target
+  appears, and warns only if it is still missing after a short grace period.
+- **Long scenario names no longer crush the tour card.** The name truncates
+  with an ellipsis, and shows in full on hover. The step counter and close
+  button keep their size.
+
 ## 0.2.1 — 2026-09-14
 
 Fixes from adopting 0.2.0.

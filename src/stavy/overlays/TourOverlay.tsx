@@ -5,12 +5,17 @@ import { ArrowLeft, ArrowRight, X, Check } from "../icons"
 import { findTarget, getPage, pageUrl, resolveDims } from "../manifest"
 import { PsButton, Chip, useHotkeys } from "../chrome"
 import { StavyLayer } from "../toplayer"
-import { hostRect, onFrameChange, type HostRect } from "../frame"
+import { frameDoc, hostRect, onFrameChange, type HostRect } from "../frame"
 import type { Scenario } from "../types"
 
 function sameRect(a: HostRect, b: HostRect) {
   return a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height
 }
+
+/** How long a target may stay missing before the "not found" banner shows — long
+ *  enough that an ordinary step transition or a late-mounting widget never
+ *  flashes it, short enough to still flag a genuinely wrong target. */
+const MISSING_GRACE_MS = 2500
 
 function stepUrl(scenario: Scenario, idx: number, carry?: Record<string, string>): string {
   const st = scenario.steps[idx]
@@ -45,53 +50,101 @@ export function TourOverlay({
   const navigate = useNavigate()
   const step = scenario.steps[stepIdx]
   const [rect, setRect] = useState<HostRect | null>(null)
+  const [missing, setMissing] = useState(false)
   const isLast = stepIdx === scenario.steps.length - 1
 
   useEffect(() => {
     setRect(null)
-    if (!step?.target || !iframe || !doc) return
-    let tries = 0
-    let timer: ReturnType<typeof setTimeout>
+    setMissing(false)
+    if (!step?.target || !iframe) return
+
+    let disposed = false
     let scrolled = false
-    const measure = () => {
-      const el = findTarget(doc, step.target!)
-      if (!el) return false
+    let observedDoc: Document | null = null
+    let mo: MutationObserver | null = null
+    let missTimer: ReturnType<typeof setTimeout> | null = null
+    // Reset whenever the frame (re)loads, so a hard reload mid-step gets its
+    // own grace period rather than inheriting one that already ran out.
+    let activity = Date.now()
+
+    const clearMissTimer = () => {
+      if (missTimer != null) {
+        clearTimeout(missTimer)
+        missTimer = null
+      }
+    }
+    const armMissTimer = () => {
+      clearMissTimer()
+      const wait = Math.max(0, MISSING_GRACE_MS - (Date.now() - activity))
+      missTimer = setTimeout(() => {
+        if (!disposed) setMissing(true)
+      }, wait)
+    }
+    // Keep observing the frame's CURRENT document for the target mounting —
+    // never a captured `doc`, which can lag a same-document (pushState) tour
+    // navigation or point at a document a hard reload has since replaced.
+    const observe = (d: Document) => {
+      mo?.disconnect()
+      mo = new MutationObserver(check)
+      mo.observe(d.documentElement, { childList: true, subtree: true, attributes: true })
+    }
+    const check = () => {
+      const d = frameDoc(iframe)
+      if (!d) return
+      if (d !== observedDoc) {
+        observedDoc = d
+        observe(d)
+      }
+      const el = findTarget(d, step.target!)
+      if (!el) {
+        setRect(null)
+        armMissTimer()
+        return
+      }
+      clearMissTimer()
+      setMissing(false)
       if (!scrolled) {
         scrolled = true
         el.scrollIntoView({ block: "center", behavior: "smooth" })
       }
       const next = hostRect(el, iframe)
       setRect((prev) => (prev && sameRect(prev, next) ? prev : next))
-      return true
     }
-    // Retry loop handles late-mounting targets and layout settling…
-    const retry = () => {
-      const found = measure()
-      if (tries++ < 30) timer = setTimeout(retry, found ? 400 : 120)
+
+    check()
+    const onLoad = () => {
+      activity = Date.now()
+      check()
     }
-    retry()
-    // …while scroll/resize (inside the frame and out) track continuously.
-    const off = onFrameChange(iframe, () => void measure())
+    iframe.addEventListener("load", onLoad)
+    // …while scroll/resize (inside the frame and out) track continuously,
+    // and act as a fallback poke for a target the MutationObserver missed.
+    const off = onFrameChange(iframe, check)
     return () => {
-      clearTimeout(timer)
+      disposed = true
+      clearMissTimer()
+      mo?.disconnect()
+      iframe.removeEventListener("load", onLoad)
       off()
     }
   }, [step, iframe, doc, stepIdx])
 
   // Clicking the highlighted element itself advances the tour.
   useEffect(() => {
-    if (!step?.target || !doc) return
+    if (!step?.target || !iframe) return
     const onClick = (e: MouseEvent) => {
-      const el = findTarget(doc, step.target!)
+      const d = frameDoc(iframe)
+      const el = d && findTarget(d, step.target!)
       if (el && e.target instanceof Node && el.contains(e.target)) {
         e.preventDefault()
         e.stopPropagation()
         navigate(isLast ? exitUrl : stepUrl(scenario, stepIdx + 1, carry))
       }
     }
-    doc.addEventListener("click", onClick, { capture: true })
-    return () => doc.removeEventListener("click", onClick, { capture: true })
-  }, [step, doc, scenario, stepIdx, isLast, exitUrl, carry, navigate])
+    const d = frameDoc(iframe)
+    d?.addEventListener("click", onClick, { capture: true })
+    return () => d?.removeEventListener("click", onClick, { capture: true })
+  }, [step, doc, iframe, scenario, stepIdx, isLast, exitUrl, carry, navigate])
 
   useHotkeys({
     ArrowRight: () => navigate(isLast ? exitUrl : stepUrl(scenario, stepIdx + 1, carry)),
@@ -140,11 +193,13 @@ export function TourOverlay({
       <StavyLayer>
         <div ref={cardRef} className="ps ps-glass-strong fixed w-80 rounded-2xl p-4" style={cardStyle} data-ps-ui>
           <div className="flex items-center gap-2 mb-2.5">
-            <Chip sm accent>{scenario.label}</Chip>
-            <span className="text-[11px] tabular-nums" style={{ color: "var(--ps-muted)" }}>
+            <Chip sm accent className="min-w-0 shrink" title={scenario.label}>
+              <span className="truncate min-w-0">{scenario.label}</span>
+            </Chip>
+            <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums" style={{ color: "var(--ps-muted)" }}>
               {stepIdx + 1} / {scenario.steps.length}
             </span>
-            <button className="ml-auto cursor-pointer transition-colors" style={{ color: "var(--ps-faint)" }} onClick={() => navigate(exitUrl)} title="Exit tour">
+            <button className="ml-auto shrink-0 cursor-pointer transition-colors" style={{ color: "var(--ps-faint)" }} onClick={() => navigate(exitUrl)} title="Exit tour">
               <X className="size-4" />
             </button>
           </div>
@@ -154,7 +209,7 @@ export function TourOverlay({
               {step.note}
             </p>
           )}
-          {step.target && !rect && doc && (
+          {step.target && missing && (
             <p className="text-[11px] mb-3" style={{ color: "var(--ps-pin)" }}>
               Target <code className="ps-mono">{step.target}</code> not found on this screen.
             </p>
