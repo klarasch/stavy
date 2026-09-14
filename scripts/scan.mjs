@@ -108,9 +108,20 @@ const browser = await chromium.launch()
 const ctx = await browser.newContext({ deviceScaleFactor: dpr, colorScheme: dark ? "dark" : "light", reducedMotion: "reduce" })
 const page = await ctx.newPage()
 const consoleErrors = []
-page.on("pageerror", (e) => consoleErrors.push(String(e)))
+// Scan navigates the same frame mid-fetch (a new state's page.goto while a
+// previous state's request is still in flight), which the browser reports as
+// an AbortError on that request — not a bug in the prototype. Drop it here so
+// it doesn't drown out real console errors in the log.
+const isOwnNavigationAbort = (s) => /AbortError/.test(s) && /signal is aborted/i.test(s)
+page.on("pageerror", (e) => {
+  const s = String(e)
+  if (!isOwnNavigationAbort(s)) consoleErrors.push(s)
+})
 page.on("console", (msg) => {
-  if (msg.type() === "error") consoleErrors.push(msg.text())
+  if (msg.type() !== "error") return
+  const s = msg.text()
+  if (isOwnNavigationAbort(s)) return
+  consoleErrors.push(s)
 })
 
 let failures = 0

@@ -81,10 +81,16 @@ Field by field:
 - **`tokenPattern`** — a custom property matching this is a design token, and
   a `var()` chain stops there. It is also how the viewer detects, per frame
   document, that your design system is the one in use — so make it match
-  something your `:root` really declares.
+  something your `:root` really declares. A negative lookahead here, like the
+  `(?!_)` in the worked example above, is what actually keeps your private
+  primitives out of detection: `tokenPattern` alone doesn't know to skip past
+  a private variable, so a chain can stop there and get reported as a token.
 - **`privateTokenPattern`** — properties that exist but are not for anyone to
   reference. A chain that bottoms out on one is reported as a private
-  primitive rather than as a token you should be using.
+  primitive rather than as a token you should be using. On its own this does
+  *not* stop a `var()` chain from stopping at a private primitive earlier —
+  that's `tokenPattern`'s lookahead's job (above); `privateTokenPattern` only
+  labels what the chain already reached.
 - **`spacingTokenPattern`** — narrows which tokens are offered as names for
   spacing and radius values (matching is exact: an off-scale 7px stays 7px,
   which is itself worth knowing). Defaults to `tokenPattern`.
@@ -92,7 +98,11 @@ Field by field:
   above 4 is read as px. `family` is one family name as it appears *first* in
   the computed stack, not the whole stack. Entries may collide metrically —
   a small heading and a bold body line often do — and the panel breaks the
-  tie on whether the element is an `h1`–`h6`.
+  tie on whether the element is an `h1`–`h6`. Measure the running app —
+  computed `font-family`/`size`/`weight`/`line-height` in devtools — rather
+  than copying the design system's published scale table: apps commonly
+  re-face or re-weight the DS, and the published numbers then don't match
+  what's actually on screen.
 - **`componentAttrs`** — attributes that mark kit components in the DOM.
 
 Regex fields are compiled once when the manifest loads. An invalid one

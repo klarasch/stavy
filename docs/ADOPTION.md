@@ -39,7 +39,9 @@ builds the viewer itself.) Init copies:
 | `.stavy/lock.json` | which of these Stavy owns, with hashes — commit it |
 
 and adds `stavy:validate`, `stavy:scan`, `stavy:tests`, `stavy:update` to
-`package.json` when absent. Everything except `public/stavy.json` and
+`package.json` when absent — `stavy:scan` picks up a Vite `base` or Next
+`basePath` from your config file at install time and bakes it in as `--app`
+(best-effort; see the base-path note below if it isn't detected). Everything except `public/stavy.json` and
 `package.json` is Stavy's and replaced by updates; your own additions go in
 the local layer (`.stavy/SKILL.local.md`, `.stavy/RULES.local.md` —
 [`UPDATING.md`](UPDATING.md) §2). Then, in order:
@@ -80,10 +82,16 @@ deploy uses a Vite `base` other than `/` (a GitHub Pages project site is
 typically `/pages/<org>/<repo>/dist/`), a page's `url` in the manifest is
 still the app's own route (`/settings`), but scan needs to know the prefix to
 find it: pass `--app <base>` — e.g. `node scripts/stavy/scan.mjs --url
-http://localhost:5173 --app /pages/<org>/<repo>/dist/`. The viewer figures out
-the same base from its own script path by default, so nothing else changes;
-set `"viewer": { "app": "/pages/<org>/<repo>/dist/" }` in the manifest only if
-the viewer is served from somewhere other than a path directly under that base.
+http://localhost:5173 --app /pages/<org>/<repo>/dist/`. `init.mjs` tries to
+detect this for you (a `base`/`basePath` literal in `vite.config.*` or
+`next.config.*`) and bakes `--app <base>` straight into the generated
+`stavy:scan` script; the detection is best-effort (a simple regex, not a
+config evaluation), so if your base is computed or your config file isn't one
+of the usual names, add `--app <base>` to `stavy:scan` in `package.json`
+yourself. The viewer figures out the same base from its own script path by
+default, so nothing else changes; set `"viewer": { "app":
+"/pages/<org>/<repo>/dist/" }` in the manifest only if the viewer is served
+from somewhere other than a path directly under that base.
 
 ---
 

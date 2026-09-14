@@ -417,23 +417,49 @@ export function ownTargetId(el: Element): string | null {
 /* not match a registered page is reported as drift.                    */
 /* ------------------------------------------------------------------ */
 
-function templateParts(page: PageDef): { pathRe: RegExp; pathDims: string[]; query: URLSearchParams } {
-  const [pathT, queryT = ""] = page.url.split("?")
-  const abs = /^[a-z]+:\/\//i.test(pathT)
-  const pathT2 = abs ? new URL(pathT).pathname : `${appBase}${pathT.startsWith("/") ? "" : "/"}${pathT}`
-  const pathDims: string[] = []
-  const src = pathT2
-    .split(/(\{[a-zA-Z0-9_-]+\})/)
-    .map((part) => {
+/**
+ * Turn a template string with `{dim}` placeholders into a regex source plus
+ * the ordered list of dims it captures. `capture` is the pattern used for
+ * each placeholder's capture group — either a fixed string, or a function of
+ * whether the placeholder is the last one in the template (so a multi-dim
+ * template like `simple-{a}-{b}` can make interior groups lazy and only let
+ * the final one soak up the rest, avoiding greedy misattribution).
+ */
+function compileTemplate(str: string, capture: string | ((isLast: boolean) => string)): { src: string; dims: string[] } {
+  const dims: string[] = []
+  const parts = str.split(/(\{[a-zA-Z0-9_-]+\})/)
+  const lastPlaceholder = parts.reduce(
+    (last, part, i) => (/^\{[a-zA-Z0-9_-]+\}$/.test(part) ? i : last),
+    -1
+  )
+  const src = parts
+    .map((part, i) => {
       const m = part.match(/^\{([a-zA-Z0-9_-]+)\}$/)
       if (m) {
-        pathDims.push(m[1])
-        return "([^/?#]+)"
+        dims.push(m[1])
+        return `(${typeof capture === "function" ? capture(i === lastPlaceholder) : capture})`
       }
       return part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     })
     .join("")
-  return { pathRe: new RegExp(`^${src}/?$`), pathDims, query: new URLSearchParams(queryT) }
+  return { src, dims }
+}
+
+type QueryMatcher = { key: string } & ({ dims: string[]; re: RegExp } | { dims: null; value: string })
+
+function templateParts(page: PageDef): { pathRe: RegExp; pathDims: string[]; query: QueryMatcher[] } {
+  const [pathT, queryT = ""] = page.url.split("?")
+  const abs = /^[a-z]+:\/\//i.test(pathT)
+  const pathT2 = abs ? new URL(pathT).pathname : `${appBase}${pathT.startsWith("/") ? "" : "/"}${pathT}`
+  const { src: pathSrc, dims: pathDims } = compileTemplate(pathT2, "[^/?#]+")
+  // Query values are matched against the already-decoded URLSearchParams value
+  // (no `/` or `&` boundary to lean on), so interior placeholders are lazy and
+  // only the last one is greedy — `{a}-{b}` splits at the first `-`.
+  const query: QueryMatcher[] = [...new URLSearchParams(queryT)].map(([key, v]) => {
+    const { src, dims } = compileTemplate(v, (isLast) => (isLast ? ".*" : ".*?"))
+    return dims.length ? { key, dims, re: new RegExp(`^${src}$`) } : { key, dims: null, value: v }
+  })
+  return { pathRe: new RegExp(`^${pathSrc}/?$`), pathDims, query }
 }
 
 export function matchAppUrl(href: string): { page: PageDef; dims: Record<string, string> } | null {
@@ -450,15 +476,23 @@ export function matchAppUrl(href: string): { page: PageDef; dims: Record<string,
     const dims: Record<string, string> = {}
     pathDims.forEach((d, i) => (dims[d] = decodeURIComponent(m[i + 1])))
     let ok = true
-    for (const [k, v] of query) {
-      const dm = v.match(/^\{([a-zA-Z0-9_-]+)\}$/)
-      if (dm) {
-        const pv = u.searchParams.get(k)
-        if (pv != null) dims[dm[1]] = pv
-      } else if (u.searchParams.get(k) !== v) {
+    for (const qm of query) {
+      const pv = u.searchParams.get(qm.key)
+      if (qm.dims === null) {
+        if (pv !== qm.value) {
+          ok = false
+          break
+        }
+        continue
+      }
+      // Missing param → every dim it would have carried is left unset.
+      if (pv == null) continue
+      const qmatch = pv.match(qm.re)
+      if (!qmatch) {
         ok = false
         break
       }
+      qm.dims.forEach((d, i) => (dims[d] = qmatch[i + 1]))
     }
     if (!ok) continue
     // Values the page does not declare are not this page (e.g. a role it doesn't render).

@@ -159,14 +159,12 @@
 .ps-glass {
   background: var(--ps-glass);
   backdrop-filter: blur(24px) saturate(170%);
-  -webkit-backdrop-filter: blur(24px) saturate(170%);
   border: 1px solid var(--ps-border);
   box-shadow: var(--ps-shadow), inset 0 1px 0 var(--ps-highlight);
 }
 .ps-glass-strong {
   background: var(--ps-glass-strong);
   backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid var(--ps-border);
   box-shadow: var(--ps-shadow), inset 0 1px 0 var(--ps-highlight);
 }
@@ -214,7 +212,7 @@
   display: flex; flex-direction: column; gap: 1px; padding: 4px; border-radius: 12px;
   background: var(--ps-glass-strong); color: var(--ps-fg);
   border: 1px solid var(--ps-border); box-shadow: var(--ps-shadow), inset 0 1px 0 var(--ps-highlight);
-  backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
 }
 .ps-menu-item {
   display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-radius: 8px; border: 0;
@@ -295,7 +293,7 @@
 .ps-eye {
   position: fixed; right: 14px; bottom: 14px; z-index: var(--ps-z-chrome); width: 32px; height: 32px; border-radius: 999px;
   display: flex; align-items: center; justify-content: center; cursor: pointer; border: 1px solid var(--ps-border);
-  background: var(--ps-glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  background: var(--ps-glass); backdrop-filter: blur(16px);
   color: var(--ps-muted); opacity: .55; transition: opacity .15s, transform .15s; box-shadow: var(--ps-shadow);
 }
 .ps-eye:hover { opacity: 1; transform: translateY(-1px); color: var(--ps-fg); }
@@ -458,7 +456,7 @@
 .ps-card-frame { content-visibility: auto; }
 .ps-proto-content *, .ps-proto-content *::before, .ps-proto-content *::after { animation: none !important; transition: none !important; }
 .is-panning .ps-glass, .is-panning .ps-glass-strong, .is-panning .ps-menu, .is-panning .ps-tipbubble {
-  backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: var(--ps-glass-solid) !important;
+  backdrop-filter: none !important; background: var(--ps-glass-solid) !important;
 }
 .is-panning .ps-card-frame { box-shadow: 0 0 0 1px var(--ps-border) !important; transition: none !important; }
 .is-panning .ps-note { box-shadow: none; }
@@ -490,11 +488,11 @@
 /* ---- docked bar mode: full-width bar, the prototype viewport shrinks instead of being covered ---- */
 .ps-dock[data-anchor="bar-bottom"], .ps-dock[data-anchor="bar-top"] {
   left: 0; right: 0; transform: none; max-width: none; flex-direction: row; align-items: center; gap: 12px; padding: 0 10px; height: 46px;
-  background: var(--ps-glass); backdrop-filter: blur(24px) saturate(170%); -webkit-backdrop-filter: blur(24px) saturate(170%);
+  background: var(--ps-glass); backdrop-filter: blur(24px) saturate(170%);
 }
 .ps-dock[data-anchor="bar-bottom"] { bottom: 0; border-top: 1px solid var(--ps-border); }
 .ps-dock[data-anchor="bar-top"] { top: 0; border-bottom: 1px solid var(--ps-border); }
-.ps-dock[data-anchor^="bar-"] > .ps-glass { background: transparent; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.ps-dock[data-anchor^="bar-"] > .ps-glass { background: transparent; border: 0; box-shadow: none; backdrop-filter: none; }
 .ps-dock[data-anchor^="bar-"] .ps-dock-notice { margin-left: auto; }
 .ps-viewport[data-bar="bottom"] { height: calc(100% - 46px); }
 .ps-viewport[data-bar="top"] { height: calc(100% - 46px); margin-top: 46px; }

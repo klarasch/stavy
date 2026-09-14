@@ -42,7 +42,7 @@ export const PanZoom = forwardRef<PanZoomHandle, {
   const live = useRef<Transform>(initial)
   const raf = useRef<number | null>(null)
   const idle = useRef<number | null>(null)
-  const drag = useRef<{ px: number; py: number; moved: boolean } | null>(null)
+  const drag = useRef<{ px: number; py: number; moved: boolean; pointerId: number } | null>(null)
   const [dragging, setDragging] = useState(false)
 
   const paint = useCallback(() => {
@@ -165,13 +165,8 @@ export const PanZoom = forwardRef<PanZoomHandle, {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return
-    drag.current = { px: e.clientX, py: e.clientY, moved: false }
+    drag.current = { px: e.clientX, py: e.clientY, moved: false, pointerId: e.pointerId }
     setDragging(true)
-    // Capture on the viewport, not on e.target: a card under the pointer may be
-    // evicted or re-rendered mid-drag (visibility.tsx), and a capture held by a
-    // removed node is released silently, so pointerup would never reach us
-    // when the button is let go over a live iframe.
-    e.currentTarget.setPointerCapture?.(e.pointerId)
   }
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag.current) return
@@ -181,6 +176,14 @@ export const PanZoom = forwardRef<PanZoomHandle, {
       if (Math.hypot(dx, dy) < 3) return
       drag.current.moved = true
       beginGesture()
+      // Capture on the viewport, not on e.target, and only once the gesture is
+      // confirmed as a drag (not a click): a card under the pointer may be
+      // evicted or re-rendered mid-drag (visibility.tsx), and a capture held by a
+      // removed node is released silently, so pointerup would never reach us
+      // when the button is let go over a live iframe. Capturing eagerly on
+      // pointerdown made Chrome route the resulting click to the viewport
+      // instead of the element under the pointer, breaking plain clicks.
+      e.currentTarget.setPointerCapture?.(drag.current.pointerId)
     }
     drag.current.px = e.clientX
     drag.current.py = e.clientY
@@ -196,14 +199,16 @@ export const PanZoom = forwardRef<PanZoomHandle, {
       e.currentTarget.addEventListener("click", stop, { capture: true, once: true })
       endGesture()
     }
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture?.(e.pointerId)
     drag.current = null
     setDragging(false)
   }
   // pointercancel (touch/trackpad gestures taken over by the OS or browser) and
   // lostpointercapture (the captured node went away) end a drag without a
   // pointerup; treat them the same, minus the click suppression.
-  const onPointerAbort = () => {
+  const onPointerAbort = (e: React.PointerEvent) => {
     if (drag.current?.moved) endGesture()
+    if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture?.(e.pointerId)
     drag.current = null
     setDragging(false)
   }

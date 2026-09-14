@@ -13,7 +13,7 @@
 //
 // Before packing, the staged release installs itself into a scratch repo and
 // updates it again — a release that can't install is never written.
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
@@ -47,6 +47,17 @@ if (!argv.includes("--no-build")) {
   run("npx", ["vite", "build", "-c", "vite.viewer.config.ts", "--logLevel", "error"], { stdio: "inherit" })
 }
 if (!existsSync(join(root, "dist-viewer/index.html"))) die("no dist-viewer/index.html.")
+
+// Blink never implemented the -webkit- prefixed backdrop-filter, so the built
+// CSS must keep the unprefixed property (Lightning CSS, run by @tailwindcss/vite,
+// has dropped it before when both forms were authored by hand — see stavy.css).
+{
+  const assetsDir = join(root, "dist-viewer/assets")
+  const cssFiles = existsSync(assetsDir) ? readdirSync(assetsDir).filter((f) => f.endsWith(".css")) : []
+  if (cssFiles.length === 0) die("no dist-viewer/assets/*.css — can't check backdrop-filter.")
+  const hasUnprefixed = cssFiles.some((f) => /(?<!-webkit-)backdrop-filter:blur/.test(readFileSync(join(assetsDir, f), "utf8")))
+  if (!hasUnprefixed) die("dist-viewer CSS has no unprefixed `backdrop-filter:blur` — Chrome will lose the glass blur.")
+}
 
 // ---- stage -----------------------------------------------------------------
 const out = join(root, "release")

@@ -5,6 +5,31 @@ prints the sections between the release a repo last took and the one it is
 taking, so write each entry for that reader: what they get, and what, if
 anything, they have to do.
 
+## 0.2.1 — 2026-09-14
+
+Fixes from adopting 0.2.0.
+
+- **Canvas clicks open the player again.** Clicking a card did nothing in
+  Chrome: the canvas captured the pointer on every press, so the click never
+  reached the card. It now captures only once a drag starts.
+- **Glass blur is back in Chrome and Edge.** The build kept only the
+  `-webkit-` form of `backdrop-filter`, which Chromium ignores. The release
+  now checks the built CSS for the standard property.
+- **Query placeholders can have a prefix or suffix.** A page URL like
+  `?scene=simple-{step}` now matches its own frame, so those states are no
+  longer marked off the map. If you made dimension values globally unique to
+  work around this, you can shorten them.
+- **Base path baked into the scan script.** `init` reads `base` from your Vite
+  config or `basePath` from your Next config and adds `--app` to
+  `stavy:scan`. A computed base is not detected; add `--app` by hand then.
+- **`init` refuses to update a dirty repo.** Commit first, or pass
+  `--allow-dirty`. `--check` and `--dry-run` are unaffected.
+- **Quieter scans.** Abort errors caused by the scan's own navigation are no
+  longer reported as prototype errors.
+- **Docs.** `docs/INSPECT-ADAPTERS.md` says to measure your type scale in the
+  running app, and shows why `tokenPattern` needs a lookahead to keep private
+  primitives out of detection.
+
 ## 0.2.0 — 2026-09-13
 
 The first packaged release. Stavy is an overlay: a static viewer next to your

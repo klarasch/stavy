@@ -14,6 +14,37 @@ test("canvas lists every page area and opens the player from a card", async ({ p
   await expect(page.locator("iframe.ps-frame")).toHaveAttribute("src", /\/expenses\?role=employee&state=loaded$/)
 })
 
+// Regression: setPointerCapture used to be called eagerly on pointerdown, on
+// the viewport. Chrome then routes the `click` produced by a plain press+
+// release to the capturing element instead of the element under the pointer,
+// so a real click on a card never reached InstanceCard's onClick. Capture
+// must be deferred until a drag is confirmed (PanZoom.tsx onPointerMove).
+test("a real click on a card opens the player (pointer capture must not steal it)", async ({ page }) => {
+  await page.goto("/stavy/")
+  await expect(page.locator("[data-canvas-root]")).toBeVisible()
+  await page.locator(".ps-toc-item", { hasText: "Expenses list" }).click()
+  // The TOC jump pans/zooms to fit the area over a .4s transition; wait it
+  // out before reading coordinates below, or they're read mid-animation.
+  await page.waitForTimeout(500)
+  // Two elements match: the canvas card and its site-map counterpart. Only
+  // one sits in the real viewport after the jump — find it by bounding box,
+  // since the canvas is a pan/zoom surface positioned with CSS transforms,
+  // not a scroll container, so Playwright's own actionability scrolling
+  // can't bring an off-screen match into view.
+  const cards = page.locator('[data-instance="expenses?role=employee&state=loaded"] .ps-card-shield')
+  const vp = page.viewportSize()!
+  let box: { x: number; y: number; width: number; height: number } | null = null
+  for (const b of await Promise.all((await cards.all()).map((c) => c.boundingBox()))) {
+    if (b && b.x >= 0 && b.y >= 0 && b.x < vp.width && b.y < vp.height) box = b
+  }
+  if (!box) throw new Error("no on-screen card found")
+  // Read its box and drive a real mouse click at those coordinates (still a
+  // trusted click, unlike dispatchEvent, so it still exercises pointer-
+  // capture routing).
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(page).toHaveURL(/[?&]p=expenses(?:&|$)/)
+})
+
 // The site map draws its arrows in an SVG under the nodes: the rows above it
 // must let the pointer through between nodes, or no arrow is ever hoverable.
 test("site map arrows are hoverable and a node fits that page's area", async ({ page }) => {

@@ -12,7 +12,7 @@
 //   --check        only report owned files the repo has edited (exit 1 if any);
 //                  cheap enough for CI or a pre-commit hook
 //   --force        take upstream's copy of edited files too
-//   --allow-dirty  install from a Stavy checkout with uncommitted changes
+//   --allow-dirty  allow an uncommitted Stavy checkout, or an uncommitted target repo
 //
 // Stavy owns (replaced on every update, listed in .stavy/lock.json):
 //   public/<dir>/                  the built viewer
@@ -96,7 +96,13 @@ const upstream = { version: pkgVersion, commit: commit + (upDirty ? "-dirty" : "
 say(`${lock || legacy ? "Updating" : "Installing"} Stavy in ${target}`)
 say(`  from ${src} @ ${short}${lock?.upstream?.commit ? ` (last taken: ${lock.upstream.commit.slice(0, 12)})` : ""}`)
 
-if (!check && git(target, "status", "--porcelain", "--untracked-files=no")) {
+const targetDirty = !check && git(target, "status", "--porcelain", "--untracked-files=no")
+if (targetDirty) {
+  if (!dryRun && !flag("--allow-dirty")) {
+    die(`the repo at ${target} has uncommitted changes. The update rewrites the files Stavy owns
+(including the composed skill/rules), so an uncommitted repo can't be told apart from your own
+edits afterwards. Commit first, or pass --allow-dirty.`)
+  }
   say("\n  Note: this repo has uncommitted changes. Commit first and the update is reviewable on its own.")
 }
 
@@ -244,9 +250,26 @@ pkg.scripts ??= {}
 // Relative when the checkout sits near the repo (../stavy), so the script works for teammates too.
 const initRel = relative(target, join(src, "scripts/init.mjs")).split("\\").join("/")
 const initPath = initRel.split("/").filter((s) => s === "..").length <= 3 ? initRel : join(src, "scripts/init.mjs")
+// Best-effort: if the app is served under a non-root base (Vite `base`, Next
+// `basePath`), bake `--app <base>` into the generated stavy:scan script so
+// scan finds the app without the adopter having to discover the flag
+// themselves (docs/ADOPTION.md "Dev server or deploy under a base path").
+const detectBasePath = (dir) => {
+  const candidates = ["vite.config.ts", "vite.config.js", "vite.config.mjs", "vite.config.cjs", "next.config.js", "next.config.mjs", "next.config.ts"]
+  for (const f of candidates) {
+    const p = join(dir, f)
+    if (!existsSync(p)) continue
+    const text = readFileSync(p, "utf8")
+    const m = text.match(/\bbase\s*:\s*["'](\/[^"']*)["']/) ?? text.match(/\bbasePath\s*:\s*["'](\/[^"']*)["']/)
+    if (m?.[1] && m[1] !== "/") return { base: m[1], file: f }
+  }
+  return null
+}
+const detectedBase = detectBasePath(target)
+const basePath = detectedBase?.base
 const want = {
   "stavy:validate": "node scripts/stavy/validate.mjs public/stavy.json --coverage",
-  "stavy:scan": "node scripts/stavy/scan.mjs public/stavy.json --url http://localhost:5173",
+  "stavy:scan": `node scripts/stavy/scan.mjs public/stavy.json --url http://localhost:5173${basePath ? ` --app ${basePath}` : ""}`,
   "stavy:tests": "node scripts/stavy/gen-tests.mjs public/stavy.json --out tests/stavy",
   "stavy:update": `node ${initPath} .`,
 }
@@ -255,6 +278,7 @@ for (const k of added) pkg.scripts[k] = want[k]
 if (added.length) {
   if (!dryRun) writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n")
   created.push(`package.json scripts: ${added.join(", ")}`)
+  if (added.includes("stavy:scan") && basePath) created.push(`stavy:scan: detected base path ${basePath} in ${detectedBase.file} and added --app ${basePath}`)
 }
 if (created.length) {
   say(`\n${dryRun ? "Would create" : "Created"} (yours from now on — updates never touch these):`)
