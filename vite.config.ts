@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url"
 import { readFileSync, writeFileSync } from "node:fs"
 import Ajv2020 from "ajv/dist/2020.js"
 import addFormats from "ajv-formats"
+// @ts-expect-error — plain ES module shipped to adopters as-is
+import stavy from "./scripts/vite-plugin.mjs"
 
 /**
  * This config builds two things from one repo:
@@ -108,7 +110,7 @@ function stavyManifest(): Plugin {
 export default defineConfig({
   // Sub-path hosting (GitHub Pages): BASE_PATH=/stavy/ npm run build
   base: process.env.BASE_PATH ?? "/",
-  plugins: [react(), tailwindcss(), stavyManifest()],
+  plugins: [react(), tailwindcss(), stavyManifest(), stavy({ root: ".", snapshots: "public/snapshots" })],
   // Keep React component names in production builds so the inspector can
   // show "Badge" instead of "Ct" on deployed prototypes.
   esbuild: { keepNames: true },

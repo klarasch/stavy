@@ -43,6 +43,8 @@ export interface TemplateDef {
 export interface InstanceDef {
   /** Dimension values pinned for this canvas instance (partial; defaults fill the rest) */
   dims: Record<string, string>
+  /** Shorthand for a named state: `{ "state": "loading" }` */
+  state?: string
   note?: string
 }
 
@@ -54,6 +56,25 @@ export interface AnnotationDef {
 }
 
 export type Fidelity = "static" | "navigable" | "interactive"
+
+/**
+ * A named state of a screen (SPEC §1.3a): the loose alternative to
+ * dimensions. Each is just a URL with a name — `url` as-is, or the page's
+ * `url` template filled with `dims`. No axes, no matrix, no placeholders.
+ */
+export interface StateDef {
+  id: string
+  label?: string
+  /** The prototype URL for this state (path or absolute). Wins over `dims`. */
+  url?: string
+  /** Values for the page's url template placeholders. */
+  dims?: Record<string, string>
+  note?: string
+  /** Free tags for filtering and grouping, never for layout. */
+  tags?: string[]
+  /** Registered (linkable, scannable) but not shown on the map by default. */
+  hidden?: boolean
+}
 
 export interface PageDef {
   id: string
@@ -79,7 +100,20 @@ export interface PageDef {
    * Every declared dimension must appear; the prototype reads them however it
    * likes (search params, path segments) and renders that state.
    */
-  url: string
+  url?: string
+  /**
+   * Named states (SPEC §1.3a). When present, the page varies by these alone:
+   * `normalizeManifest` turns them into one hidden `_state` axis and moves
+   * `dimensions` to `urlDims` (template values only).
+   */
+  states?: StateDef[]
+  /** Set by normalisation when `states` is used: the page's original dimensions, now only url-template values. */
+  urlDims?: Record<string, string[]>
+  urlDefaults?: Record<string, string>
+  /** How the map lays out this page's states: a row (default) or, opt-in, a matrix over two axes. */
+  layout?: "row" | "matrix"
+  /** Handover status, shown as a chip. Free text; "draft" | "review" | "ready" are styled. */
+  status?: string
   /** Optional shape/grouping label (a registered template id) */
   template?: string
   /**
@@ -106,6 +140,8 @@ export interface PageDef {
 
 export interface ScenarioStep {
   page: string
+  /** A named state of the page (shorthand for `dims: { _state: … }`) */
+  state?: string
   /** Dimension overrides for this step (defaults fill the rest) */
   dims?: Record<string, string>
   /** Target to highlight; omit for an "observe" step */
@@ -282,8 +318,141 @@ export interface Manifest {
   scenarios: Scenario[]
   prototypes?: PrototypeSlice[]
   notes?: CanvasNote[]
+  /** Legacy (0.2) boards: Mermaid / image / text, rendered in the map's Boards area. 0.3 boards live in `stavy-content/boards/`. */
   boards?: BoardDef[]
   requirements?: RequirementDef[]
+}
+
+/* ------------------------------------------------------------------ */
+/* Authored content — stavy-content/ next to stavy.json (SPEC §4)       */
+/* ------------------------------------------------------------------ */
+
+/** stavy-content/index.json: which boards and docs exist, in order. */
+export interface ContentIndex {
+  boards?: Array<{ id: string; title: string; description?: string }>
+  docs?: Array<{ id: string; title: string }>
+}
+
+/** An action the scan (and the player) performs before showing a board screen item. */
+export type BoardAction =
+  | { click: string }
+  | { hover: string }
+  | { focus: string }
+  | { press: string }
+  | { type: string; into: string }
+  | { wait: number }
+
+interface ItemBase {
+  /** Unique within the board; arrows and edits refer to it. */
+  id: string
+  /** Position and size in board pixels. Omit x/y and the board places the item automatically. */
+  x?: number
+  y?: number
+  w?: number
+  h?: number
+  /** Caption above the item */
+  title?: string
+  /** Short text under the item (Markdown allowed) */
+  note?: string
+}
+
+/** One screen at one state, as a snapshot card that opens the player. */
+export interface ScreenItem extends ItemBase {
+  type: "screen"
+  screen: string
+  /** Named state id (pages with `states`) */
+  state?: string
+  /** Dimension values (pages with dimensions) */
+  dims?: Record<string, string>
+  /** Show only this target (plus a margin), captured by scan as its own crop */
+  crop?: string
+  /** Steps the scan performs before capturing: open a menu, hover, focus… */
+  do?: BoardAction[]
+  /** Capture at another viewport, e.g. { width: 390, height: 844 } */
+  viewport?: { width: number; height: number }
+}
+
+/** Several states of one screen, laid out together. */
+export interface StatesItem extends ItemBase {
+  type: "states"
+  screen: string
+  /** Subset and order of states (state ids, or instance indexes as strings); default all shown */
+  states?: string[]
+  layout?: "row" | "grid"
+  columns?: number
+  crop?: string
+}
+
+/** A flow (scenario) as a compact strip of steps; long flows wrap, never cap. */
+export interface FlowItem extends ItemBase {
+  type: "flow"
+  flow: string
+  /** Steps per row before wrapping (default: fit to `w`, else 5) */
+  perRow?: number
+  collapsed?: boolean
+}
+
+/** Rendered Markdown — inline (`md`) or a file in stavy-content (`src`, optionally `#heading`). */
+export interface MarkdownItem extends ItemBase {
+  type: "markdown"
+  md?: string
+  src?: string
+}
+
+/** A sticky note. */
+export interface NoteItem extends ItemBase {
+  type: "note"
+  text: string
+  color?: "yellow" | "blue" | "green" | "pink" | "purple" | "gray"
+  author?: string
+}
+
+/** A titled frame grouping other items; children are laid out inside it unless they carry x/y. */
+export interface SectionItem extends ItemBase {
+  type: "section"
+  title: string
+  items?: BoardItem[]
+  layout?: "row" | "column" | "grid"
+  columns?: number
+  collapsed?: boolean
+}
+
+/** An image (reference, crop, whiteboard photo, an SVG an agent drew), with optional numbered callouts. */
+export interface ImageItem extends ItemBase {
+  type: "image"
+  /** URL, or a path relative to stavy-content */
+  src: string
+  alt?: string
+  callouts?: BoardCallout[]
+}
+
+/** A Mermaid diagram; the renderer loads only when a board uses one. */
+export interface MermaidItem extends ItemBase {
+  type: "mermaid"
+  code: string
+}
+
+/** A connector between two items. */
+export interface ArrowItem {
+  id: string
+  type: "arrow"
+  from: string
+  to: string
+  label?: string
+  style?: "solid" | "dashed"
+}
+
+export type BoardItem = ScreenItem | StatesItem | FlowItem | MarkdownItem | NoteItem | SectionItem | ImageItem | MermaidItem | ArrowItem
+
+/** stavy-content/boards/<id>.json */
+export interface BoardFile {
+  title: string
+  description?: string
+  /** "draft" | "review" | "ready" are styled; anything else shows as-is */
+  status?: string
+  /** Auto-layout for unplaced top-level items */
+  layout?: { direction?: "row" | "column"; gap?: number; maxWidth?: number }
+  items: BoardItem[]
 }
 
 /* ------------------------------------------------------------------ */

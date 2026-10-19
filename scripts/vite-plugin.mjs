@@ -1,0 +1,189 @@
+// Stavy dev plugin — makes the viewer editable while the prototype's dev
+// server runs. Dev only: it has no effect on `vite build`, and the viewer is
+// read-only without it (static hosting, a published prototype).
+//
+//   // vite.config.ts
+//   import stavy from "./scripts/stavy/vite-plugin.mjs"
+//   export default defineConfig({ plugins: [react(), stavy()] })
+//
+// What it adds, all under /__stavy/:
+//   GET    /__stavy/health          { ok, writable, rev, scan }   rev bumps on any content/manifest/snapshot change
+//   PUT    /__stavy/content/<path>  write a file under stavy-content/ (boards, docs, notes, comments, assets)
+//   DELETE /__stavy/content/<path>  remove one
+//   POST   /__stavy/scan            { keys?: string[], all?: boolean } → re-capture those states in the background
+//   GET    /__stavy/scan            the running / last scan
+// and, when stavy.json is not inside public/, serves /stavy.json and
+// /stavy-content/** from where they are.
+//
+// It never writes to stavy.json or to app code: hand edits and agent edits
+// to the screen registry can't collide.
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, writeFileSync, createReadStream } from "node:fs"
+import { dirname, extname, join, relative, resolve, sep } from "node:path"
+import { spawn } from "node:child_process"
+
+const MAX_BODY = 15 * 1024 * 1024
+const TYPES = {
+  ".json": "application/json",
+  ".md": "text/markdown; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+}
+
+/**
+ * @param {{ root?: string, manifest?: string, snapshots?: string, scanScript?: string, url?: string }} [opts]
+ *   root       folder holding stavy.json (default: public/ if public/stavy.json exists, else the project root)
+ *   manifest   path to stavy.json (default: <root>/stavy.json)
+ *   snapshots  folder scan writes snapshots to (default: <root>/snapshots)
+ *   scanScript path to scan.mjs (default: scripts/stavy/scan.mjs, else scripts/scan.mjs)
+ *   url        the dev server's own URL for scans (default: derived from the server)
+ */
+export default function stavy(opts = {}) {
+  const cwd = process.cwd()
+  const root = resolve(opts.root ?? (existsSync(join(cwd, "public/stavy.json")) ? "public" : "."))
+  const manifestPath = resolve(opts.manifest ?? join(root, "stavy.json"))
+  const contentDir = join(dirname(manifestPath), "stavy-content")
+  const snapshotsDir = resolve(opts.snapshots ?? join(dirname(manifestPath), "snapshots"))
+  const snapshotsServedByPublic = snapshotsDir.startsWith(resolve(cwd, "public") + sep)
+  const scanScript = resolve(opts.scanScript ?? (existsSync(join(cwd, "scripts/stavy/scan.mjs")) ? "scripts/stavy/scan.mjs" : "scripts/scan.mjs"))
+  const servedByPublic = dirname(manifestPath).startsWith(resolve(cwd, "public"))
+
+  let rev = Date.now()
+  const bump = () => (rev = Date.now())
+  /** @type {{ running: boolean, keys?: string[] | "all", startedAt?: string, finishedAt?: string, ok?: boolean, log: string }} */
+  let scan = { running: false, log: "" }
+  let queued = null
+  let serverUrl = opts.url ?? null
+
+  const json = (res, code, body) => {
+    res.statusCode = code
+    res.setHeader("content-type", "application/json")
+    res.setHeader("cache-control", "no-store")
+    res.end(JSON.stringify(body))
+  }
+  const readBody = (req) =>
+    new Promise((ok, fail) => {
+      const chunks = []
+      let size = 0
+      req.on("data", (c) => {
+        size += c.length
+        if (size > MAX_BODY) {
+          fail(new Error("payload too large"))
+          req.destroy()
+        } else chunks.push(c)
+      })
+      req.on("end", () => ok(Buffer.concat(chunks)))
+      req.on("error", fail)
+    })
+  /** A path inside stavy-content, or null if it escapes it. */
+  const contentPath = (rel) => {
+    const p = resolve(contentDir, decodeURIComponent(rel).replace(/^\/+/, ""))
+    return p === contentDir || p.startsWith(contentDir + sep) ? p : null
+  }
+
+  const runScan = (keys) => {
+    if (scan.running) {
+      queued = keys === "all" || queued === "all" ? "all" : [...new Set([...(queued ?? []), ...keys])]
+      return
+    }
+    const args = [scanScript, manifestPath, "--url", serverUrl ?? "http://localhost:5173", "--out", snapshotsDir]
+    if (keys === "all") args.push("--all")
+    else args.push("--keys", keys.join(","))
+    scan = { running: true, keys, startedAt: new Date().toISOString(), log: "" }
+    const child = spawn(process.execPath, args, { cwd, env: process.env })
+    const take = (d) => (scan.log = (scan.log + d.toString()).slice(-8000))
+    child.stdout.on("data", take)
+    child.stderr.on("data", take)
+    child.on("close", (code) => {
+      scan = { ...scan, running: false, ok: code === 0, finishedAt: new Date().toISOString() }
+      bump()
+      if (queued) {
+        const next = queued
+        queued = null
+        runScan(next)
+      }
+    })
+  }
+
+  return {
+    name: "stavy",
+    apply: "serve",
+    configureServer(server) {
+      for (const dir of [contentDir, snapshotsDir, dirname(manifestPath)]) {
+        try {
+          if (existsSync(dir)) watch(dir, { recursive: dir !== dirname(manifestPath) }, (_e, f) => {
+            if (dir !== dirname(manifestPath) || String(f).endsWith("stavy.json")) bump()
+          })
+        } catch {
+          /* recursive watch unsupported: health rev only bumps on our own writes */
+        }
+      }
+      server.httpServer?.once("listening", () => {
+        if (serverUrl) return
+        const a = server.httpServer.address()
+        const base = (server.config.base ?? "/").replace(/\/$/, "")
+        if (a && typeof a === "object") serverUrl = `http://localhost:${a.port}${base}`
+      })
+
+      server.middlewares.use(async (req, res, next) => {
+        const url = new URL(req.url ?? "/", "http://x")
+        const path = url.pathname
+        const at = path.indexOf("/__stavy/")
+        if (at === -1) {
+          if (!servedByPublic) {
+            if (path.endsWith("/stavy.json") && existsSync(manifestPath)) {
+              res.setHeader("content-type", "application/json")
+              res.setHeader("cache-control", "no-store")
+              return res.end(readFileSync(manifestPath))
+            }
+            const ci = path.indexOf("/stavy-content/")
+            const si = snapshotsServedByPublic ? -1 : path.indexOf("/snapshots/")
+            const file =
+              ci !== -1 ? contentPath(path.slice(ci + "/stavy-content/".length)) : si !== -1 ? join(snapshotsDir, decodeURIComponent(path.slice(si + "/snapshots/".length))) : null
+            if (file && file.startsWith(ci !== -1 ? contentDir : snapshotsDir) && existsSync(file) && statSync(file).isFile()) {
+              res.setHeader("content-type", TYPES[extname(file)] ?? "application/octet-stream")
+              res.setHeader("cache-control", "no-store")
+              return createReadStream(file).pipe(res)
+            }
+          }
+          return next()
+        }
+        const route = path.slice(at + "/__stavy/".length)
+        try {
+          if (route === "health") return json(res, 200, { ok: true, writable: true, rev, scan: { running: scan.running, ok: scan.ok, finishedAt: scan.finishedAt } })
+          if (route === "scan") {
+            if (req.method === "GET") return json(res, 200, scan)
+            if (req.method !== "POST") return json(res, 405, { ok: false })
+            const body = JSON.parse((await readBody(req)).toString() || "{}")
+            const keys = body.all ? "all" : Array.isArray(body.keys) ? body.keys.filter((k) => typeof k === "string") : []
+            if (keys !== "all" && keys.length === 0) return json(res, 400, { ok: false, error: "keys or all required" })
+            runScan(keys)
+            return json(res, 202, { ok: true, queued: scan.running })
+          }
+          if (route.startsWith("content/")) {
+            const file = contentPath(route.slice("content/".length))
+            if (!file || file === contentDir) return json(res, 400, { ok: false, error: "path must be inside stavy-content/" })
+            if (req.method === "DELETE") {
+              if (existsSync(file)) rmSync(file)
+              bump()
+              return json(res, 200, { ok: true })
+            }
+            if (req.method !== "PUT" && req.method !== "POST") return json(res, 405, { ok: false })
+            const body = await readBody(req)
+            if (extname(file) === ".json") JSON.parse(body.toString()) // refuse malformed JSON
+            mkdirSync(dirname(file), { recursive: true })
+            writeFileSync(file, body)
+            bump()
+            return json(res, 200, { ok: true, path: relative(dirname(manifestPath), file) })
+          }
+          return json(res, 404, { ok: false })
+        } catch (e) {
+          return json(res, 400, { ok: false, error: String(e?.message ?? e) })
+        }
+      })
+    },
+  }
+}

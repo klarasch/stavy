@@ -1,4 +1,16 @@
-import type { BoardDef, Dimension, Manifest, PageDef, Scenario, SnapshotEntry, SnapshotIndex } from "./types"
+import type { BoardDef, BoardFile, ContentIndex, Dimension, Manifest, PageDef, Scenario, SnapshotEntry, SnapshotIndex } from "./types"
+import {
+  normalizeManifest,
+  resolveDims as modelResolveDims,
+  stateHref,
+  stateOf,
+  instanceKey as modelInstanceKey,
+  snapshotStem,
+  STATE_DIM,
+  CONTENT_DIR,
+} from "../../scripts/lib/model.mjs"
+
+export { STATE_DIM, stateOf }
 
 /* ------------------------------------------------------------------ */
 /* Where things are                                                    */
@@ -45,18 +57,64 @@ export let standaloneBoards: BoardDef[] = []
 
 export const DEFAULT_TARGET_ATTRS = ["data-proto", "data-testid"]
 
+/** URL of the folder holding stavy.json (no trailing slash); content and snapshots resolve against it. */
+export let workspaceBase = ""
+/** Authored content: boards, docs, assets, comments (SPEC §4). */
+export function contentUrl(rel = ""): string {
+  if (/^([a-z]+:)?\/\//i.test(rel) || rel.startsWith("/") || rel.startsWith("data:")) return rel
+  return `${workspaceBase}/${CONTENT_DIR}${rel ? `/${rel.replace(/^\.?\//, "")}` : ""}`
+}
+
+/** stavy-content/index.json — the boards and docs that exist, in order. Empty when absent. */
+export let contentIndex: ContentIndex = {}
+
+export async function loadContentIndex(): Promise<ContentIndex> {
+  try {
+    const r = await fetch(contentUrl("index.json"), { cache: "no-store" })
+    contentIndex = r.ok ? ((await r.json()) as ContentIndex) : {}
+  } catch {
+    contentIndex = {}
+  }
+  return contentIndex
+}
+
+export async function loadBoard(id: string): Promise<BoardFile> {
+  const r = await fetch(contentUrl(`boards/${id}.json`), { cache: "no-store" })
+  if (!r.ok) throw new Error(`board "${id}" → ${r.status}`)
+  return (await r.json()) as BoardFile
+}
+
+/** A Markdown file in stavy-content (`docs/x.md`, or a bare doc id). */
+export async function loadText(rel: string): Promise<string> {
+  const path = /\.[a-z]+$/i.test(rel) ? rel : `docs/${rel}.md`
+  const r = await fetch(contentUrl(path), { cache: "no-store" })
+  if (!r.ok) throw new Error(`${path} → ${r.status}`)
+  return r.text()
+}
+
+/** Re-read the snapshot index (after an on-demand scan). */
+export async function reloadSnapshotIndex(): Promise<SnapshotIndex> {
+  try {
+    const ir = await fetch(`${snapshotsBase()}/index.json`, { cache: "no-store" })
+    if (ir.ok) snapshotIndex = (await ir.json()) as SnapshotIndex
+  } catch {
+    /* keep the old one */
+  }
+  return snapshotIndex
+}
+
+function snapshotsBase() {
+  return `${workspaceBase || appBase}/snapshots`
+}
+
 /** Load the manifest (and the optional snapshot index). Call once before rendering. */
 export async function loadManifest(url?: string): Promise<Manifest> {
   const src = url ?? `${appBase}/stavy.json`
   const res = await fetch(src, { cache: "no-store" })
   if (!res.ok) throw new Error(`${src} → ${res.status}`)
   setManifest((await res.json()) as Manifest)
-  try {
-    const ir = await fetch(`${appBase}/snapshots/index.json`, { cache: "no-store" })
-    if (ir.ok) snapshotIndex = (await ir.json()) as SnapshotIndex
-  } catch {
-    /* no snapshots yet — cards show labels */
-  }
+  workspaceBase = new URL(src, location.href).pathname.replace(/\/[^/]*$/, "")
+  await Promise.all([reloadSnapshotIndex(), loadContentIndex()])
   return manifest
 }
 
@@ -64,7 +122,7 @@ export async function loadManifest(url?: string): Promise<Manifest> {
 export function setManifest(m: Manifest) {
   // `dimensions` is optional in the manifest (SPEC §1.3) — a page with no axes
   // is normal. Fill it in once here so every reader can treat it as an object.
-  for (const p of m.pages) if (!p.dimensions) p.dimensions = {}
+  normalizeManifest(m)
   manifest = m
   if (m.viewer?.app !== undefined) appBase = m.viewer.app.replace(/\/+$/, "")
   workspaceDimensions = m.dimensions.filter((d) => d.scope === "workspace")
@@ -124,10 +182,7 @@ export function pageUrl(pageId: string, dims?: Record<string, string>, extra?: R
  * Relative templates are served from the app base; absolute ones are used as-is.
  */
 export function appUrl(page: PageDef, dims: Record<string, string>): string {
-  const full = resolveDims(page, dims)
-  const filled = page.url.replace(/\{([a-zA-Z0-9_-]+)\}/g, (_, d: string) => encodeURIComponent(full[d] ?? ""))
-  if (/^[a-z]+:\/\//i.test(filled)) return filled
-  return `${appBase}${filled.startsWith("/") ? "" : "/"}${filled}`
+  return stateHref(page, resolveDims(page, dims), appBase) ?? `${appBase}/`
 }
 
 /** Dimension ids a url template references. */
@@ -206,11 +261,30 @@ export function pageFigures(pageId: string): BoardDef[] {
 }
 
 export function dimensionLabel(dimId: string): string {
+  if (dimId === STATE_DIM) return "State"
   return manifest.dimensions.find((d) => d.id === dimId)?.label ?? dimId
 }
 
 export function valueLabel(dimId: string, valueId: string): string {
+  if (dimId === STATE_DIM) {
+    for (const p of manifest.pages) {
+      const s = p.states?.find((x) => x.id === valueId)
+      if (s) return s.label ?? humanize(s.id)
+    }
+    return humanize(valueId)
+  }
   return manifest.dimensions.find((d) => d.id === dimId)?.values.find((v) => v.id === valueId)?.label ?? valueId
+}
+
+/** Label for a page's state, page-scoped (two pages may reuse a state id). */
+export function stateLabel(page: PageDef, stateId: string): string {
+  const s = page.states?.find((x) => x.id === stateId)
+  return s?.label ?? humanize(stateId)
+}
+
+export function humanize(id: string): string {
+  const t = id.replace(/[-_]+/g, " ").trim()
+  return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
 /* ------------------------------------------------------------------ */
@@ -372,19 +446,12 @@ export function dimsFromParams(page: PageDef, sp: URLSearchParams): Record<strin
 
 /** Stable key identifying a page instance (page + full dimension assignment). */
 export function instanceKey(pageId: string, dims: Record<string, string>): string {
-  const q = Object.entries(dims)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join("&")
-  return `${pageId}?${q}`
+  return modelInstanceKey(pageId, dims)
 }
 
 /** Conventional snapshot file name for an instance (what scripts/scan.mjs writes). */
 export function snapshotFile(page: PageDef, dims: Record<string, string>): string {
-  const full = resolveDims(page, dims)
-  return `${page.id}__${Object.keys(page.dimensions)
-    .map((d) => `${d}=${full[d]}`)
-    .join("__")}.png`
+  return `${snapshotStem(page, dims)}.webp`
 }
 
 /** The scan entry for an instance, if the index has one. */
@@ -398,7 +465,8 @@ export function snapshotEntry(page: PageDef, dims: Record<string, string>): Snap
  */
 export function snapshotUrl(page: PageDef, dims: Record<string, string>): string {
   const entry = snapshotEntry(page, dims)
-  return `${appBase}/snapshots/${entry?.file ?? snapshotFile(page, dims)}`
+  const v = entry?.at ? `?v=${encodeURIComponent(entry.at)}` : ""
+  return `${snapshotsBase()}/${entry?.file ?? snapshotFile(page, dims)}${v}`
 }
 
 /** The target id this element itself carries (no ancestor walk), if any. */
@@ -448,7 +516,7 @@ function compileTemplate(str: string, capture: string | ((isLast: boolean) => st
 type QueryMatcher = { key: string } & ({ dims: string[]; re: RegExp } | { dims: null; value: string })
 
 function templateParts(page: PageDef): { pathRe: RegExp; pathDims: string[]; query: QueryMatcher[] } {
-  const [pathT, queryT = ""] = page.url.split("?")
+  const [pathT, queryT = ""] = (page.url ?? "").split("?")
   const abs = /^[a-z]+:\/\//i.test(pathT)
   const pathT2 = abs ? new URL(pathT).pathname : `${appBase}${pathT.startsWith("/") ? "" : "/"}${pathT}`
   const { src: pathSrc, dims: pathDims } = compileTemplate(pathT2, "[^/?#]+")
@@ -469,7 +537,24 @@ export function matchAppUrl(href: string): { page: PageDef; dims: Record<string,
   } catch {
     return null
   }
+  // Named states first (SPEC §1.3a): a state matches when the path is equal
+  // and every query param its URL sets is present with the same value. The
+  // most specific match (most params) wins.
+  let best: { page: PageDef; dims: Record<string, string>; score: number } | null = null
   for (const page of manifest.pages) {
+    for (const st of page.states ?? []) {
+      const href = stateHref(page, { [STATE_DIM]: st.id }, appBase)
+      if (!href) continue
+      const su = new URL(href, location.origin)
+      if (su.pathname.replace(/\/+$/, "") !== u.pathname.replace(/\/+$/, "")) continue
+      const params = [...su.searchParams]
+      if (!params.every(([k, v]) => u.searchParams.get(k) === v)) continue
+      if (!best || params.length > best.score) best = { page, dims: { [STATE_DIM]: st.id }, score: params.length }
+    }
+  }
+  if (best) return { page: best.page, dims: best.dims }
+  for (const page of manifest.pages) {
+    if (page.states || !page.url) continue
     const { pathRe, pathDims, query } = templateParts(page)
     const m = u.pathname.match(pathRe)
     if (!m) continue
