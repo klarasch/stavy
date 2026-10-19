@@ -257,7 +257,8 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   // ---- scenarios
   for (const sc of m.scenarios) {
     const w = `scenario "${sc.id}"`
-    if (!sc.refs?.length) warn(`${w}: no refs — what requirement does it demonstrate?`)
+    // Only workspaces that track requirements care which one a flow demonstrates.
+    if (!sc.refs?.length && m.requirements?.length) warn(`${w}: no refs — what requirement does it demonstrate?`)
     sc.steps.forEach((st, i) => {
       const page = pageIndex.get(st.page)
       if (!page) return err(`${w} step ${i + 1}: unknown page "${st.page}"`)
@@ -270,7 +271,8 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     // are usually a flow that stopped at the last form step. A single-step
     // scenario is a pointer at one state, not a walkthrough that stopped early.
     const visited = new Set(sc.steps.map((st) => st.page))
-    if (sc.steps.length > 1 && visited.size === 1)
+    // A hint, not a rule: a flow inside one screen (a pipeline move) is legitimate, so only --strict asks.
+    if (flags.strict && sc.steps.length > 1 && visited.size === 1)
       warn(`${w}: stays on page "${sc.steps[0].page}" for all ${sc.steps.length} steps: is it end to end (the success state plus the thing that changed)?`)
     // A scenario belongs to one world: if its steps pin two values of a
     // workspace axis, or a step's page excludes a value another step pins, the

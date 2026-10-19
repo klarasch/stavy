@@ -319,14 +319,17 @@ describe("validate: scenarios", () => {
     expect(warnings.some((w) => w.includes("no refs"))).toBe(true)
   })
 
-  it("warns when every step of a multi-step scenario stays on one page", async () => {
-    const { warnings } = await run((m) => {
+  it("with --strict, warns when every step of a multi-step scenario stays on one page", async () => {
+    const oneScreen = (m: ReturnType<typeof baseManifest>) => {
       m.scenarios[0].steps = [
         { page: "simple-page", title: "Fill it in", dims: { role: "user" } },
         { page: "simple-page", title: "Submit", target: "SubmitButton", dims: { role: "user" } },
       ]
-    })
-    expect(warnings.some((w) => w.includes("stays on page \"simple-page\" for all 2 steps"))).toBe(true)
+    }
+    const loose = await run(oneScreen)
+    expect(loose.warnings.some((w) => w.includes("stays on page"))).toBe(false)
+    const strict = await run(oneScreen, { refs: [], coverage: false, strict: true } as Flags)
+    expect(strict.warnings.some((w) => w.includes("stays on page \"simple-page\" for all 2 steps"))).toBe(true)
   })
 
   it("does not ask a single-step scenario to be end to end", async () => {

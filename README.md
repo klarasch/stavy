@@ -62,7 +62,7 @@ node stavy/scripts/init.mjs ../my-prototype-repo
 - **Everything is a URL** — dimensions, wireframe, annotations, inspect, tour
   step, and even the canvas viewport (`?v=x,y,zoom`) live in the link, so
   "look at this detail" is a paste, not a screen recording.
-- **Chrome that stays out of the way** — floating glass toolbar,
+- **Chrome that stays out of the way** — a toolbar docked at the bottom (or floating),
   independent light/dark, a "Mock only — not a real product" label, and
   ⌘\ / Ctrl+\ to hide all viewer UI for clean demos. Because the prototype
   renders in its own frame document, the chrome shares no CSS with it —

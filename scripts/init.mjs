@@ -225,7 +225,7 @@ if (!existsSync(manifestPath)) {
     $schema: "../scripts/stavy/stavy.schema.json",
     version: "0.3",
     product: { name: pkg.name ?? "Prototype", description: "" },
-    viewer: { toolbar: "bottom", targetAttrs: ["data-testid", "data-proto"] },
+    viewer: { targetAttrs: ["data-testid", "data-proto"] },
     dimensions: [],
     pages: [
       {
@@ -365,13 +365,15 @@ if (dryRun) {
 Done (Stavy ${short}). Nothing under src/ was touched. Next:
   1. npm i -D playwright ajv@8.12.0 ajv-formats@2.1.1 && npx playwright install chromium   (scan needs a browser;
      these ajv versions install cleanly on locked-down registries — a newer ajv pulls in fast-uri)
-  2. npm run dev, then open  http://localhost:5173/${dir}/index.html          (the viewer, next to your app)
-  3. Register your first real screens in public/stavy.json: one entry per page with its existing URL.
-     Every dimension a page declares must appear in its url as {dim} — the app reads them as it likes.
-  4. npm run stavy:scan     → snapshots + a target report (the coverage contract, checked against the running app)
-     npm run stavy:validate → schema, cross-references, the URL contract, last scan's misses
-  5. Add "@STAVY.md" to your CLAUDE.md so agents follow the rules (additive only — never gut a page for Stavy).
-  6. Commit, ${LOCK} included. To update later: pull Stavy, then npm run stavy:update.
+  2. Add the dev plugin to vite.config (above) so the viewer can save boards, notes and comments.
+  3. Run your dev server and open /${dir}/index.html next to the app.
+  4. Register screens in public/stavy.json: one entry per screen, its states as named URLs
+     ("states": [{ "id": "empty", "url": "/contacts?scene=empty" }]). Dimensions are optional.
+  5. npm run stavy:scan     → captures new or missing states only (a cache; never committed). Set its --url
+     to your dev server's port in package.json if it isn't 5173.
+     npm run stavy:validate → manifest, boards and references; only a state that won't load is an error
+  6. Add "@STAVY.md" to your CLAUDE.md so agents follow the rules and use the skill to compose boards and docs.
+  7. Commit, ${LOCK} included. To update later: pull Stavy, then npm run stavy:update.
 Docs: docs/STAVY-SPEC.md · docs/STAVY-UPDATING.md · skill: .claude/skills/${p.skill}/SKILL.md`)
 }
 process.exit(result.skipped.length || result.kept.length ? 1 : 0)
