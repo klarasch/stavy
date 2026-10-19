@@ -112,6 +112,22 @@ How to compose:
 - After adding screen items with `crop`/`do`/`viewport`, capture them:
   `stavy:scan` (incremental) picks them up.
 
+## Reference (field names)
+
+- Flows live under `scenarios` in stavy.json; a board's `flow` item takes the scenario `id`.
+- Board file: `{ "title", "description"?, "status"?, "items": [...] }`. Every item has `id`, `type`, optional `x`/`y`/`w`/`h`, `title`, `note`.
+  - `screen`: `screen` (page id), `state` or `dims`, `crop`?, `do`?, `viewport`?
+  - `states`: `screen`, `states`? (ids), `layout`? (`row`|`grid`), `columns`?, `crop`?
+  - `flow`: `flow` (scenario id), `perRow`?, `collapsed`?
+  - `markdown`: `md` (inline) or `src` (`docs/x.md`, or `docs/x.md#heading-slug`)
+  - `note`: `text`, `color`?, `author`?
+  - `section`: `title`, `items`, `layout`? (`row`|`column`|`grid`), `columns`?
+  - `image`: `src`, `alt`?, `callouts`?  ·  `mermaid`: `code`  ·  `arrow`: `from`, `to`, `label`?, `style`?
+- Heading slugs: lowercase, punctuation dropped, spaces → `-` ("Error states" → `error-states`).
+- Doc embeds: `![caption](stavy:page/state)` renders a snapshot card; `[text](stavy:page/state)` links to the player.
+- Scan keys: `--keys contacts` (a screen), `--keys contacts/empty` (a state, with its crops), comma separated.
+- Checking targets: `stavy:scan -- --keys <screen>` prints `missing target "X"` for any flow or board target it can't find; `stavy:validate` lists the last scan's misses.
+
 ## Docs: the handover
 
 `stavy-content/docs/<id>.md` is what an engineer reads. Embed live states

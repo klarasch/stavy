@@ -15,7 +15,8 @@
 //
 //   (default)  capture only states missing from the index, or whose file is gone / was
 //              captured at another size
-//   --keys     exactly those states (instanceKey / variantKey, comma separated)
+//   --keys     exactly those states, comma separated: "contacts" (a screen), "contacts/empty"
+//              (a named state, with its crops/variants), or a full instanceKey / variantKey
 //   --all      everything, and prune index entries nothing wants any more
 //   --only     restrict to one page
 //   --strict   a missing scenario-step target fails the scan (otherwise a warning)
@@ -78,14 +79,30 @@ const readIndex = () => (existsSync(indexPath) ? JSON.parse(readFileSync(indexPa
 const index = readIndex()
 
 const sizeFor = (s) => ({ W: s.variant?.viewport?.width ?? s.page.frame?.width ?? defaultW, H: s.variant?.viewport?.height ?? s.page.frame?.height ?? defaultH })
-// Keys in --keys may contain commas (a `type` action); a key always starts "<page-id>?".
-const splitKeys = (s) => s.split(/,(?=[a-z0-9][\w-]*\?)/).map((k) => k.trim()).filter(Boolean)
+// Keys in --keys may contain commas (a `type` action); a key always starts "<page-id>?",
+// "<page-id>/" (shorthand) or is a bare page id.
+const splitKeys = (s) => s.split(/,(?=\s*[A-Za-z0-9][\w-]*(?:[?/]|,|$))/).map((k) => k.trim()).filter(Boolean)
+// Shorthand people and agents can type: "contacts" (every state of a screen,
+// crops and board variants included) or "contacts/empty" (one named state and
+// its variants). Full instance / variant keys still work as-is.
+const expandShorthand = (key) => {
+  const m2 = key.match(/^([A-Za-z0-9][\w-]*)(?:\/([\w.-]+))?$/)
+  if (!m2 || states.has(key)) return null
+  const [, pid, st] = m2
+  return [...states.values()].filter((x) => x.page.id === pid && (!st || x.dims._state === st || Object.values(x.dims).includes(st)))
+}
 
 let selected
 let cached = 0
 if (keysArg != null) {
   selected = []
   for (const key of splitKeys(keysArg)) {
+    const many = expandShorthand(key)
+    if (many) {
+      if (many.length) selected.push(...many)
+      else warnings.push(`--keys: nothing registered for "${key}"`)
+      continue
+    }
     let s = states.get(key)
     if (!s && !key.includes("#")) {
       // A plain state nothing pins (e.g. the player visited it): "<page>?<dim>=<v>&…"

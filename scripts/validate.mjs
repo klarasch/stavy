@@ -235,7 +235,7 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
       checkDims(`${w} state "${st.id}"`, { ...page, states: undefined, dimensions: page.urlDims ?? {} }, st.dims)
     }
     if (page.layout && !["row", "matrix"].includes(page.layout)) warn(`${w}: unknown layout "${page.layout}" (row | matrix)`)
-    if (!page.fidelity) warn(`${w}: no fidelity rung declared (static | navigable | interactive)`)
+    if (flags.strict && !page.fidelity) warn(`${w}: no fidelity rung declared (static | navigable | interactive)`)
     for (const [d, values] of Object.entries(page.urlDims ?? page.dimensions)) {
       if (!dimIndex.has(d)) err(`${w}: unknown dimension "${d}"`)
       else for (const v of values) if (!dimIndex.get(d).has(v)) err(`${w}: "${d}=${v}" not declared`)

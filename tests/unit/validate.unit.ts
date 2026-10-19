@@ -265,12 +265,14 @@ describe("validate: pages", () => {
     expect(errors.some((e) => e.includes('"role=nonexistent-value" not declared'))).toBe(true)
   })
 
-  it("warns when a page has no fidelity rung", async () => {
-    const { warnings } = await run((m) => {
+  it("asks for a fidelity rung only with --strict", async () => {
+    const noFidelity = (m: ReturnType<typeof baseManifest>) => {
       // @ts-expect-error deliberately invalid: fidelity is optional at runtime, not in this literal's inferred type
       delete m.pages[0].fidelity
-    })
-    expect(warnings.some((w) => w.includes("no fidelity rung declared"))).toBe(true)
+    }
+    expect((await run(noFidelity)).warnings.some((w) => w.includes("no fidelity rung declared"))).toBe(false)
+    const strict = await run(noFidelity, { refs: [], coverage: false, strict: true } as Flags)
+    expect(strict.warnings.some((w) => w.includes("no fidelity rung declared"))).toBe(true)
   })
 
   it("warns when a page dimension has no default", async () => {
