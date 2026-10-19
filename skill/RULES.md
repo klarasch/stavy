@@ -12,12 +12,11 @@ registers, or register a new one.
    simplify an existing page or layout to make it fit Stavy. If nothing needs
    to change to register a page, register it as-is.
 2. **Never replace real logic with a static mock to satisfy Stavy.** If a
-   state genuinely isn't reachable through a URL yet, register it as a gap
-   (leave it out of `dimensions`, or note it) rather than faking the screen.
-3. **State is route + dataset + minimal UI params.** A page's `url` template
-   (SPEC §2.1) should read as "this route, with this dataset, with these
-   flags" — not a fork. No page-per-state, no branch that only exists to
-   satisfy a dimension value.
+   state genuinely isn't reachable through a URL yet, add a scene for it or
+   leave it out — don't fake the screen.
+3. **A state is a URL with a name.** Route + dataset + minimal UI params,
+   ideally one `scene` param naming a bundle of them. No page-per-state, no
+   branch that only exists for Stavy.
 4. **No Stavy runtime imports in product code.** Nothing under `src/` (or
    equivalent) imports anything from the viewer. This app must build, run,
    and behave identically with the entire `stavy/` folder deleted.
@@ -38,23 +37,14 @@ registers, or register a new one.
    different host or a proxy that changes the origin — that breaks inspect,
    tours, pins, and comments (snapshots keep working regardless).
 
-## The fidelity compromise: real app, fake data
-
-The prototype should be the real app shell, router, and UI kit, wired to
-named, deterministic datasets — not a separate mock. State = route + dataset
-+ minimal UI params. Prefer wiring one more `{dim}` into an existing data
-layer over adding a new page, a new mode, or a new mock. If a scenario needs
-a state the app can't reach yet, that's a real gap — say so, don't paper over
-it with a static screen.
-
 ## Commands
 
-- `npm run stavy:scan` — visits every registered state in a real browser,
-  checks that every referenced target exists, and writes the canvas
-  snapshots. Run it after any change that touches a registered page's markup
-  or URL handling.
-- `npm run stavy:validate` — static checks only (manifest shape, cross-refs,
-  the URL contract, the last scan's missing targets). Fast; run it after any
-  manifest edit.
-- Open `/stavy/` (or `/stavy/index.html`) next to the running app to see the
-  canvas.
+- `npm run stavy:scan` — captures snapshots for new or missing states only
+  (incremental). `-- --keys a,b` for exactly those states, `-- --all` before
+  a review. The viewer's refresh button does the same on demand. Snapshots
+  are a cache: never commit them.
+- `npm run stavy:validate` — static checks (manifest, boards, references).
+  Fast; run it after editing `stavy.json` or `stavy-content/`. Only a state
+  that doesn't load or unparsable JSON is an error; the rest are warnings.
+- Open `/stavy/` next to the running app. With the dev plugin in the Vite
+  config, boards, notes and comments are editable there.

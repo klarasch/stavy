@@ -1,293 +1,156 @@
 ---
 name: stavy
-description: Set up and operate a Stavy prototyping workspace — a manifest-driven overlay for reviewing an existing (or in-progress) prototype, with a zoomable canvas, a player, guided scenario tours, dimension variants (states/roles/lifecycles), annotations, and dev-mode inspection. Use when the user wants to register a page with Stavy, add a page/scenario/dimension/annotation to a prototype's manifest, work from a comments export, or asks about stavy.json. Works with any framework, router, or UI kit — Stavy never imports the prototype's code.
+description: Keep a Stavy workspace true and tell the prototype's story on it — register screens and their named states, write flows, compose boards (screens, component crops, flows, Markdown, notes, diagrams) and Markdown handover docs, resolve viewer comments, and keep a changelog. Use when the user works on a prototype or app that has a stavy.json, asks to add a screen/state/flow/board/doc, to document something for developers, to prepare a review or handover, or to act on Stavy comments. Works with any framework — Stavy never imports the app's code.
 ---
 
 # Stavy skill
 
-You are operating a **Stavy workspace**: a prototype repo with a `stavy.json`
-manifest and a static viewer served alongside it (`public/stavy/`), per the
-spec in `SPEC.md` (read it if present; its rules win over this file on any
-conflict). Read `skill/RULES.md` (or `STAVY.md` if this repo was set up by
-`init`) before touching any page — it is the rule list this file summarizes,
-written to be read cold.
+Stavy gives **windows into an app that already exists** — a prototype, or a
+real app's staging build. Every state is a real URL; the viewer shows them
+as snapshot cards on boards and opens the real app in a player. You keep
+that map true and tell the story around it; humans refine it in the viewer.
+Read `STAVY.md` (the rules) before changing app code. `SPEC.md`, if present,
+wins over this file.
 
-## Core model
+## The workspace
 
-- **Stavy is a viewer of existing things, not a way to build them.** It reads
-  the prototype's own URLs into a same-origin frame. It never imports the
-  prototype's code, and the prototype must run identically with Stavy absent.
-- **Dimensions** are generic named axes (data state, role, lifecycle stage,
-  process step, locale…). Each declares a `scope`: `page` (default) for axes
-  that live inside one screen, `workspace` for axes that decide which world
-  the whole prototype is in — release phase, role, locale. See "Workspace
-  axes" below; getting this wrong is the most common modelling mistake.
-- **Pages** declare a `url` template with `{dim}` placeholders (this IS the
-  binding contract — SPEC §2.1), and optionally which dimensions they
-  support, defaults, curated canvas `instances`, `group` (the section it
-  belongs to), and `annotations`. **A page with no dimensions is normal** —
-  one screen, one card — and most pages should be one. Pages with `kind:
-  "component"` are bespoke **organisms**, registered the same way but
-  rendered through a harness route or story in their own `frame`.
-- **Scenarios** are executable step lists (page + dims + `target` + note)
-  that power guided tours inside the player, canvas lanes, and written
-  walkthroughs. Every step is a card on the canvas — a 13-step scenario puts
-  13 more cards there — so keep step lists purposeful.
-- Every reachable state is a URL. There is no other kind of "state" Stavy
-  knows about: no hidden component state to wire, no navigation callback to
-  implement.
+```
+stavy.json                     the screen registry: screens, their states, flows, viewer settings
+stavy-content/
+  index.json                   which boards and docs exist, in order
+  boards/<id>.json             free-form boards (you compose, humans refine)
+  docs/<id>.md                 Markdown handover docs (the source for spec text)
+  assets/                      images and SVGs you or people add
+  comments.json                comments left in the viewer
+snapshots/  (gitignored)       a cache, made by scan on demand — never commit it
+```
 
-## Rules for an existing prototype (additive only)
+## The loop: cheap by default
 
-Full text and rationale: `skill/RULES.md`. Summary:
+The person is iterating fast. Don't make them wait on Stavy.
 
-1. **Additive only** — add a param read, a harness route, an id, a manifest
-   entry. Never remove, restructure, or simplify a page to fit Stavy.
-2. **Never fake a state to satisfy Stavy.** Not URL-reachable yet? Register
-   it as a gap, don't mock it.
-3. **State = route + dataset + minimal UI params.** No forked pages per
-   state, no per-state branches.
-4. **No Stavy runtime imports in product code.** The app runs identically
-   with Stavy absent.
-5. **Fixtures are deterministic** — fixed clock, seeded ids, no network.
-6. **Organisms render through a harness route or stories** — never by
-   stripping a page down to one component.
-7. **Targets are the kit's own instance ids**, added at the usage site —
-   never inside a shared kit component.
-8. **Same origin** — the viewer is served from the app's public folder.
+- **Never run a full scan as routine.** After changing a screen, capture
+  only what you touched: `npm run stavy:scan -- --keys "<key>,<key>"`, or
+  just `stavy:scan` (incremental: only new or missing states). People can
+  also press refresh on a card. `--all` is for before a review.
+- Edit `stavy.json` for screens and flows, `stavy-content/` for everything
+  else. The viewer reloads on its own.
+- `stavy:validate` is cheap and static: run it after manifest edits. Treat
+  warnings as prompts, not failures. The only real errors: a state that
+  doesn't load, unparsable JSON.
 
-## Registering a page
+## Screens and states
 
-1. Find (or add) the URL that renders the state: which route, and which
-   search params / path segments select the dimension values.
-2. Write `url` with a `{dim}` placeholder for every dimension this page will
-   declare — nothing more, nothing less (`npm run validate`/`stavy:validate`
-   checks both directions).
-3. Make sure every declared dimension is actually reachable that way. If a
-   dimension the manifest wants isn't wired into the app's data layer yet,
-   wire it (see "URL state recipes" below) — additively.
-4. Add target ids at the elements a scenario, annotation, or note will point
-   at (rule 7).
-5. Add `group` (the section it belongs to), and — only where they earn it —
-   `dimensions`, `defaults`, 1–3 pinned `instances`, and `annotations`. See
-   "When to declare a dimension" below; the honest answer for many pages is
-   no dimensions at all.
-6. Run the scan (`npm run scan` / `stavy:scan`) against a running dev server,
-   then `npm run validate` / `stavy:validate`. Fix errors; treat warnings
-   (missing fidelity, no default, un-pinned note target) as prompts to
-   decide, not noise.
+- **A state is a URL with a name.** Prefer named states:
+  ```jsonc
+  { "id": "contacts", "label": "Contacts", "url": "/contacts",
+    "states": [
+      { "id": "loaded", "url": "/contacts" },
+      { "id": "empty", "url": "/contacts?scene=contacts-empty", "note": "First run: import or add" },
+      { "id": "bulk-conflict", "url": "/contacts?scene=bulk-conflict", "label": "Bulk edit: conflicts" }
+    ] }
+  ```
+- **One `scene` param beats many dimensions.** If the app needs a bundle of
+  seeds, flags and open panels to land on a moment, give it one named scene.
+  Dimensions (`url` template with `{dim}`) are still fine for genuine axes
+  (role × state), and `layout: "matrix"` opts a page into a grid. Default is
+  a row. Never add states to fill a grid.
+- Register states that someone will look at. A screen with one state is
+  normal.
+- `group` sorts screens into sections; `status` (`draft`/`review`/`ready`)
+  tells developers what's settled.
+- Not URL-reachable yet? Add a scene to the app (additively) or leave it
+  out. Never fake it.
 
-## URL state recipes
+## Flows
 
-- **Search params via the app's own router.** The common case: read
-  `useSearchParams()` (or the framework's equivalent) at the route or
-  fixture layer, not deep inside a component. A ~20-line `useDims`-style
-  helper that merges declared dimension ids over per-route defaults is
-  usually all it takes (see `src/demo/app/dims.ts` in the Stavy repo for a
-  worked example — not code to copy verbatim, a shape to imitate).
-- **One scene param, not a dozen seeds.** The recommended shape for anything
-  data-heavy: give the app one named scene (`?scene=empty-org`,
-  `?dataset=trial-expired`) where each name maps to a whole bundle of seeds,
-  and declare *that* as the dimension. The alternative — a placeholder per
-  seed param — is how manifests end up with nine axes whose combinations are
-  mostly meaningless. An app parameter does not have to become a dimension:
-  leave it out of the `url` template and it keeps its app-side default.
-- **Dialogs and overlays as a param.** Model an open modal/drawer as an
-  `overlay` or `modal` dimension value (`?overlay=confirm-reject`) that the
-  page reads to decide whether to render it open — not as something reached
-  only by clicking, which would make that state unlinkable.
-- **When a state isn't URL-reachable:** register a gap (an annotation or a
-  requirement noting what's missing, or simply don't declare that dimension
-  value yet) and say so. Never rewrite the page's logic just to expose a URL
-  hook — that's rule 2.
+Steps reference states (`{ "page": "import", "state": "mapping", "title": …,
+"note": … }`), so a flow never duplicates a screen. `target` (a `data-proto`
+id) is optional: it highlights the element in the tour; without it the step
+just shows the state, which can't fail. Run a flow to the outcome the user
+would see next (the new record in its list), not to the last form step.
+Long flows are fine: the board wraps them.
 
-## Figures next to a page
+## Boards: tell the story
 
-For the parts of a screen that will never earn a URL — an open menu, a
-hover state, a tooltip, a crop of the old design for comparison — add a
-**figure**: a board with `page: "<page id>"`, which the canvas renders inside
-that page's area, right after its anatomy (SPEC §1.7).
+A board answers one question for one audience: *"how does import fail and
+recover?"*, *"every state of the sync chip"*, *"what's new for Thursday's
+review"*. Make several small boards rather than one huge one. There is no
+required shape — pick what explains it best:
 
-- Produce the crop yourself against the running prototype with Playwright:
-  open the state's URL, click the thing open, then screenshot clipped to the
-  element's bounding box (`deviceScaleFactor: 2`, no padding, so no
-  background noise creeps into the crop).
-- Save it under `public/figures/<name>.png` and commit it — figures are
-  hand-made, unlike `public/snapshots/`, which the scan regenerates.
-- Point `source` at the URL the app serves it from (`/figures/<name>.png`),
-  keep `width` modest (~300–400) so the figure does not dwarf the page's
-  cards, and number the parts with `callouts` — `x`/`y` (`w`/`h` optional,
-  omit them for a point pin) as **fractions 0..1 of the image**, measured
-  from the same Playwright run, never guessed.
-- If a scenario step has to point at it, it is not a figure: make it a real
-  URL state instead ("Dialogs and overlays as a param" above).
+| To show… | Use |
+| --- | --- |
+| a screen at a moment | `screen` (state, optional `crop` to one element) |
+| one component in its states, side by side | `section` of `screen` items with the same `crop`, or `states` with `crop` |
+| an open menu, hover, focus | `screen` with `do: [{ "click": "FilterButton" }]` / `{ "hover": … }` |
+| responsive versions | `screen` items with `viewport` |
+| a journey | `flow` (wraps, never capped) |
+| rules, edge cases, copy, tables | `markdown` — never an image of text |
+| a state machine or sequence | `mermaid`, or an SVG you draw into `assets/` as an `image` |
+| an open question, a decision, a caveat | `note` (yellow = question, blue = decision, pink = risk) |
+| how parts connect | `arrow` between item ids, sparingly |
+| grouping | `section` with a title; children lay out inside it |
 
-## Harness routes for organisms
+How to compose:
 
-A bespoke organism gets its own page entry with `kind: "component"` and a
-`frame: { width, height }`. Its `url` points at:
+- **Write no coordinates.** Items without `x`/`y` are laid out in order;
+  sections lay out their children (`layout: row|column|grid`, `columns`).
+  Order the items as the story reads. Give screens a `w` only to make one
+  bigger or smaller than its neighbours.
+- Lead with a short `markdown` block (what this board is, who it's for), then
+  the evidence, then open questions.
+- Captions (`title`) name the state in the reader's words; `note` says why it
+  matters. One or two sentences.
+- **Spec text lives in docs.** If the rules for a component are long, write
+  them in `docs/<id>.md` and embed the section: `{ "type": "markdown",
+  "src": "docs/import.md#errors" }`. One source, no drift.
+- Register every new board in `stavy-content/index.json`.
+- **Respect human edits.** People move, resize and annotate in the viewer.
+  Patch items by `id`; never rewrite a board wholesale, never drop fields you
+  don't know, never move an item that has `x`/`y` unless asked. Don't edit
+  or delete notes with an `author` other than you.
+- After adding screen items with `crop`/`do`/`viewport`, capture them:
+  `stavy:scan` (incremental) picks them up.
 
-- a new, **additive** route the app adds that renders just the organism with
-  the app's real providers and no page shell around it, or
-- an existing Storybook/Ladle story's iframe URL, if the team already runs
-  one — same `{dim}` placeholder contract.
+## Docs: the handover
 
-Never register an organism by registering an existing full page and pretending
-its `frame` is smaller — that still ships the whole page shell.
+`stavy-content/docs/<id>.md` is what an engineer reads. Embed live states
+with `![Empty state](stavy:contacts/empty)`. A useful shape per feature:
+purpose · states (embedded) · behaviour rules · edge cases and limits · copy ·
+open questions. Keep it current as you change the app: when a rule changes,
+change the doc in the same step. Docs read fine on a git host too.
 
-## Scenarios & targets
+## Changelog
 
-Write steps as a real user path: one `target` per step, a note that says
-*why* this step matters, not just what it does. Verify each target exists
-under the step's dims (the scan does this for you — run it before declaring
-done). `refs` cites the requirement(s) the scenario demonstrates.
+After each change the person would want to know about, append to
+`STAVY-CHANGELOG.md` (newest first, under today's date or the current
+version): what changed on the map (screens, states, flows, boards) and *why*,
+in one line each, from the conversation. "Cut a version" = add a version
+heading above the dated entries. Skip pure refactors.
 
-**Run it to the end.** A scenario starts where the user really starts and
-ends at the outcome *as the user would next see it*: the success state **and**
-the thing that changed — the created record's own screen, or its row in the
-list it now appears in. "Create an expense" ends on the new expense, not on
-the last form step; "invite a teammate" ends on the pending invitation in the
-member list, not on the sent-confirmation toast. A walkthrough that stops at
-the form is the single most common gap in a generated manifest, and
-`validate` warns when every step of a scenario sits on one page.
+## Comments
 
-## When to declare a dimension
+`stavy-content/comments.json` holds what people left in the viewer, each
+anchored to a screen, state and element. Treat open ones as tasks: open that
+state, make the change, then set `resolved: true` and add a reply
+`{ "author": "Claude", "body": "Done: …" }`. Never delete comments.
 
-The test is one question: **would a reviewer need to see these values side by
-side to judge the design?** If not, it is not a dimension — it is a parameter
-the app happens to read.
+## Rules for the app (short — full text in STAVY.md)
 
-- A page with **zero dimensions is normal**, and most pages are. One screen,
-  one card, done. `dimensions` and `instances` are both optional, and
-  `validate` will not ask you for either.
-- `empty`, `loading` and `error` are **designed states, not a checklist**.
-  Declare one when its design exists and someone will review it (an empty
-  state with real first-run copy, an error with agreed wording). Never
-  declare a skeleton next to a loaded screen just to have the axis covered.
-- **Never generate a matrix for the sake of coverage.** The canvas draws
-  row/column headers only where two axes genuinely vary; a page whose values
-  never differ shows one card, which is the honest picture.
-- **Pin 1–3 instances**, not the variant space. `dimensions` says what the
-  page can render; `instances` says what is worth looking at. They are not
-  supposed to match.
-- Sections beat axes for organisation: several plain pages under a `group`
-  read better than one page carrying an axis that switches between them.
+1. Additive only: a scene, a param read, a `data-proto` id. Never restructure
+   a page to fit Stavy.
+2. The app runs identically without Stavy; no Stavy imports in app code.
+3. Deterministic data in scenes: fixed clock, seeded ids.
+4. Target ids go at the usage site, never inside a shared kit component.
+5. Same origin: the viewer is served from the app's public folder.
 
-## Fidelity ladder
+How much real behaviour a prototype should have is the team's call (see
+`PROTOTYPING.md` if the repo has one). Stavy only shows what's there.
 
-Every page declares a `fidelity` rung. Climb only when a scenario step needs
-it:
+## Inspector on a design system
 
-| Rung | `fidelity` | What the page has | Climb when… |
-|---|---|---|---|
-| 0 | `static` | Renders a fixed state at its URL. | — (default) |
-| 1 | `navigable` | Links/buttons that change the URL (route, or a dimension param) to reach another registered state. | A scenario step's point is to go somewhere. |
-| 2 | `interactive` | Real local behaviour beyond navigation: form validation, optimistic updates, in-page state machines. | A scenario step can't be demonstrated without it. |
-
-Record the rung honestly and bump it in the same change that adds the
-behaviour — the canvas shows it, so reviewers see scope creep. Never add real
-data fetching, persistence, auth, or business logic to satisfy a scenario —
-mock it, and say so in an annotation.
-
-## Working with PMs: requirements and coverage
-
-`requirements[]` is the PM-facing list of what must be demonstrated. Given a
-PRD (Markdown, Confluence/Notion export), extract requirements from its
-headings/criteria into `requirements[]` (`id` = the stable handle people
-already use, e.g. `PRD-118 §3`), then propose a scenario for each uncovered
-one — don't silently invent scenarios. Scenarios cite requirements in `refs`
-using the exact id. The canvas's coverage board shows demonstrated vs. gaps;
-`npm run validate --coverage --refs <prd.md>` cross-checks the document text.
-PMs review the board and comment; they don't edit the manifest.
-
-## Working from comments (designers' and PMs' feedback)
-
-When given a comments export (`.json`/`.md` from the viewer's Comments
-panel), treat each open comment as a task: it's anchored to `page + dims (+
-target)` — open that state (in the player, at the manifest `url`), make the
-change, then produce a resolution payload to *Import* back so threads close
-with a reply: write `comments-resolved.json` with the same comments plus
-`resolved: true` and a reply `{ "author": "Claude", "body": "Done: …" }`
-(keep ids; merging is by id). Never delete comments; never invent new ones.
-
-## Day-to-day operations
-
-- **After any change to a registered page's markup or URL handling**: `npm
-  run scan` (needs a running dev/preview server + `npx playwright install
-  chromium` once). It checks every referenced target exists and refreshes
-  the canvas snapshots. A missing-target failure is a real finding — fix the
-  page or the manifest, not the scan.
-- **After any manifest edit**: `npm run validate`. Static only — schema,
-  cross-refs, the URL contract, the last scan's `missing` list.
-- **Changed `viewer.viewport`** (screenshot size, default 1920×1080, SPEC
-  §1.8): re-run `npm run scan` — `validate` only warns that snapshots are
-  stale, it doesn't refresh them.
-- **Changelog**: `npm run changelog [base-ref]` — a Markdown diff of the
-  manifest (states added, scenarios changed, fidelity bumps, requirement
-  coverage). Run it after every change that touches the manifest and paste
-  the result into the PR description; don't hand-write one.
-- **Handoff**: `npm run handoff` writes `docs/handoff/<page>.md` per
-  page/component from the manifest. Regenerate before a handoff; never edit
-  by hand.
-- **Generated tests**: `npm run gen:tests` writes Playwright specs from
-  scenarios (each step opens the page's real `url` and asserts the target);
-  `npm run test:scenarios` runs them. A failing generated test is a finding
-  about the prototype's wiring or the scenario — fix the prototype or the
-  step, not the test.
-
-## Workspace axes
-
-Use `scope: "workspace"` when the question is *which world am I looking at*
-rather than *where in this screen am I*. The test: if a reviewer would be
-annoyed to re-pick it on every screen, it's workspace-scoped. Release phase,
-role, and locale usually are; flow step, data state, overlay and density
-never are.
-
-How to model a phased prototype:
-
-- One `phase` dimension, `scope: "workspace"`, values in shipping order (the
-  first value is the default world).
-- A screen that is **the same in both phases declares nothing** — absence
-  means unchanged, and it keeps showing in every phase.
-- A screen that **gains features** declares `"phase": ["p1", "p2"]` and pins
-  an instance per phase, so the canvas row reads as the before/after.
-- A screen that is **new later** declares `"phase": ["p2"]` only. It drops
-  off the canvas in Phase I; the coverage matrix shows the gap.
-- Scenarios that differ per phase are separate scenarios (`…-p1`, `…-p2`)
-  with the phase pinned in every step; a scenario may never straddle two
-  values.
-- Do **not** model phases as forked pages, branches, or repos — all three
-  hide the delta the canvas exists to show.
-
-**Many dimensions**: keep each axis small, pin only the combinations
-reviewers must see, and use `defaults` so scenario steps and links stay
-short. If a page is heading past three or four axes, that is the signal to
-bundle seeds into one scene param (see "URL state recipes"), not to pin a
-bigger matrix.
-
-## Style
-
-- Prototype code is throwaway; the manifest is the durable artifact —
-  optimize for manifest legibility over code cleverness.
-- Mock data behind the UI; never add real backends to a prototype.
-- When the user shows you a Figma frame or screenshot to prototype, build it
-  as the real app would render it — a route, real components, wired to a
-  named dataset — then register the URL. Don't build a one-off screen just to
-  have something to point Stavy at.
-
-## Inspector on your design system
-
-The inspector reads the prototype through the frame — DOM, fiber tree, CSSOM —
-so it hardcodes no design system, including the one this repo's demo uses.
-What it cannot work out unaided is your names. Add `viewer.inspect` to the
-manifest (SPEC §1.8): `kits[]` with a `componentPrefix` and the `classPattern`
-your kit stamps on component roots (capture group 1 = the component name),
-`tokenPattern` / `privateTokenPattern` for your CSS custom properties, and
-`typeScale`. That is data, no code, and it is what turns a hex value into a
-token name and an anonymous `forwardRef` wrapper into `AcButton`. Detection is
-per frame document, so apps on different stacks coexist in one workspace.
-Without it the inspector still reports computed values and the `var()` chain
-behind them. For the long tail there is `viewer.inspect.module`, a same-origin
-ES module merged over the defaults. Recipe, worked example, ten-minute
-checklist and troubleshooting: `docs/INSPECT-ADAPTERS.md`; a fill-in-the-blanks
-module: `docs/inspect-adapter.template.js`.
+`viewer.inspect` in stavy.json describes the team's design system as data
+(kits, `classPattern`, `tokenPattern`, `typeScale`); `viewer.inspect.module`
+is a same-origin module for what data can't say. Both belong to the team and
+live in the repo's local layer. Recipe and checklist:
+`docs/INSPECT-ADAPTERS.md`.

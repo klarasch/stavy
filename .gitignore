@@ -13,3 +13,4 @@ public/snapshots/
 dist-viewer/
 dist-viewer.commit
 release/
+.claude/worktrees/
