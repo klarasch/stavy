@@ -38,7 +38,10 @@ loadManifest(override ?? undefined).then(
   () =>
     root.render(
       <StrictMode>
-        <BrowserRouter basename={location.pathname.replace(/\/+$/, "")}>
+        {/* No basename: the viewer routes by query string only, and every link it
+            builds (pageUrl, canvasUrl) is already absolute — a basename would be
+            prefixed a second time (/stavy/stavy/?p=…). */}
+        <BrowserRouter>
           <StavyApp />
         </BrowserRouter>
       </StrictMode>
