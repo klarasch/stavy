@@ -723,7 +723,7 @@ export function CanvasPage() {
               {openComments > 0 && <span className="ps-ccount">{openComments}</span>}
             </PsButton>
             {scanAll.writable && (
-              <PsButton icon tip={scanAll.busy ? "Capturing every snapshot…" : "Refresh all snapshots"} tipBelow disabled={scanAll.busy} onClick={scanAll.start}>
+              <PsButton icon aria-label="Refresh all snapshots" tip={scanAll.busy ? "Capturing every snapshot…" : "Refresh all snapshots"} tipBelow disabled={scanAll.busy} onClick={scanAll.start}>
                 {scanAll.busy ? <span className="ps-spinner" /> : <RotateCcw />}
               </PsButton>
             )}

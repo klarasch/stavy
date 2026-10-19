@@ -329,8 +329,8 @@ keeps a local source file the served JSON is built from).
 
 ```jsonc
 "viewer": {
-  "toolbar": "bottom",        // floating: bottom | top | bottom-left | bottom-right | top-left | top-right
-                               // docked bar (prototype viewport shrinks, nothing is covered): bar-bottom | bar-top
+  "toolbar": "bar-bottom",    // default: docked bar (prototype viewport shrinks, nothing is covered): bar-bottom | bar-top
+                               // floating pill: bottom | top | bottom-left | bottom-right | top-left | top-right
   "base": "/stavy",           // path prefix the viewer is served under. Default: derived from the viewer's own location.
   "app": "/",                 // where the prototype is served (origin or path prefix). Default: the viewer's origin at the parent of `base`.
   "targetAttrs": ["data-proto", "data-testid"],  // attributes a bare target id is looked up in, in order

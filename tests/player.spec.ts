@@ -12,6 +12,53 @@ test("the frame shows the prototype at the page url for the dims", async ({ page
   await expect(page.frameLocator("iframe.ps-frame").locator('[data-proto="ApproveButton"]')).toBeVisible()
 })
 
+// The toolbar is a docked, full-width bottom bar unless the manifest says
+// otherwise, and the "mock only" notice is part of it, floating or docked.
+test("the toolbar is the docked bottom bar by default, with the mock notice inside it", async ({ page }) => {
+  await page.goto("/stavy/?p=expenses&d_role=manager&d_state=loaded")
+  const dock = page.locator(".ps-dock")
+  await expect(dock).toHaveAttribute("data-anchor", "bar-bottom")
+  await expect(dock.locator(".ps-dock-pill .ps-dock-notice")).toContainText("Mock only")
+  const bar = (await dock.boundingBox())!
+  expect(bar.x).toBe(0)
+  expect(bar.width).toBe(page.viewportSize()!.width)
+  // The bar takes its own space: the prototype's viewport ends where it starts.
+  const frame = (await page.locator("iframe.ps-frame").boundingBox())!
+  expect(frame.y + frame.height).toBeLessThanOrEqual(bar.y + 1)
+})
+
+test("a floating toolbar carries the mock notice attached to the pill", async ({ page }) => {
+  await page.goto("/stavy/?p=expenses&d_role=manager&d_state=loaded&tb=bottom")
+  const pill = page.locator(".ps-dock-pill")
+  const notice = pill.locator(".ps-dock-notice")
+  await expect(notice).toContainText("Mock only")
+  const p = (await pill.boundingBox())!
+  const n = (await notice.boundingBox())!
+  expect(n.y).toBeGreaterThanOrEqual(p.y)
+  expect(n.y + n.height).toBeLessThanOrEqual(p.y + p.height + 1)
+})
+
+test("a page with named states switches between them by their names", async ({ page }) => {
+  await page.route("**/stavy.json", async (route) => {
+    const manifest = await (await route.fetch()).json()
+    const p = manifest.pages.find((x: { id: string }) => x.id === "submit-expense")
+    p.states = [
+      { id: "details", label: "Details", dims: { step: "details" } },
+      { id: "receipt-upload", dims: { step: "receipt" } },
+    ]
+    delete p.instances
+    await route.fulfill({ json: manifest })
+  })
+  await page.goto("/stavy/?p=submit-expense")
+  await page.getByRole("button", { name: /State/ }).click()
+  await page.getByRole("option", { name: "Receipt upload" }).click()
+  await expect(page).toHaveURL(/d__state=receipt-upload/)
+  await expect(page.frameLocator("iframe.ps-frame").getByText("Attach a receipt")).toBeVisible()
+  // The frame sits on the state's own URL, so it is not "off the map".
+  await expect(page.getByText("off the map")).toHaveCount(0)
+  expect(await page.locator("body").innerText()).not.toMatch(/_state/)
+})
+
 test("switching a dimension rewrites the frame url", async ({ page }) => {
   await page.goto("/stavy/?p=expenses&d_role=employee&d_state=loaded")
   await page.getByRole("button", { name: /Data state/ }).click()
@@ -97,6 +144,8 @@ test("the inspector resolves the element under the pointer inside the frame", as
 test("tour steps navigate the frame client-side, without reloading it", async ({ page }) => {
   await page.goto("/stavy/?p=dashboard&tour=employee-submits&ts=0")
   const frame = page.locator("iframe.ps-frame")
+  // The frame's real document must be up before it is stamped.
+  await expect(page.locator(".ps-halo")).toBeVisible()
   await frame.evaluate((el: HTMLIFrameElement) => {
     ;(el.contentWindow as unknown as { __stamp?: number }).__stamp = 1
   })
@@ -118,6 +167,7 @@ test("tour steps navigate the frame client-side, without reloading it", async ({
 test("clicking a step's target reaches the app, and the tour advances without touching the frame", async ({ page }) => {
   await page.goto("/stavy/?p=dashboard&d_role=manager&d_state=loaded&tour=manager-approves&ts=0")
   const frame = page.locator("iframe.ps-frame")
+  await expect(page.locator(".ps-halo")).toBeVisible()
   await frame.evaluate((el: HTMLIFrameElement) => {
     ;(el.contentWindow as unknown as { __stamp?: number }).__stamp = 1
   })
