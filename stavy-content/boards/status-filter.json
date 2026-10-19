@@ -1,0 +1,56 @@
+{
+  "title": "Status filter",
+  "description": "One control in all its states: closed, open, and the per-role default. Captured from the real expenses list, opened by the scan itself.",
+  "status": "draft",
+  "items": [
+    {
+      "id": "spec",
+      "type": "markdown",
+      "w": 400,
+      "md": "## StatusFilter\n\nA `Select` above the expenses table.\n\n| Role | Default |\n|---|---|\n| Employee | All statuses |\n| Manager | All statuses |\n| Finance | **Approved** (what they act on) |\n\nOptions follow the lifecycle order. Changing it filters the table in place, no reload.\n\n![The list it filters](stavy:expenses?role=finance)"
+    },
+    {
+      "id": "states",
+      "type": "section",
+      "title": "States",
+      "layout": "row",
+      "items": [
+        { "id": "closed", "type": "screen", "screen": "expenses", "dims": { "role": "employee" }, "crop": "StatusFilter", "title": "Closed", "w": 240 },
+        { "id": "open", "type": "screen", "screen": "expenses", "dims": { "role": "employee" }, "do": [{ "click": "StatusFilter" }], "crop": "[role=listbox]", "title": "Open", "note": "Opened by the scan: `do: [{ click: StatusFilter }]`.", "w": 240 },
+        { "id": "finance", "type": "screen", "screen": "expenses", "dims": { "role": "finance" }, "crop": "StatusFilter", "title": "Finance default", "w": 240 }
+      ]
+    },
+    {
+      "id": "context",
+      "type": "screen",
+      "screen": "expenses",
+      "dims": { "role": "employee" },
+      "do": [{ "click": "StatusFilter" }],
+      "title": "In context",
+      "note": "The open menu over the list.",
+      "w": 560
+    },
+    {
+      "id": "machine",
+      "type": "mermaid",
+      "title": "Behaviour",
+      "w": 420,
+      "code": "stateDiagram-v2\n  direction LR\n  [*] --> Closed\n  Closed --> Open: click / Enter\n  Open --> Closed: pick an option\n  Open --> Closed: Esc / click outside"
+    },
+    {
+      "id": "a11y",
+      "type": "note",
+      "color": "green",
+      "text": "Keyboard: **↑ ↓** move, **Enter** picks, **Esc** closes without changing the filter."
+    },
+    {
+      "id": "empty",
+      "type": "states",
+      "screen": "expenses",
+      "states": ["0", "2", "3"],
+      "title": "What the filter sits on",
+      "w": 840
+    },
+    { "id": "a1", "type": "arrow", "from": "open", "to": "context", "style": "dashed" }
+  ]
+}

@@ -133,7 +133,7 @@ export interface RenderOptions {
 }
 
 function makeMarked(opts: RenderOptions) {
-  const resolve = (u: string) => (opts.resolveUrl && !/^([a-z][a-z0-9+.-]*:|#|\/)/i.test(u) ? opts.resolveUrl(u) : u)
+  const resolve = (u: string) => (opts.resolveUrl && !/^([a-z][a-z0-9+.-]*:|#|\/|\?)/i.test(u) ? opts.resolveUrl(u) : u)
   const marked = new Marked({ gfm: true, breaks: !!opts.inline })
   marked.use({
     renderer: {

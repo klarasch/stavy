@@ -40,11 +40,11 @@ export interface BoardLayout {
   bbox: Box
 }
 
-/** A section's frame around its children: title bar on top, padding around. */
-export const SECTION_PAD = { top: 60, side: 28, bottom: 28 }
-/** Height of a collapsed section (the title bar alone). */
+/** A section's frame around its children (its title sits above the frame, like a Figma section). */
+export const SECTION_PAD = { top: 32, side: 28, bottom: 28 }
+/** Height of a collapsed section (a one-line summary). */
 export const SECTION_COLLAPSED_H = 48
-export const BOARD_GAP = 56
+export const BOARD_GAP = 72
 export const SECTION_GAP = 28
 /** A balanced board reads like a page from orbit: aim the wrap width at this aspect ratio. */
 const TARGET_ASPECT = 16 / 10
