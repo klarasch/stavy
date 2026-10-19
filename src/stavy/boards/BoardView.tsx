@@ -584,6 +584,7 @@ export function BoardView() {
   const onBackgroundPointerMove = (e: React.PointerEvent) => {
     if (marquee) setMarquee({ ...marquee, x1: e.clientX, y1: e.clientY })
   }
+  const marqueeEnded = useRef(false)
   const onBackgroundPointerUp = () => {
     if (!marquee) return
     const a = toBoard(Math.min(marquee.x0, marquee.x1), Math.min(marquee.y0, marquee.y1))
@@ -601,6 +602,8 @@ export function BoardView() {
       })
     setSelection(hit)
     setMarquee(null)
+    marqueeEnded.current = true
+    setTimeout(() => (marqueeEnded.current = false), 50)
   }
 
   /* ---------------- keyboard ---------------- */
@@ -722,6 +725,8 @@ export function BoardView() {
           onPointerUp={onBackgroundPointerUp}
           onClick={(e) => {
             if (!editMode) return
+            // The click that ends a marquee must not clear what it just selected.
+            if (marqueeEnded.current) return void (marqueeEnded.current = false)
             const tgt = e.target as HTMLElement
             if (!tgt.closest("[data-item-id], [data-ps-ui]")) {
               setSelection(new Set())
