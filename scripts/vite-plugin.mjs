@@ -133,6 +133,26 @@ export default function stavy(opts = {}) {
         const path = url.pathname
         const at = path.indexOf("/__stavy/")
         if (at === -1) {
+          // The viewer is a folder in public/ (public/stavy/index.html). Vite serves
+          // folder indexes only for the app's own index, so /stavy and /stavy/ (and
+          // any /stavy/?p=… deep link reloaded) would fall through to the app's
+          // router. Serve the viewer's index for its folder; redirect the slashless form.
+          if (req.method === "GET" && !extname(path)) {
+            const base = (server.config.base ?? "/").replace(/\/$/, "")
+            const rel = path.startsWith(base) ? path.slice(base.length) : path
+            const dir = join(resolve(cwd, "public"), decodeURIComponent(rel))
+            const index = join(dir, "index.html")
+            if (dir.startsWith(resolve(cwd, "public") + sep) && existsSync(join(dir, "VERSION")) && existsSync(index)) {
+              if (!path.endsWith("/")) {
+                res.statusCode = 302
+                res.setHeader("location", `${path}/${url.search}`)
+                return res.end()
+              }
+              res.setHeader("content-type", "text/html; charset=utf-8")
+              res.setHeader("cache-control", "no-store")
+              return res.end(readFileSync(index))
+            }
+          }
           if (!servedByPublic) {
             if (path.endsWith("/stavy.json") && existsSync(manifestPath)) {
               res.setHeader("content-type", "application/json")
