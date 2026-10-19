@@ -324,6 +324,26 @@
   color: var(--ps-faint); font-size: 11px; cursor: pointer; transition: border-color .12s, color .12s;
 }
 .ps-cell-empty:hover { border-color: var(--ps-focus); color: var(--ps-focus); }
+/* ---- page status chip (draft / review / ready) ---- */
+.ps-status-draft { color: var(--ps-pin); border-color: color-mix(in srgb, var(--ps-pin) 45%, transparent); background: color-mix(in srgb, var(--ps-pin) 12%, transparent); }
+.ps-status-review { color: var(--ps-focus); border-color: color-mix(in srgb, var(--ps-focus) 40%, transparent); background: var(--ps-focus-soft); }
+.ps-status-ready { color: var(--ps-comment); border-color: color-mix(in srgb, var(--ps-comment) 40%, transparent); background: var(--ps-comment-soft); }
+/* ---- map: state rows, flow lanes ---- */
+.ps-state-label { font-size: 11.5px; font-weight: 600; line-height: 1.25; }
+.ps-lane-toggle { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; border: 0; background: transparent; color: var(--ps-muted); cursor: pointer; }
+.ps-lane-toggle:hover { background: var(--ps-hover); color: var(--ps-fg); }
+.ps-lane-toggle svg { width: 14px; height: 14px; transition: transform .12s; }
+.ps-lane-toggle[data-open="true"] svg { transform: rotate(90deg); }
+/* ---- on-demand snapshots ---- */
+.ps-card-refresh {
+  position: absolute; top: 5px; right: 5px; z-index: 2; width: 22px; height: 22px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--ps-border); background: var(--ps-glass-solid); color: var(--ps-btn-fg); cursor: pointer; opacity: 0; transition: opacity .12s;
+}
+.ps-card-refresh svg { width: 12px; height: 12px; }
+.ps-card-frame:hover .ps-card-refresh, .ps-card-refresh[data-busy="true"], .ps-card-refresh:focus-visible { opacity: 1; }
+.ps-capture { position: relative; z-index: 2; height: 24px; font-size: 11px; padding: 0 9px; border: 1px solid var(--ps-border); background: var(--ps-glass-solid); }
+.ps-spinner { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ps-border); border-top-color: var(--ps-muted); animation: ps-spin .7s linear infinite; display: inline-block; }
+@keyframes ps-spin { to { transform: rotate(360deg); } }
 /* ---- anatomy outlines ---- */
 .ps-anat-box { position: absolute; border: 1.5px solid var(--ps-focus); border-radius: 4px; background: var(--ps-focus-soft); opacity: .55; pointer-events: none; }
 .ps-anat-tag {

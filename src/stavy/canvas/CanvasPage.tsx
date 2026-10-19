@@ -1,14 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
-  ArrowRight, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play, Waypoints,
+  ArrowRight, ChevronRight, RotateCcw, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play, Waypoints,
 } from "../icons"
 import { cn } from "../cn"
 import {
   manifest, getPage, getTemplate, resolveDims, pageUrl, valueLabel, dimensionLabel,
   isWorkspaceDim, workspaceDimensions, workspaceDimsFromParams, workspaceCarry, workspaceKey,
   workspaceOverridesFor, pageInWorkspace, scenarioInWorkspace, varyingDims, varyingAcross, groupPages, instanceKey,
-  pageViewport, frameOf,
+  pageViewport, frameOf, stateLabel, STATE_DIM,
   pageFigures, standaloneBoards,
 } from "../manifest"
 import { elementAt } from "../frame"
@@ -24,8 +24,9 @@ import { CoverageBoard } from "./CoverageBoard"
 import { Inspector, type FrameHit } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
 import { useComments } from "../comments/store"
+import { useScan } from "../snapshots"
 import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "../chrome"
-import type { BoardDef, PageDef } from "../types"
+import type { BoardDef, PageDef, Scenario } from "../types"
 
 const INITIAL: Transform = { x: 300, y: 110, k: 0.55 }
 
@@ -48,6 +49,17 @@ function parseView(v: string | null): Transform | null {
 const CARD_TARGET_W = 256
 const LANE_CARD_TARGET_W = 179.2
 const ANATOMY_CARD_TARGET_W = 384
+/** Most cards in one row before the row wraps. */
+const MAX_ROW = 6
+/** Flow steps are thumbnails, smaller than page cards. */
+const STEP_THUMB_W = 150
+const STEPS_PER_ROW = 6
+
+function chunk<T>(xs: T[], n: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < xs.length; i += n) out.push(xs.slice(i, i + n))
+  return out
+}
 
 function cardScale(page: PageDef) {
   return Math.min(0.6, CARD_TARGET_W / frameOf(page).width)
@@ -79,11 +91,11 @@ function Area({
 }
 
 /* ------------------------------------------------------------------ */
-/* One page's cards. Two shapes, chosen by how much actually varies:   */
-/* a coverage matrix when two or more dimensions differ across the     */
-/* pinned instances (axes as row/column headers, declared-but-unpinned */
-/* cells as dashed placeholders), and otherwise a plain row of cards   */
-/* — one card, labelled with nothing, being the normal case (SPEC 1.3).*/
+/* One page's cards. A plain row by default (wrapping after MAX_ROW),  */
+/* labelled with state names or the axes that differ — one card,       */
+/* labelled with nothing, being the normal case. A coverage matrix     */
+/* (axes as headers, unpinned cells as dashed placeholders) only when  */
+/* the page asks for `layout: "matrix"` and two axes vary.             */
 /* ------------------------------------------------------------------ */
 
 const PageGroup = memo(function PageGroup({
@@ -117,8 +129,8 @@ const PageGroup = memo(function PageGroup({
     // Only what differs between these cards is worth drawing (a workspace axis
     // is fixed for the whole canvas, so it never counts).
     const varying = varyingDims(page, instances.map((i) => i.full))
-    // A matrix earns its headers only when there are two axes to cross.
-    const matrix = varying.length >= 2
+    // A matrix is opt-in (`layout: "matrix"`) and needs two axes to cross.
+    const matrix = page.layout === "matrix" && varying.length >= 2
     const colDim = matrix ? varying[0] : undefined
     const rowDim = matrix ? varying[1] : undefined
     const extraVarying = matrix ? varying.slice(2) : []
@@ -130,9 +142,14 @@ const PageGroup = memo(function PageGroup({
     }
     // A single axis reads better as a row in its declared order than as a
     // one-row matrix with a header over every column.
-    const one = varying[0]
-    const row = one
-      ? [...instances].sort((a, b) => page.dimensions[one].indexOf(a.full[one]) - page.dimensions[one].indexOf(b.full[one]))
+    const row = varying.length
+      ? [...instances].sort((a, b) => {
+          for (const d of varying) {
+            const diff = page.dimensions[d].indexOf(a.full[d]) - page.dimensions[d].indexOf(b.full[d])
+            if (diff) return diff
+          }
+          return 0
+        })
       : instances
     return { instances, varying, matrix, colDim, rowDim, extraVarying, groups, row }
   }, [page, wOver])
@@ -154,12 +171,23 @@ const PageGroup = memo(function PageGroup({
               </Chip>
             )}
             <span className="flex items-center gap-1">
-              {Object.entries(page.dimensions).filter(([d]) => !isWorkspaceDim(d)).map(([d, vs]) => (
-                <span key={d} className="ps-chip ps-chip-sm font-normal">
-                  <span className="ps-chip-k">{dimensionLabel(d)}</span> {vs.length}
-                </span>
-              ))}
+              {Object.entries(page.dimensions).filter(([d]) => !isWorkspaceDim(d)).map(([d, vs]) =>
+                d === STATE_DIM ? (
+                  <span key={d} className="ps-chip ps-chip-sm font-normal">
+                    {vs.length} state{vs.length === 1 ? "" : "s"}
+                  </span>
+                ) : (
+                  <span key={d} className="ps-chip ps-chip-sm font-normal">
+                    <span className="ps-chip-k">{dimensionLabel(d)}</span> {vs.length}
+                  </span>
+                )
+              )}
             </span>
+            {page.status && (
+              <Chip sm className={`ps-status-${page.status.toLowerCase()}`} title={`Status: ${page.status}`}>
+                {page.status}
+              </Chip>
+            )}
           </h3>
         </span>
       </div>
@@ -167,21 +195,26 @@ const PageGroup = memo(function PageGroup({
 
       <div className="flex flex-col gap-8">
         {!matrix && (
-          <div className="flex flex-wrap items-start gap-5">
-            {row.map((inst) => (
-              <InstanceCard
-                key={instanceKey(page.id, inst.full)}
-                pageId={page.id}
-                dims={inst.full}
-                note={inst.note}
-                scale={scale}
-                frame={page.frame}
-                chips={varying}
-                annotations={page.annotations}
-                showPins={showNotes}
-                wireframe={wireframe}
-                href={pageUrl(page.id, inst.full, linkExtra)}
-              />
+          <div className="flex flex-col gap-6">
+            {chunk(row, MAX_ROW).map((rw, ri) => (
+              <div key={ri} className="flex items-start gap-5">
+                {rw.map((inst) => (
+                  <InstanceCard
+                    key={instanceKey(page.id, inst.full)}
+                    pageId={page.id}
+                    dims={inst.full}
+                    label={page.states ? stateLabel(page, inst.full[STATE_DIM]) : undefined}
+                    note={inst.note ?? page.states?.find((x) => x.id === inst.full[STATE_DIM])?.note}
+                    scale={scale}
+                    frame={page.frame}
+                    chips={varying.filter((d) => d !== STATE_DIM)}
+                    annotations={page.annotations}
+                    showPins={showNotes}
+                    wireframe={wireframe}
+                    href={pageUrl(page.id, inst.full, linkExtra)}
+                  />
+                ))}
+              </div>
             ))}
           </div>
         )}
@@ -353,6 +386,73 @@ function RowFragment({
   )
 }
 
+
+/** One flow: numbered step thumbnails wrapped onto rows, collapsible. */
+function ScenarioLane({ sc, wdims, linkExtra }: { sc: Scenario; wdims: Record<string, string>; linkExtra: Record<string, string> }) {
+  const [open, setOpen] = useState(true)
+  // Every step resolved once: the lane labels only the axes that move between
+  // steps (a lifecycle advancing), never the ones that hold still.
+  const stepDims = sc.steps.map((st) => {
+    const p = getPage(st.page)
+    return p ? resolveDims(p, { ...st.dims, ...workspaceOverridesFor(p, wdims) }) : {}
+  })
+  const laneDims = varyingAcross(stepDims)
+  const steps = sc.steps.map((st, i) => ({ st, i, page: getPage(st.page) })).filter((x) => x.page)
+  return (
+    <div data-toc={`scenario:${sc.id}`}>
+      <span className="ps-zl">
+        <div className="flex items-center gap-2 mb-1">
+          <button className="ps-lane-toggle" data-open={open ? "true" : undefined} aria-expanded={open} title={open ? "Collapse this flow" : "Expand this flow"} onClick={() => setOpen(!open)}>
+            <ChevronRight />
+          </button>
+          <h3 className="ps-h3">{sc.label}</h3>
+          <Chip sm>{sc.steps.length} step{sc.steps.length === 1 ? "" : "s"}</Chip>
+          {sc.persona && <Chip sm className="capitalize">{sc.persona}</Chip>}
+          {sc.refs?.map((r) => (
+            <Chip key={r} sm mono>{r}</Chip>
+          ))}
+        </div>
+      </span>
+      {open && sc.description && <p className="ps-sub mb-4 max-w-2xl">{sc.description}</p>}
+      {open && (
+        <div className="flex flex-col gap-5">
+          {chunk(steps, STEPS_PER_ROW).map((rw, ri) => (
+            <div key={ri} className="flex items-start gap-3">
+              {rw.map(({ st, i, page }, k) => {
+                const dims = stepDims[i]
+                return (
+                  <div key={i} className="flex items-start gap-3">
+                    {k > 0 && <ArrowRight className="size-3.5 mt-10 shrink-0" style={{ color: "var(--ps-faint)" }} />}
+                    <div className="relative">
+                      <span
+                        className="absolute -top-1.5 -left-1.5 z-10 size-4 rounded-full flex items-center justify-center text-[10px] font-semibold pointer-events-none"
+                        style={{ background: "var(--ps-accent)", color: "var(--ps-accent-fg)" }}
+                      >
+                        {i + 1}
+                      </span>
+                      <InstanceCard
+                        pageId={st.page}
+                        dims={dims}
+                        scale={page!.kind === "component" ? cardScale(page!) * 0.6 : STEP_THUMB_W / pageViewport().width}
+                        frame={page!.frame}
+                        scope="scenarios"
+                        chips={laneDims.filter((d) => d in page!.dimensions && d !== STATE_DIM)}
+                        label={st.title}
+                        note={st.note}
+                        href={pageUrl(st.page, dims, { tour: sc.id, ts: String(i), ...linkExtra })}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ */
 
 export function CanvasPage() {
@@ -385,6 +485,7 @@ export function CanvasPage() {
 
   const { theme, setTheme, setHidden } = useChrome()
   const { open: openComments } = useComments()
+  const scanAll = useScan("all")
   const wKey = workspaceKey(sp)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const wdims = useMemo(() => workspaceDimsFromParams(sp), [wKey])
@@ -531,62 +632,9 @@ export function CanvasPage() {
           {/* ---- Scenarios: one wide area, lanes stacked ---- */}
           <Area title="Scenarios" kind={`${scenarios.length} walkthrough${scenarios.length === 1 ? "" : "s"}`} icon={<BookOpen />} tocId="area:scenarios" className="self-start">
             <div className="flex flex-col gap-8">
-              {scenarios.map((sc) => {
-                // Every step resolved once: the lane labels only the axes that
-                // move between steps (a lifecycle advancing), never the ones
-                // that hold still for the whole walkthrough.
-                const stepDims = sc.steps.map((st) => {
-                  const p = getPage(st.page)
-                  return p ? resolveDims(p, { ...st.dims, ...workspaceOverridesFor(p, wdims) }) : {}
-                })
-                const laneDims = varyingAcross(stepDims)
-                return (
-                <div key={sc.id} data-toc={`scenario:${sc.id}`}>
-                  <span className="ps-zl">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="ps-h3">{sc.label}</h3>
-                      {sc.persona && <Chip sm className="capitalize">{sc.persona}</Chip>}
-                      {sc.refs?.map((r) => (
-                        <Chip key={r} sm mono>{r}</Chip>
-                      ))}
-                    </div>
-                  </span>
-                  {sc.description && <p className="ps-sub mb-4 max-w-2xl">{sc.description}</p>}
-                  <div className="flex items-start gap-3">
-                    {sc.steps.map((st, i) => {
-                      const page = getPage(st.page)
-                      if (!page) return null
-                      const dims = stepDims[i]
-                      return (
-                        <div key={i} className="flex items-start gap-3">
-                          {i > 0 && <ArrowRight className="size-4 mt-14 shrink-0" style={{ color: "var(--ps-faint)" }} />}
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1.5 text-[11.5px]">
-                              <span
-                                className="size-4 rounded-full flex items-center justify-center text-[10px] font-semibold"
-                                style={{ background: "var(--ps-accent)", color: "var(--ps-accent-fg)" }}
-                              >
-                                {i + 1}
-                              </span>
-                              <span className="font-medium truncate max-w-40">{st.title}</span>
-                            </div>
-                            <InstanceCard
-                              pageId={st.page}
-                              dims={dims}
-                              scale={page.kind === "component" ? cardScale(page) * 0.7 : LANE_CARD_TARGET_W / pageViewport().width}
-                              frame={page.frame}
-                              scope="scenarios"
-                              chips={laneDims.filter((d) => d in page.dimensions)}
-                              href={pageUrl(st.page, dims, { tour: sc.id, ts: String(i), ...linkExtra })}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-                )
-              })}
+              {scenarios.map((sc) => (
+                <ScenarioLane key={sc.id} sc={sc} wdims={wdims} linkExtra={linkExtra} />
+              ))}
             </div>
           </Area>
 
@@ -674,6 +722,11 @@ export function CanvasPage() {
               <MessageCircle /> Comments
               {openComments > 0 && <span className="ps-ccount">{openComments}</span>}
             </PsButton>
+            {scanAll.writable && (
+              <PsButton icon tip={scanAll.busy ? "Capturing every snapshot…" : "Refresh all snapshots"} tipBelow disabled={scanAll.busy} onClick={scanAll.start}>
+                {scanAll.busy ? <span className="ps-spinner" /> : <RotateCcw />}
+              </PsButton>
+            )}
             <PsDivider />
             <PsButton icon tip="Zoom out" keys={["−"]} tipBelow onClick={() => zoomBy(1 / 1.5)}>
               <Minus />
