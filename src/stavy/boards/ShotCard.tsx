@@ -2,7 +2,7 @@ import { memo, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { InstanceCard } from "../canvas/InstanceCard"
 import { frameOf, pageUrl, snapshotIndex } from "../manifest"
-import { requestScan, useDev } from "../dev"
+import { useScan } from "../snapshots"
 import { cn } from "../cn"
 import { snapshotHref, type ResolvedShot } from "./resolve"
 import { useSnapshotsRev } from "./store"
@@ -39,20 +39,15 @@ export const ShotCard = memo(function ShotCard({
 
 function VariantCard({ shot, width, href }: { shot: ResolvedShot; width: number; href: string }) {
   const navigate = useNavigate()
-  const dev = useDev()
+  const scan = useScan([shot.key])
   const entry = snapshotIndex[shot.key]
   const url = snapshotHref(entry)
   const [err, setErr] = useState(false)
-  const [asked, setAsked] = useState(false)
   useEffect(() => setErr(false), [url])
-  useEffect(() => {
-    if (asked && dev?.scan && !dev.scan.running) setAsked(false)
-  }, [asked, dev?.scan?.running, dev?.scan])
   const fr = shot.variant?.viewport ?? frameOf(shot.page)
   const aspect = entry ? entry.height / entry.width : shot.variant?.crop ? 0.45 : fr.height / fr.width
   const h = Math.round(width * aspect)
   const missing = !url || err
-  const busy = asked || !!dev?.scan?.running
 
   return (
     <div className="ps flex flex-col gap-1.5" style={{ width }} data-instance={shot.key}>
@@ -71,19 +66,19 @@ function VariantCard({ shot, width, href }: { shot: ResolvedShot; width: number;
                 .filter(Boolean)
                 .join(" · ")}
             </span>
-            {dev?.writable && (
+            {scan.writable && (
               <button
                 type="button"
                 className="ps-btn ps-capture"
                 data-ps-ui
-                disabled={busy}
+                disabled={scan.busy}
                 onClick={(e) => {
                   e.stopPropagation()
-                  setAsked(true)
-                  requestScan([shot.key]).catch(() => setAsked(false))
+                  scan.start()
                 }}
               >
-                {busy ? "Capturing…" : "Capture"}
+                {scan.busy ? <span className="ps-spinner" /> : null}
+                {scan.busy ? "Capturing" : "Capture"}
               </button>
             )}
           </div>

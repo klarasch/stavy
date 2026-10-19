@@ -1,16 +1,16 @@
 import { useEffect, useSyncExternalStore } from "react"
-import { contentIndex, loadContentIndex, reloadSnapshotIndex } from "../manifest"
+import { contentIndex, loadContentIndex } from "../manifest"
 import { deleteContent, useContentRev, writeContent } from "../dev"
+import { refreshSnapshotIndex, useSnapshotRev } from "../snapshots"
 import type { BoardFile, ContentIndex } from "../types"
 
 /**
  * Shared state for authored content (stavy-content/): the index of boards
- * and docs, and a revision that bumps whenever it or the snapshot index was
- * re-read, so every board and card picks up an agent's edits live.
+ * and docs, re-read whenever the dev endpoint reports a change, so every
+ * board picks up an agent's edits live.
  */
 
 let index: ContentIndex = contentIndex
-let snapRev = 0
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((l) => l())
 const subscribe = (l: () => void) => {
@@ -34,20 +34,18 @@ export function useContentIndex(): ContentIndex {
 
 let lastSnapRev = 0
 /**
- * Re-read the snapshot index on every content change (a scan finishing bumps
- * it too); returns a number that changes when it did, for memo keys.
+ * Re-read the snapshot index on every content change — a scan an agent ran
+ * from the terminal finishes, a board asked for a variant — so cards on a
+ * board (and the map's own cards, via snapshots.ts) show new captures live.
  */
 export function useSnapshotsRev(): number {
   const rev = useContentRev()
   useEffect(() => {
     if (!rev || rev === lastSnapRev) return
     lastSnapRev = rev
-    void reloadSnapshotIndex().then(() => {
-      snapRev++
-      emit()
-    })
+    void refreshSnapshotIndex()
   }, [rev])
-  return useSyncExternalStore(subscribe, () => snapRev)
+  return useSnapshotRev()
 }
 
 /* ------------------------------------------------------------------ */

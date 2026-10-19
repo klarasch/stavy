@@ -615,7 +615,6 @@
   border: 1.5px dashed var(--ps-border); color: var(--ps-faint); font-size: 11.5px;
 }
 .ps-shot-missing { background: var(--ps-area-bg); box-shadow: 0 0 0 1px var(--ps-area-border); }
-.ps-capture { height: 24px; padding: 0 9px; font-size: 11px; border: 1px solid var(--ps-border); background: var(--ps-glass-strong); }
 /* Markdown on a board: a quiet paper card */
 .ps-board-md { background: var(--ps-glass-strong); border: 1px solid var(--ps-border); border-radius: 14px; padding: 22px 24px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 .ps-board-figure img { border-radius: 10px; box-shadow: 0 0 0 1px var(--ps-border); background: #fff; }
