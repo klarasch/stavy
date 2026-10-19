@@ -6,6 +6,8 @@ import { frameDoc, setWireframe } from "../frame"
 import type { AnnotationDef } from "../types"
 import { cn } from "../cn"
 import { useComments } from "../comments/store"
+import { useScan, useSnapshotRev } from "../snapshots"
+import { RotateCcw } from "../icons"
 
 const EMPTY_CHIPS: string[] = []
 
@@ -36,6 +38,7 @@ export const InstanceCard = memo(function InstanceCard({
   frame,
   chips = EMPTY_CHIPS,
   wireframe = false,
+  label,
 }: {
   pageId: string
   dims: Record<string, string>
@@ -54,7 +57,10 @@ export const InstanceCard = memo(function InstanceCard({
   chips?: string[]
   /** Canvas wireframe mode: opened page should keep it on (SPEC.md §3 deep links). */
   wireframe?: boolean
+  /** A title under the card (a state's name, a flow step's title). */
+  label?: string
 }) {
+  useSnapshotRev() // re-render when an on-demand scan refreshed the index
   const vp = frame ?? pageViewport()
   const FW = vp.width
   const FH = vp.height
@@ -76,6 +82,8 @@ export const InstanceCard = memo(function InstanceCard({
   const h = Math.round(FH * scale)
   const url = href ?? pageUrl(pageId, dims, wireframe ? { w: "1" } : undefined)
   const key = instanceKey(pageId, dims)
+  const scan = useScan([key])
+  const missing = !entry || snapErr
 
   // Hover with a short delay in, a grace period out — sweeping the pointer
   // across the canvas must not mount a frame per card it crosses.
@@ -123,8 +131,23 @@ export const InstanceCard = memo(function InstanceCard({
           className="ps-card-frame relative rounded-lg bg-white overflow-hidden cursor-zoom-in transition-[box-shadow,transform] duration-150 hover:-translate-y-px"
           style={{ width: w, height: h }}
         >
-          <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium" style={{ color: "var(--ps-faint)" }}>
-            {page?.label ?? pageId}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-2 text-center text-[11px] font-medium" style={{ color: "var(--ps-faint)" }}>
+            <span className="line-clamp-2">{label ?? page?.label ?? pageId}</span>
+            {missing && scan.writable && (
+              <button
+                type="button"
+                className="ps-btn ps-capture"
+                data-ps-ui
+                disabled={scan.busy}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  scan.start()
+                }}
+              >
+                {scan.busy ? <span className="ps-spinner" /> : null}
+                {scan.busy ? "Capturing" : "Capture"}
+              </button>
+            )}
           </div>
           {live && page && (
             <iframe
@@ -140,6 +163,22 @@ export const InstanceCard = memo(function InstanceCard({
           {snapshot && !snapErr && <img className="ps-card-img" src={snapshot} alt="" draggable={false} onError={() => setSnapErr(true)} />}
           {/* The shield: cards are static previews — click opens the player; the inspector hit-tests through it. */}
           <div className="ps-card-shield" onClick={() => navigate(url)} />
+          {scan.writable && !missing && (
+            <button
+              type="button"
+              className="ps-card-refresh"
+              data-ps-ui
+              data-busy={scan.busy ? "true" : undefined}
+              title={scan.busy ? "Capturing a fresh snapshot…" : "Refresh this snapshot"}
+              disabled={scan.busy}
+              onClick={(e) => {
+                e.stopPropagation()
+                scan.start()
+              }}
+            >
+              {scan.busy ? <span className="ps-spinner" /> : <RotateCcw />}
+            </button>
+          )}
         </div>
         {commentCount > 0 && (
           <span className="ps-cbubble ps-cbubble-badge" data-ps-ui title={`${commentCount} open comment(s)`}>{commentCount}</span>
@@ -175,6 +214,9 @@ export const InstanceCard = memo(function InstanceCard({
           ))}
         </div>
       )}
+      {label && (
+        <div className="text-[11.5px] font-medium leading-snug px-0.5">{label}</div>
+      )}
       {note && (
         <p className="text-[11px] leading-snug px-0.5" style={{ color: "var(--ps-muted)" }}>
           {note}
@@ -194,5 +236,6 @@ export const InstanceCard = memo(function InstanceCard({
   a.scope === b.scope &&
   (a.chips ?? EMPTY_CHIPS).join("|") === (b.chips ?? EMPTY_CHIPS).join("|") &&
   a.wireframe === b.wireframe &&
+  a.label === b.label &&
   a.frame?.width === b.frame?.width &&
   a.frame?.height === b.frame?.height)

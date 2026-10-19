@@ -22,6 +22,8 @@ import {
   workspaceKey,
   workspaceCarry,
   pageInWorkspace,
+  stateLabel,
+  STATE_DIM,
 } from "./manifest"
 import { TourOverlay, stepUrl } from "./overlays/TourOverlay"
 import { AnnotationOverlay } from "./overlays/AnnotationOverlay"
@@ -33,6 +35,8 @@ import { CommentsPanel } from "./comments/CommentsPanel"
 import { useComments } from "./comments/store"
 import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt, navigateFrame } from "./frame"
 
+/** Docked, full-width bottom bar unless the manifest sets `viewer.toolbar`. */
+const DEFAULT_ANCHOR: ToolbarAnchor = "bar-bottom"
 const ANCHORS: ToolbarAnchor[] = ["bottom", "top", "bottom-left", "bottom-right", "top-left", "top-right", "bar-bottom", "bar-top"]
 
 /** Nearest dock anchor for a pointer position: thirds horizontally, halves vertically. */
@@ -116,8 +120,15 @@ export function PageView() {
 
   /* ---- the frame follows the viewer URL, and the viewer follows the frame ---- */
   const desired = page ? appUrl(page, dims) : null
+  // A tour step reached by the app itself (a click opened a menu, moved on a
+  // page) changes the viewer URL but must not drive the frame: whatever the
+  // app now shows IS the step. One-shot, keyed by the URL it was set for.
+  const holdFrame = useRef<string | null>(null)
   useEffect(() => {
     if (!iframe || !page || !desired) return
+    const held = holdFrame.current
+    holdFrame.current = null
+    if (held === desired) return
     const cur = frameHref(iframe)
     const m = cur ? matchAppUrl(cur) : null
     // Already showing this exact state (e.g. we just followed the frame there): don't reload.
@@ -140,6 +151,9 @@ export function PageView() {
         return
       }
       setDrift(null)
+      // A tour keeps running while the app moves under it (the click on a step's
+      // target lands on a registered state before the tour has advanced).
+      if (scenario) return
       if (m.page.id !== page.id || !dimsEqual(m.dims, dims)) {
         // The user navigated inside the prototype onto a registered state: follow it.
         const { tour: _t, ts: _s, ...rest } = carry as Record<string, string>
@@ -178,13 +192,40 @@ export function PageView() {
   const pageScenarios = manifest.scenarios.filter((s) => s.steps.some((st) => st.page === page.id))
   const exitUrl = pageUrl(page.id, dims, carry)
 
+  /** Tour: go to step `idx` by changing `ts` alone; the step supplies its own dims, the frame is left as the app made it. */
+  const advanceTourInPlace = (idx: number) => {
+    const st = scenario?.steps[idx]
+    const sp2 = new URLSearchParams(sp)
+    for (const k of [...sp2.keys()]) if (k.startsWith("d_") && !isWorkspaceDim(k.slice(2))) sp2.delete(k)
+    sp2.set("ts", String(idx))
+    const np = st && getPage(st.page)
+    if (np) holdFrame.current = appUrl(np, resolveDims(np, st.dims))
+    if (np) sp2.set("p", np.id)
+    setSp(sp2)
+  }
+  /** Tour: leave it with the app exactly as it is (the state becomes the viewer's own). */
+  const exitTourInPlace = () => {
+    const href = frameHref(iframe)
+    const m = href ? matchAppUrl(href) : null
+    const sp2 = new URLSearchParams(sp)
+    sp2.delete("tour")
+    sp2.delete("ts")
+    for (const k of [...sp2.keys()]) if (k.startsWith("d_") && !isWorkspaceDim(k.slice(2))) sp2.delete(k)
+    const tp = m ? m.page : page
+    const td = m ? m.dims : dims
+    holdFrame.current = appUrl(tp, resolveDims(tp, td))
+    sp2.set("p", tp.id)
+    for (const [d, v] of Object.entries(td)) if (!isWorkspaceDim(d)) sp2.set(`d_${d}`, v)
+    setSp(sp2)
+  }
+
   // Toolbar dock: manifest default, overridable per link (?tb=) and by dragging the grip.
   const tbParam = sp.get("tb") as ToolbarAnchor | null
-  const anchor: ToolbarAnchor = tbParam && ANCHORS.includes(tbParam) ? tbParam : (manifest.viewer?.toolbar ?? "bottom")
+  const anchor: ToolbarAnchor = tbParam && ANCHORS.includes(tbParam) ? tbParam : (manifest.viewer?.toolbar ?? DEFAULT_ANCHOR)
   const isBar = anchor.startsWith("bar-")
   const barSide = anchor === "bar-top" || anchor === "top" || anchor.startsWith("top-") ? "top" : "bottom"
   const setAnchor = (next: ToolbarAnchor) => {
-    const def = manifest.viewer?.toolbar ?? "bottom"
+    const def = manifest.viewer?.toolbar ?? DEFAULT_ANCHOR
     setParam("tb", next === def ? null : next)
   }
   // Float ⇄ bar keeps the vertical side; a bar shrinks the prototype viewport instead of covering it.
@@ -222,6 +263,8 @@ export function PageView() {
     }
     setParam(`d_${dimId}`, isDefault ? null : value)
   }
+  // Named states are page-scoped; every other axis resolves through the manifest.
+  const vLabel = (d: string, v: string) => (d === STATE_DIM ? stateLabel(page, v) : valueLabel(d, v))
   const defaultOf = (d: string) => page.defaults?.[d] ?? page.dimensions[d][0]
   const changed = dimEntries.filter(([d]) => dims[d] !== defaultOf(d))
   const inlineDims = dimEntries.length <= 3
@@ -277,7 +320,7 @@ export function PageView() {
           <CommentLayer iframe={iframe} doc={doc} pageId={page.id} dims={dims} placing={placing} onPlaced={() => setPlacing(false)} openId={openCommentId} onOpenChange={(id) => setParam("c", id)} />
         </div>
         {annotMode && page.annotations && <AnnotationOverlay annotations={page.annotations} iframe={iframe} doc={doc} mode={annotMode} />}
-        {scenario && <TourOverlay scenario={scenario} stepIdx={tourStep} iframe={iframe} doc={doc} exitUrl={exitUrl} carry={carry} />}
+        {scenario && <TourOverlay scenario={scenario} stepIdx={tourStep} iframe={iframe} doc={doc} exitUrl={exitUrl} carry={carry} onAdvanceInPlace={advanceTourInPlace} onExitInPlace={exitTourInPlace} />}
         {inspectOn && !hidden && shield && <Inspector host={shield} hit={hit} onClose={() => setParam("i", null)} />}
       </div>
 
@@ -289,7 +332,7 @@ export function PageView() {
           style={drag ? { transform: `${anchor === "bottom" || anchor === "top" ? "translateX(-50%) " : ""}translate(${drag.dx}px, ${drag.dy}px)` } : undefined}
         >
           {dimPanel && (
-            <div className="ps ps-glass-strong rounded-2xl p-3.5 mb-1" style={{ width: 560, maxWidth: "94vw" }}>
+            <div className="ps ps-glass-strong ps-dimpanel rounded-2xl p-3.5 mb-1" style={{ width: 560, maxWidth: "94vw" }}>
               <div className="flex items-center gap-2 mb-3">
                 <SlidersHorizontal className="size-3.5" style={{ color: "var(--ps-muted)" }} />
                 <span className="font-semibold text-[12.5px]">Dimensions</span>
@@ -307,7 +350,7 @@ export function PageView() {
                     <div className="ps-seg">
                       {values.map((v) => (
                         <button key={v} data-on={dims[dimId] === v ? "true" : undefined} onClick={() => setParam(`d_${dimId}`, v)}>
-                          {valueLabel(dimId, v)}
+                          {vLabel(dimId, v)}
                         </button>
                       ))}
                     </div>
@@ -316,8 +359,8 @@ export function PageView() {
               </div>
             </div>
           )}
-          {!isBar && <MockNotice />}
-          <div className="ps ps-glass rounded-2xl pl-1 pr-1.5 py-1 flex items-center gap-0.5">
+          <div className="ps ps-glass ps-dock-pill rounded-2xl">
+          <div className="ps-dock-row">
             {!isBar && (
               <span className="ps-grip" title="Drag to move the toolbar" onPointerDown={startDrag}>
                 <GripVertical className="size-3.5" />
@@ -356,16 +399,16 @@ export function PageView() {
                 )}
               </>
             )}
-            <PsDivider />
+            {dimEntries.length > 0 && <PsDivider />}
 
-            {/* Dimensions: inline pills up to 3 axes, a panel beyond that */}
+            {/* Dimensions (or named states): inline pills up to 3 axes, a panel beyond that */}
             {inlineDims ? (
               dimEntries.map(([dimId, values]) => (
                 <PsSelect
                   key={dimId}
                   prefix={dimensionLabel(dimId)}
                   value={dims[dimId]}
-                  options={values.map((v) => ({ value: v, label: valueLabel(dimId, v) }))}
+                  options={values.map((v) => ({ value: v, label: vLabel(dimId, v) }))}
                   onChange={(v) => setParam(`d_${dimId}`, v)}
                 />
               ))
@@ -375,7 +418,7 @@ export function PageView() {
                 {dimEntries.length} dimensions
                 {changed.length > 0 && (
                   <span className="ps-chip ps-chip-sm" style={{ marginLeft: 2 }}>
-                    {changed.map(([d]) => valueLabel(d, dims[d])).join(" · ")}
+                    {changed.map(([d]) => vLabel(d, dims[d])).join(" · ")}
                   </span>
                 )}
               </PsButton>
@@ -439,7 +482,9 @@ export function PageView() {
             <ThemeToggle tipBelow={barSide === "top"} />
             <HelpButton tipBelow={barSide === "top"} />
           </div>
-          {isBar && <MockNotice className="ps-dock-notice" />}
+          {/* Part of the toolbar, never a label of its own: the bar's right end, or the pill's footer. */}
+          <MockNotice className="ps-dock-notice" />
+          </div>
         </div>
       )}
       {drag && <DockTargetGhost anchor={drag.target} />}

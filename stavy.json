@@ -5,9 +5,7 @@
     "name": "Orbit",
     "description": "Demo product: team expense tracking & approvals. Employees submit expenses, managers approve, finance reimburses."
   },
-  "viewer": {
-    "toolbar": "bottom"
-  },
+  "viewer": {},
   "strings": "/src/demo/strings.json",
   "dimensions": [
     {

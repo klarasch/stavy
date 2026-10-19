@@ -324,6 +324,27 @@
   color: var(--ps-faint); font-size: 11px; cursor: pointer; transition: border-color .12s, color .12s;
 }
 .ps-cell-empty:hover { border-color: var(--ps-focus); color: var(--ps-focus); }
+/* ---- page status chip (draft / review / ready) ---- */
+.ps-status-draft { color: var(--ps-pin); border-color: color-mix(in srgb, var(--ps-pin) 45%, transparent); background: color-mix(in srgb, var(--ps-pin) 12%, transparent); }
+.ps-status-review { color: var(--ps-focus); border-color: color-mix(in srgb, var(--ps-focus) 40%, transparent); background: var(--ps-focus-soft); }
+.ps-status-ready { color: var(--ps-comment); border-color: color-mix(in srgb, var(--ps-comment) 40%, transparent); background: var(--ps-comment-soft); }
+/* ---- map: state rows, flow lanes ---- */
+.ps-state-label { font-size: 11.5px; font-weight: 600; line-height: 1.25; }
+.ps-lane-toggle { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; border: 0; background: transparent; color: var(--ps-muted); cursor: pointer; }
+.ps-lane-toggle:hover { background: var(--ps-hover); color: var(--ps-fg); }
+.ps-lane-toggle svg { width: 14px; height: 14px; transition: transform .12s; }
+.ps-lane-toggle[data-open="true"] svg { transform: rotate(90deg); }
+/* ---- on-demand snapshots ---- */
+.ps-card-refresh {
+  position: absolute; top: 5px; right: 5px; z-index: 2; width: 22px; height: 22px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--ps-border); background: var(--ps-glass-solid); color: var(--ps-btn-fg); cursor: pointer; opacity: 0; transition: opacity .12s;
+}
+.ps-card-refresh svg { width: 12px; height: 12px; }
+.ps-card-frame:hover .ps-card-refresh, .ps-card-refresh[data-busy="true"], .ps-card-refresh:focus-visible { opacity: 1; }
+/* Bottom edge, not the middle: a click in the middle of a card still opens the player. */
+.ps-capture { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); z-index: 2; height: 22px; font-size: 11px; padding: 0 9px; border: 1px solid var(--ps-border); background: var(--ps-glass-solid); }
+.ps-spinner { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--ps-border); border-top-color: var(--ps-muted); animation: ps-spin .7s linear infinite; display: inline-block; }
+@keyframes ps-spin { to { transform: rotate(360deg); } }
 /* ---- anatomy outlines ---- */
 .ps-anat-box { position: absolute; border: 1.5px solid var(--ps-focus); border-radius: 4px; background: var(--ps-focus-soft); opacity: .55; pointer-events: none; }
 .ps-anat-tag {
@@ -494,6 +515,21 @@
 .ps-dock[data-anchor="bar-top"] { top: 0; border-bottom: 1px solid var(--ps-border); }
 .ps-dock[data-anchor^="bar-"] > .ps-glass { background: transparent; border: 0; box-shadow: none; backdrop-filter: none; }
 .ps-dock[data-anchor^="bar-"] .ps-dock-notice { margin-left: auto; }
+/* The toolbar is one object: buttons row + the "mock only" notice. Floating, the notice is the pill's footer. */
+.ps-dock-pill { display: flex; flex-direction: column; align-items: stretch; max-width: 96vw; }
+.ps-dock-row { display: flex; align-items: center; gap: 2px; padding: 4px 6px 4px 4px; min-width: 0; }
+.ps-dock-pill > .ps-dock-notice { justify-content: center; padding: 3px 12px 5px; border-top: 1px solid var(--ps-border); white-space: nowrap; }
+.ps-dock[data-anchor^="bar-"] > .ps-dock-pill { flex: 1; flex-direction: row; align-items: center; min-width: 0; }
+.ps-dock[data-anchor^="bar-"] .ps-dock-row { padding: 0; }
+/* leave room for the always-on eye toggle at the bottom-right corner */
+.ps-dock[data-anchor^="bar-"] { padding-right: 46px; }
+.ps-dock[data-anchor^="bar-"] > .ps-dock-pill > .ps-dock-notice { margin-left: auto; padding: 0 2px 0 12px; border-top: 0; flex-shrink: 0; }
+@media (max-width: 1280px) { .ps-dock[data-anchor^="bar-"] .ps-notice-hint { display: none; } }
+@media (max-width: 1100px) { .ps-dock[data-anchor^="bar-"] .ps-notice-long { display: none; } }
+@media (max-width: 900px) { .ps-dock[data-anchor^="bar-"] .ps-dock-row { overflow-x: auto; scrollbar-width: none; } }
+/* In a bar the dimensions panel opens above (or below) it instead of squeezing into the row. */
+.ps-dock[data-anchor="bar-bottom"] > .ps-dimpanel { position: absolute; bottom: calc(100% + 8px); left: 10px; }
+.ps-dock[data-anchor="bar-top"] > .ps-dimpanel { position: absolute; top: calc(100% + 8px); left: 10px; }
 .ps-viewport[data-bar="bottom"] { height: calc(100% - 46px); }
 .ps-viewport[data-bar="top"] { height: calc(100% - 46px); margin-top: 46px; }
 

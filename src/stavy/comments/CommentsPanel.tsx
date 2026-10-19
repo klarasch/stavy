@@ -5,11 +5,13 @@ import { PsButton, Kbd } from "../chrome"
 import { getPage, pageUrl } from "../manifest"
 import { useComments, shareUrl, toMarkdown, decodePayload, describeAnchor, timeAgo, downloadText } from "./store"
 import { manifest } from "../manifest"
+import { useDev } from "../dev"
 
 /** The list of all comments in the workspace, with share / import actions. */
 export function CommentsPanel({ onClose, onAdd, wireframe }: { onClose: () => void; onAdd?: () => void; wireframe?: boolean }) {
   const { comments, importMany, clearAll, author, setAuthor } = useComments()
   const navigate = useNavigate()
+  const writable = !!useDev()?.writable
   const [filter, setFilter] = useState<"open" | "resolved" | "all">("open")
   const [flash, setFlash] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
@@ -138,9 +140,9 @@ export function CommentsPanel({ onClose, onAdd, wireframe }: { onClose: () => vo
           <PsButton
             icon
             className="h-7 ml-auto"
-            tip="Delete all comments in this browser"
+            tip={writable ? "Delete all comments (removes them from comments.json)" : "Delete all comments in this browser"}
             onClick={() => {
-              if (confirm("Delete all comments stored in this browser?")) clearAll()
+              if (confirm(writable ? "Delete all comments from stavy-content/comments.json?" : "Delete all comments stored in this browser?")) clearAll()
             }}
             disabled={comments.length === 0}
           >

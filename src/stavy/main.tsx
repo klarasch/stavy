@@ -10,6 +10,26 @@ import { StavyApp } from "./StavyApp"
  * (same origin). It loads `stavy.json` at runtime and renders the prototype's
  * URLs — it never imports the prototype.
  */
+// The router writes `/stavy?p=…` (no slash) when it updates the query, and a
+// dev server (or a host without a redirect) answers a reload of that with a
+// 404. Keep the directory form: every URL the viewer writes ends in `/`.
+if (!/\.html$/.test(location.pathname)) {
+  const dir = location.pathname.replace(/\/+$/, "")
+  for (const m of ["pushState", "replaceState"] as const) {
+    const orig = history[m].bind(history)
+    history[m] = (state: unknown, title: string, url?: string | URL | null) => {
+      if (dir && url != null) {
+        const u = new URL(String(url), location.href)
+        if (u.pathname === dir) {
+          u.pathname = `${dir}/`
+          url = u.pathname + u.search + u.hash
+        }
+      }
+      orig(state, title, url)
+    }
+  }
+}
+
 const rootEl = document.getElementById("stavy-root")!
 const root = createRoot(rootEl)
 const override = rootEl.getAttribute("data-manifest") || new URLSearchParams(location.search).get("manifest")
