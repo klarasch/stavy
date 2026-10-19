@@ -514,6 +514,21 @@
 .ps-dock[data-anchor="bar-top"] { top: 0; border-bottom: 1px solid var(--ps-border); }
 .ps-dock[data-anchor^="bar-"] > .ps-glass { background: transparent; border: 0; box-shadow: none; backdrop-filter: none; }
 .ps-dock[data-anchor^="bar-"] .ps-dock-notice { margin-left: auto; }
+/* The toolbar is one object: buttons row + the "mock only" notice. Floating, the notice is the pill's footer. */
+.ps-dock-pill { display: flex; flex-direction: column; align-items: stretch; max-width: 96vw; }
+.ps-dock-row { display: flex; align-items: center; gap: 2px; padding: 4px 6px 4px 4px; min-width: 0; }
+.ps-dock-pill > .ps-dock-notice { justify-content: center; padding: 3px 12px 5px; border-top: 1px solid var(--ps-border); white-space: nowrap; }
+.ps-dock[data-anchor^="bar-"] > .ps-dock-pill { flex: 1; flex-direction: row; align-items: center; min-width: 0; }
+.ps-dock[data-anchor^="bar-"] .ps-dock-row { padding: 0; }
+/* leave room for the always-on eye toggle at the bottom-right corner */
+.ps-dock[data-anchor^="bar-"] { padding-right: 46px; }
+.ps-dock[data-anchor^="bar-"] > .ps-dock-pill > .ps-dock-notice { margin-left: auto; padding: 0 2px 0 12px; border-top: 0; flex-shrink: 0; }
+@media (max-width: 1280px) { .ps-dock[data-anchor^="bar-"] .ps-notice-hint { display: none; } }
+@media (max-width: 1100px) { .ps-dock[data-anchor^="bar-"] .ps-notice-long { display: none; } }
+@media (max-width: 900px) { .ps-dock[data-anchor^="bar-"] .ps-dock-row { overflow-x: auto; scrollbar-width: none; } }
+/* In a bar the dimensions panel opens above (or below) it instead of squeezing into the row. */
+.ps-dock[data-anchor="bar-bottom"] > .ps-dimpanel { position: absolute; bottom: calc(100% + 8px); left: 10px; }
+.ps-dock[data-anchor="bar-top"] > .ps-dimpanel { position: absolute; top: calc(100% + 8px); left: 10px; }
 .ps-viewport[data-bar="bottom"] { height: calc(100% - 46px); }
 .ps-viewport[data-bar="top"] { height: calc(100% - 46px); margin-top: 46px; }
 

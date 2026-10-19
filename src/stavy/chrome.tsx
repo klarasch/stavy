@@ -313,9 +313,11 @@ export function MockNotice({ className }: { className?: string }) {
     <div className={cn("ps flex items-center gap-3 select-none", className)} style={{ color: "var(--ps-muted)", fontSize: 11 }}>
       <span className="flex items-center gap-1.5">
         <span className="inline-block size-1.5 rounded-full" style={{ background: "var(--ps-pin)" }} />
-        Mock only — not a real product
+        <span>
+          Mock only<span className="ps-notice-long"> — not a real product</span>
+        </span>
       </span>
-      <span className="flex items-center gap-1.5" style={{ color: "var(--ps-faint)" }}>
+      <span className="ps-notice-hint flex items-center gap-1.5" style={{ color: "var(--ps-faint)" }}>
         <Keys keys={HIDE_KEY_LABEL} />
         <span>or</span>
         <Keys keys={HIDE_KEY_ALT} />
