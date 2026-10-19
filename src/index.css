@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Authored boards and docs are content, not code: editing them must not reload the page. */
+@source not "../stavy-content";
 
 :root {
   --radius: 0.625rem;

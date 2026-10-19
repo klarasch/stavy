@@ -21,6 +21,7 @@ import { CanvasToc } from "./CanvasToc"
 import { SiteMap } from "./SiteMap"
 import { BoardCard } from "./BoardCard"
 import { CoverageBoard } from "./CoverageBoard"
+import { PageSwitcher } from "../boards/PageSwitcher"
 import { Inspector, type FrameHit } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
 import { useComments } from "../comments/store"
@@ -683,6 +684,8 @@ export function CanvasPage() {
             <span className="font-semibold text-[13px]">Stavy</span>
             <span style={{ color: "var(--ps-faint)" }}>/</span>
             <span className="font-medium text-[13px]">{manifest.product.name}</span>
+            <span style={{ color: "var(--ps-faint)" }}>/</span>
+            <PageSwitcher current={{ kind: "map" }} />
             <Chip sm>{manifest.pages.length} screens</Chip>
             {workspaceDimensions.length > 0 && (
               <>

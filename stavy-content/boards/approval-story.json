@@ -1,0 +1,77 @@
+{
+  "title": "Approval story",
+  "description": "How an expense gets from a manager's queue to approved: the walkthrough, the rules behind each button, and the moments where the screen changes.",
+  "status": "review",
+  "items": [
+    {
+      "id": "intro",
+      "type": "markdown",
+      "w": 440,
+      "md": "## What this board covers\n\nA manager opens the queue, picks an expense and decides. Everything here is a **real state** of the prototype: click any card to open it, or play the flow.\n\n- The walkthrough: *Manager approves*\n- The approval rules, from [the spec doc](?doc=approval-rules)\n- The action panel at every lifecycle step"
+    },
+    {
+      "id": "flow",
+      "type": "flow",
+      "flow": "manager-approves",
+      "title": "The walkthrough",
+      "perRow": 4,
+      "w": 1040
+    },
+    {
+      "id": "rules",
+      "type": "markdown",
+      "title": "Rules",
+      "src": "docs/approval-rules.md#approval-limits",
+      "w": 460
+    },
+    {
+      "id": "q-delegation",
+      "type": "note",
+      "color": "yellow",
+      "text": "**Open question:** can a manager delegate approvals while on leave? Out of scope for v1, but the queue should not *look* like it supports it.",
+      "author": "Design"
+    },
+    {
+      "id": "moments",
+      "type": "section",
+      "title": "The action panel, step by step",
+      "note": "Cropped to the ApprovalActions card, so the buttons read at board size.",
+      "layout": "row",
+      "items": [
+        { "id": "m-draft", "type": "screen", "screen": "expense-detail", "dims": { "role": "employee", "lifecycle": "draft" }, "crop": "ApprovalActions", "title": "Draft · employee", "note": "Submit, or keep editing.", "w": 300 },
+        { "id": "m-submitted", "type": "screen", "screen": "expense-detail", "dims": { "role": "manager", "lifecycle": "submitted" }, "crop": "ApprovalActions", "title": "Submitted · manager", "note": "Three ways out: approve, reject, ask for changes.", "w": 300 },
+        { "id": "m-review", "type": "screen", "screen": "expense-detail", "dims": { "role": "manager", "lifecycle": "in-review" }, "crop": "ApprovalActions", "title": "In review · manager", "note": "Changes requested once: no second request.", "w": 300 },
+        { "id": "m-approved", "type": "screen", "screen": "expense-detail", "dims": { "role": "finance", "lifecycle": "approved" }, "crop": "ApprovalActions", "title": "Approved · finance", "note": "Finance pays it out.", "w": 300 }
+      ]
+    },
+    {
+      "id": "reject",
+      "type": "screen",
+      "screen": "expense-detail",
+      "dims": { "role": "manager", "lifecycle": "submitted", "overlay": "reject-confirm" },
+      "title": "Rejecting asks first",
+      "note": "The confirm says what happens next: the employee is told and can resubmit.",
+      "w": 420
+    },
+    {
+      "id": "lifecycle",
+      "type": "image",
+      "src": "assets/approval-lifecycle.svg",
+      "title": "Lifecycle",
+      "alt": "Draft, submitted, in review, approved, reimbursed; rejected branches off submitted and in review",
+      "w": 760,
+      "callouts": [
+        { "x": 0.33, "y": 0.2, "title": "Manager decides", "note": "Approve, reject or request changes." },
+        { "x": 0.75, "y": 0.2, "title": "Finance pays", "note": "Only approved expenses can be reimbursed." }
+      ]
+    },
+    {
+      "id": "edge",
+      "type": "note",
+      "color": "blue",
+      "text": "Edge case: an expense **over the limit** still lands in the manager's queue, flagged. Finance approves it second (not prototyped yet)."
+    },
+    { "id": "a1", "type": "arrow", "from": "flow", "to": "moments", "label": "step 3, closer", "style": "dashed" },
+    { "id": "a2", "type": "arrow", "from": "m-submitted", "to": "reject", "label": "Reject" }
+  ]
+}

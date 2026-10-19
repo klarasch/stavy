@@ -2,7 +2,8 @@ import { defineConfig, type Plugin } from "vite"
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "node:url"
-import { readFileSync, writeFileSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { join, sep } from "node:path"
 import Ajv2020 from "ajv/dist/2020.js"
 import addFormats from "ajv-formats"
 // @ts-expect-error — plain ES module shipped to adopters as-is
@@ -41,6 +42,13 @@ function stavyManifest(): Plugin {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const path = (req.url ?? "").split("?")[0]
+        // The viewer's router writes `/stavy?v=…` (no slash); a reload of that must
+        // land on the viewer, not on the prototype's SPA fallback.
+        if (path === `${server.config.base.replace(/\/$/, "")}/stavy`) {
+          res.statusCode = 302
+          res.setHeader("location", `${path}/${(req.url ?? "").slice(path.length)}`)
+          return res.end()
+        }
         if (path.endsWith("/stavy.json")) {
           res.setHeader("content-type", "application/json")
           res.setHeader("cache-control", "no-store")
@@ -103,6 +111,13 @@ function stavyManifest(): Plugin {
     },
     generateBundle() {
       this.emitFile({ type: "asset", fileName: "stavy.json", source: readFileSync(manifestPath, "utf8") })
+      // Authored boards, docs and assets ship next to the manifest, so a static deploy shows them too.
+      const contentDir = fileURLToPath(new URL("./stavy-content", import.meta.url))
+      if (existsSync(contentDir))
+        for (const rel of readdirSync(contentDir, { recursive: true }) as string[]) {
+          const abs = join(contentDir, rel)
+          if (statSync(abs).isFile()) this.emitFile({ type: "asset", fileName: `stavy-content/${rel.split(sep).join("/")}`, source: readFileSync(abs) })
+        }
     },
   }
 }

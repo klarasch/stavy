@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 250" font-family="ui-sans-serif, system-ui, sans-serif" font-size="14">
+  <!-- Drawn by an agent for the Approval story board: the expense lifecycle. -->
+  <rect width="760" height="250" fill="#ffffff"/>
+  <defs>
+    <marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#71717a"/>
+    </marker>
+  </defs>
+  <g fill="#f4f4f5" stroke="#d4d4d8" stroke-width="1.5">
+    <rect x="20" y="80" width="110" height="44" rx="10"/>
+    <rect x="170" y="80" width="120" height="44" rx="10"/>
+    <rect x="330" y="80" width="110" height="44" rx="10"/>
+    <rect x="480" y="80" width="110" height="44" rx="10" fill="#dcfce7" stroke="#86efac"/>
+    <rect x="630" y="80" width="110" height="44" rx="10" fill="#dbeafe" stroke="#93c5fd"/>
+    <rect x="300" y="186" width="110" height="44" rx="10" fill="#fee2e2" stroke="#fca5a5"/>
+  </g>
+  <g fill="#18181b" text-anchor="middle" font-weight="600">
+    <text x="75" y="107">Draft</text>
+    <text x="230" y="107">Submitted</text>
+    <text x="385" y="107">In review</text>
+    <text x="535" y="107">Approved</text>
+    <text x="685" y="107">Reimbursed</text>
+    <text x="355" y="213">Rejected</text>
+  </g>
+  <g stroke="#71717a" stroke-width="1.5" fill="none" marker-end="url(#h)">
+    <path d="M130,102 H168"/>
+    <path d="M290,102 H328"/>
+    <path d="M440,102 H478"/>
+    <path d="M590,102 H628"/>
+    <path d="M250,124 V208 H298"/>
+    <path d="M385,124 V184"/>
+    <path d="M230,80 V48 H535 V78" stroke-dasharray="5 4"/>
+  </g>
+  <g fill="#71717a" font-size="12" text-anchor="middle">
+    <text x="383" y="40">approve straight away</text>
+    <text x="150" y="70">submit</text>
+    <text x="458" y="150">resubmit</text>
+  </g>
+  <path d="M410,208 C470,208 470,150 440,124" stroke="#a1a1aa" stroke-width="1.2" fill="none" stroke-dasharray="3 3" marker-end="url(#h)"/>
+</svg>
