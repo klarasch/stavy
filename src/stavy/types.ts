@@ -468,7 +468,7 @@ export interface TargetBox {
 }
 
 export interface SnapshotEntry {
-  /** PNG file name inside the snapshots folder */
+  /** Image file name inside the snapshots folder (.webp; .png when the browser could not encode webp) */
   file: string
   width: number
   height: number
@@ -482,7 +482,11 @@ export interface SnapshotEntry {
   absent?: string[]
   /** The scan scrolled the state's first required target into view before measuring/capturing (it was below the fold) */
   scrolled?: boolean
-  /** ISO timestamp of the scan */
+  /** A board item's `do` steps that could not be performed (the capture was taken anyway) */
+  actionFailed?: string[]
+  /** Content hash of the image; scan skips rewriting (and keeps `at`) when a re-capture is identical */
+  hash?: string
+  /** ISO timestamp the image last changed */
   at?: string
 }
 
