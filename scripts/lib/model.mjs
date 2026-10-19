@@ -112,3 +112,33 @@ export function snapshotStem(page, dims) {
 
 /** Where a workspace keeps its authored content (boards, docs, assets, comments), relative to stavy.json. */
 export const CONTENT_DIR = "stavy-content"
+
+/**
+ * Key of a *variant* capture: a state plus what a board item does to it
+ * before capturing (crop to a target, actions such as opening a menu, another
+ * viewport). Plain states keep their instanceKey; variants append a stable
+ * suffix, so scan and viewer agree without coordination.
+ *   variantKey("contacts", {_state:"loaded"}, { crop: "FilterMenu", do: [{ click: "Filter" }] })
+ *   → "contacts?_state=loaded#crop=FilterMenu&do=click:Filter"
+ */
+export function variantKey(pageId, dims, v = {}) {
+  const base = instanceKey(pageId, dims)
+  const parts = []
+  if (v.crop) parts.push(`crop=${v.crop}`)
+  if (v.do?.length) parts.push(`do=${v.do.map((a) => Object.entries(a).map(([k, x]) => `${k}:${x}`).join(",")).join(";")}`)
+  if (v.viewport) parts.push(`vp=${v.viewport.width}x${v.viewport.height}`)
+  return parts.length ? `${base}#${parts.join("&")}` : base
+}
+
+/** File stem for a variant capture: the state's stem plus a short hash of the variant. */
+export function variantStem(page, dims, v = {}) {
+  const key = variantKey(page.id, resolveDims(page, dims), v)
+  const hash = key.includes("#") ? `__v${fnv(key.slice(key.indexOf("#")))}` : ""
+  return `${snapshotStem(page, dims)}${hash}`
+}
+
+function fnv(s) {
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0
+  return h.toString(36)
+}

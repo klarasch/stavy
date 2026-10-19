@@ -8,3 +8,6 @@ export declare function statePath(page: PageDef, dims: Record<string, string>): 
 export declare function stateHref(page: PageDef, dims: Record<string, string>, appBase?: string): string | null
 export declare function instanceKey(pageId: string, dims: Record<string, string>): string
 export declare function snapshotStem(page: PageDef, dims: Record<string, string>): string
+export type Variant = { crop?: string; do?: Array<Record<string, string | number>>; viewport?: { width: number; height: number } }
+export declare function variantKey(pageId: string, dims: Record<string, string>, v?: Variant): string
+export declare function variantStem(page: PageDef, dims: Record<string, string>, v?: Variant): string
