@@ -164,13 +164,22 @@ export function CommentLayer({
 }
 
 function AuthorField({ author, onAuthor }: { author: string; onAuthor: (a: string) => void }) {
-  if (author) return null
+  // Asked once, remembered in the browser. The name counts as soon as it is
+  // typed (so ⌘↩ straight after it works), the field goes away on blur.
+  const [typing, setTyping] = useState(false)
+  if (author && !typing) return null
   return (
     <input
       className="ps-cinput mb-1.5"
       placeholder="Your name"
       autoFocus
-      onBlur={(e) => e.target.value.trim() && onAuthor(e.target.value.trim())}
+      defaultValue={author}
+      data-ps-author
+      onChange={(e) => {
+        setTyping(true)
+        onAuthor(e.target.value.trim())
+      }}
+      onBlur={() => setTyping(false)}
       onKeyDown={(e) => {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur()
       }}
@@ -207,7 +216,8 @@ function Composer({
   const [err, setErr] = useState<string | null>(null)
   useEffect(() => {
     if (author) ref.current?.focus()
-  }, [author])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const annotate = canWriteAnnotations && !!target
   const post = async () => {
     const v = ref.current?.value.trim()

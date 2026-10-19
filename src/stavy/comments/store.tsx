@@ -1,10 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
-import { manifest, getPage, valueLabel, dimensionLabel, pageUrl, canvasUrl, findTarget } from "../manifest"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { manifest, getPage, valueLabel, dimensionLabel, pageUrl, canvasUrl, findTarget, contentUrl } from "../manifest"
+import { useContentRev, useDev, writeContent } from "../dev"
 
 /* ------------------------------------------------------------------ */
 /* Comments: conversation about a prototype — separate from annotations  */
-/* (authored documentation in the manifest). Local-first: stored in the   */
-/* browser, shared as a link payload or Markdown (Slack-friendly).       */
+/* (authored documentation in the manifest). With the dev endpoint they   */
+/* live in stavy-content/comments.json (a file the team and agents can    */
+/* read, commit and review); without it they stay in the browser and are  */
+/* shared as a link payload or Markdown (Slack-friendly).                 */
 /* ------------------------------------------------------------------ */
 
 export interface CommentReply {
@@ -50,6 +53,8 @@ interface CommentsState {
 const Ctx = createContext<CommentsState | null>(null)
 const storageKey = () => `ps-comments:${manifest.product.name}`
 const AUTHOR_KEY = "ps-author"
+/** Where the comments live when the viewer can write (relative to stavy-content/). */
+export const COMMENTS_FILE = "comments.json"
 
 export const uid = () => Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4)
 
@@ -66,18 +71,126 @@ function load(): Comment[] {
   }
 }
 
-export function CommentsProvider({ children }: { children: ReactNode }) {
-  const [comments, setComments] = useState<Comment[]>(load)
-  const [author, setAuthorState] = useState(() => localStorage.getItem(AUTHOR_KEY) ?? "")
+/* ---- the file: ISO timestamps so it reads (and diffs) like text ---- */
+const iso = (t: number) => new Date(t).toISOString()
+const ms = (t: unknown) => (typeof t === "number" ? t : Date.parse(String(t)) || Date.now())
 
-  useEffect(() => localStorage.setItem(storageKey(), JSON.stringify(comments)), [comments])
+function toFile(list: Comment[]): string {
+  return JSON.stringify(
+    {
+      version: 1,
+      comments: list.map((c) => ({ ...c, createdAt: iso(c.createdAt), replies: c.replies.map((r) => ({ ...r, createdAt: iso(r.createdAt) })) })),
+    },
+    null,
+    2
+  )
+}
+
+function fromFile(text: string): Comment[] {
+  const raw = JSON.parse(text)
+  const list: any[] = Array.isArray(raw) ? raw : (raw.comments ?? [])
+  return list.map((c) => ({
+    ...c,
+    dims: c.dims ?? {},
+    createdAt: ms(c.createdAt),
+    resolved: !!c.resolved,
+    replies: (c.replies ?? []).map((r: any) => ({ ...r, createdAt: ms(r.createdAt) })),
+  }))
+}
+
+export function CommentsProvider({ children }: { children: ReactNode }) {
+  const [comments, setCommentsRaw] = useState<Comment[]>(load)
+  const [author, setAuthorState] = useState(() => localStorage.getItem(AUTHOR_KEY) ?? "")
+  const dev = useDev()
+  const rev = useContentRev()
+  const writable = !!dev?.writable
+
+  // File mode (the dev endpoint is there): comments.json is the source of
+  // truth. `dirty` marks a local edit not yet written; a reload from the file
+  // never overwrites one, and our own write is recognised and skipped.
+  const dirty = useRef(false)
+  const loaded = useRef(false)
+  const lastFile = useRef<string | null>(null)
+  const [saveTick, setSaveTick] = useState(0)
+  const setComments = useCallback((fn: (prev: Comment[]) => Comment[]) => {
+    dirty.current = true
+    setCommentsRaw(fn)
+  }, [])
+
+  // Browser mode: localStorage, in sync across tabs.
   useEffect(() => {
+    if (writable) return
+    localStorage.setItem(storageKey(), JSON.stringify(comments))
+  }, [comments, writable])
+  useEffect(() => {
+    if (writable) return
     const onStorage = (e: StorageEvent) => {
-      if (e.key === storageKey()) setComments(load())
+      if (e.key === storageKey()) setCommentsRaw(load())
     }
     window.addEventListener("storage", onStorage)
     return () => window.removeEventListener("storage", onStorage)
-  }, [])
+  }, [writable])
+
+  // File mode: load on start and whenever the content changes underneath us.
+  useEffect(() => {
+    if (!writable) {
+      loaded.current = false
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      let text: string | null = null
+      try {
+        const r = await fetch(contentUrl(COMMENTS_FILE), { cache: "no-store" })
+        if (r.ok) {
+          const t = await r.text()
+          // A dev server answers a missing file with index.html: only JSON counts.
+          if (/^\s*[{[]/.test(t)) text = t
+        }
+      } catch {
+        /* treated as no file */
+      }
+      if (cancelled) return
+      if (text === null) {
+        // No file yet: anything collected in the browser so far moves into it.
+        const first = !loaded.current
+        loaded.current = true
+        if (first && comments.length > 0) dirty.current = true
+        setSaveTick((t) => t + 1)
+        return
+      }
+      loaded.current = true
+      setSaveTick((t) => t + 1)
+      if (text === lastFile.current || dirty.current) return
+      try {
+        setCommentsRaw(fromFile(text))
+        lastFile.current = text
+      } catch (e) {
+        console.warn("stavy: comments.json is not valid, keeping what is on screen", e)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [writable, rev])
+
+  // File mode: save shortly after a local edit.
+  useEffect(() => {
+    if (!writable || !loaded.current || !dirty.current) return
+    const t = setTimeout(async () => {
+      const text = toFile(comments)
+      try {
+        dirty.current = false
+        lastFile.current = text
+        await writeContent(COMMENTS_FILE, text)
+      } catch (e) {
+        dirty.current = true
+        console.warn("stavy: could not save comments", e)
+      }
+    }, 250)
+    return () => clearTimeout(t)
+  }, [comments, writable, saveTick])
 
   const importMany = useCallback((list: Comment[]) => {
     let added = 0
@@ -94,7 +207,7 @@ export function CommentsProvider({ children }: { children: ReactNode }) {
       return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
     })
     return added
-  }, [])
+  }, [setComments])
 
   // Unpack a shared payload from the URL hash (#c=…), then drop the hash.
   useEffect(() => {
@@ -130,11 +243,11 @@ export function CommentsProvider({ children }: { children: ReactNode }) {
           p.map((c) => (c.id === id ? { ...c, replies: [...c.replies, { id: uid(), author, body, createdAt: Date.now() }] } : c))
         ),
       importMany,
-      clearAll: () => setComments([]),
+      clearAll: () => setComments(() => []),
       countFor: (page, dims) => comments.filter((c) => !c.resolved && c.page === page && dimsEqual(c.dims, dims)).length,
       forInstance: (page, dims) => comments.filter((c) => c.page === page && dimsEqual(c.dims, dims)),
     }),
-    [comments, author, importMany]
+    [comments, author, importMany, setComments]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
