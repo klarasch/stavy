@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react"
-import { canvasUrl, contentIndex, loadContentIndex, reloadSnapshotIndex } from "../manifest"
+import { contentIndex, loadContentIndex, reloadSnapshotIndex } from "../manifest"
 import { deleteContent, useContentRev, writeContent } from "../dev"
 import type { BoardFile, ContentIndex } from "../types"
 
@@ -75,9 +75,12 @@ const withView = (page: string, extra: Record<string, string>) => {
   return v ? { ...extra, v } : extra
 }
 
-export const mapHref = () => canvasUrl(withView("map", {}))
-export const boardHref = (id: string) => canvasUrl(withView(`b:${id}`, { b: id }))
-export const docHref = (id?: string) => canvasUrl(id ? { doc: id } : { doc: "" })
+// Search-only links: navigate() resolves them against the current path, so the
+// viewer stays wherever it is served (no basename doubling; deep links reload).
+const qs = (p: Record<string, string>) => `?${new URLSearchParams(p).toString()}`
+export const mapHref = () => qs(withView("map", {}))
+export const boardHref = (id: string) => qs(withView(`b:${id}`, { b: id }))
+export const docHref = (id?: string) => qs({ doc: id ?? "" })
 
 /* ------------------------------------------------------------------ */
 /* Index edits (dev endpoint only)                                     */

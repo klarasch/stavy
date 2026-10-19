@@ -1,7 +1,20 @@
 {
   "boards": [
-    { "id": "approval-story", "title": "Approval story", "description": "From the manager's queue to approved: flow, rules, and the action panel at every step." },
-    { "id": "status-filter", "title": "Status filter", "description": "One control in all its states, opened by the scan." }
+    {
+      "id": "approval-story",
+      "title": "Approval story",
+      "description": "From the manager's queue to approved: flow, rules, and the action panel at every step."
+    },
+    {
+      "id": "status-filter",
+      "title": "Status filter",
+      "description": "One control in all its states, opened by the scan."
+    }
   ],
-  "docs": [{ "id": "approval-rules", "title": "Approval rules" }]
+  "docs": [
+    {
+      "id": "approval-rules",
+      "title": "Approval rules"
+    }
+  ]
 }

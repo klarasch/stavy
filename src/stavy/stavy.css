@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Authored boards and docs are content, not code: saving one from the viewer must not reload it. */
+@source not "../../stavy-content";
 
 /* Stavy viewer stylesheet — the chrome only. The prototype lives in an iframe and never sees this file. */
 
@@ -622,7 +624,7 @@
 /* sticky notes: a hue mixed into the paper, so light and dark follow the theme */
 .ps-sticky, .ps-text-editor.is-note { --hue: #f5c518; }
 .ps-sticky {
-  padding: 14px 16px 16px; border-radius: 4px;
+  padding: 14px 16px 16px; border-radius: 4px; min-height: 120px;
   background: color-mix(in srgb, var(--hue) 26%, var(--ps-glass-solid)); color: var(--ps-fg);
   border: 1px solid color-mix(in srgb, var(--hue) 40%, transparent);
   font-size: 13px; line-height: 1.5; box-shadow: 0 1px 0 rgba(0,0,0,.03), 0 10px 22px -14px rgba(0,0,0,.45);

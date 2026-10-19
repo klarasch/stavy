@@ -89,7 +89,7 @@ export function BoardView() {
   const [, setHist] = useState(0)
   const lastSaved = useRef<string>("")
   const saveT = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved")
+  const [saveState, setSaveState] = useState<"idle" | "saved" | "saving" | "error">("idle")
   const busy = useRef(false) // mid-drag / resize / text edit: hold live reloads
 
   const save = useCallback(
@@ -401,7 +401,15 @@ export function BoardView() {
     } else {
       const c = toBoard(window.innerWidth / 2, window.innerHeight / 2)
       const w = itemWidth(item) ?? 400
-      Object.assign(item, { x: snap(c.x - w / 2), y: snap(c.y - 80) })
+      // Mid-screen, stepping down-right past anything already there, so a burst of additions never stacks.
+      let x = snap(c.x - w / 2)
+      let y = snap(c.y - 80)
+      const boxes = board.items.filter((i) => i.type !== "arrow").map((i) => layout.local[i.id]).filter(Boolean)
+      for (let n = 0; n < 40 && boxes.some((b) => x >= b.x - 8 && x < b.x + b.w && y >= b.y - 8 && y < b.y + b.h); n++) {
+        const hit = boxes.find((b) => x >= b.x - 8 && x < b.x + b.w && y >= b.y - 8 && y < b.y + b.h)!
+        x = snap(hit.x + hit.w + 32)
+      }
+      Object.assign(item, { x, y })
       commit({ ...board, items: [...board.items, item] })
     }
     setSelection(new Set([item.id]))
@@ -807,7 +815,7 @@ export function BoardView() {
                           <Redo2 />
                         </PsButton>
                         <span className={cn("ps-save", saveState === "error" && "is-error")} aria-live="polite">
-                          {saveState === "saving" ? "Saving…" : saveState === "error" ? "Not saved" : "Saved"}
+                          {saveState === "saving" ? "Saving…" : saveState === "error" ? "Not saved" : saveState === "saved" ? "Saved" : ""}
                         </span>
                       </>
                     )}
@@ -1041,6 +1049,18 @@ function TextEditor({ item, onPatch, onDone }: { item: Extract<BoardItem, { type
     if (v == null && initial != null) setV(initial)
   }, [initial, v])
   const ref = useRef<HTMLTextAreaElement>(null)
+  // Focus once the text is there — and after whatever opened the editor (a menu) let go of focus.
+  const ready = v != null
+  useEffect(() => {
+    if (!ready) return
+    const id = requestAnimationFrame(() => {
+      const el = ref.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [ready])
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return

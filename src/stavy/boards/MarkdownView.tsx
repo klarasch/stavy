@@ -66,6 +66,13 @@ export const Markdown = memo(function Markdown({
   }, [html])
 
   const onClick = (e: React.MouseEvent) => {
+    // Viewer links (`?b=board`, `?doc=id`) stay inside the app, no page load.
+    const local = (e.target as HTMLElement).closest<HTMLAnchorElement>('a[href^="?"]')
+    if (local && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault()
+      navigate(local.getAttribute("href")!)
+      return
+    }
     const a = (e.target as HTMLElement).closest<HTMLAnchorElement>("a[data-stavy-ref]")
     if (!a) return
     e.preventDefault()

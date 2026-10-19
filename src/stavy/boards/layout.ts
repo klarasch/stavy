@@ -49,6 +49,8 @@ export const SECTION_GAP = 28
 /** A balanced board reads like a page from orbit: aim the wrap width at this aspect ratio. */
 const TARGET_ASPECT = 16 / 10
 const MAX_AUTO_WIDTH = 4200
+/** A handful of items reads best as one row, not a column: never wrap narrower than this. */
+const MIN_AUTO_WIDTH = 1400
 
 export const isPlaced = (it: BoardItem) => it.type !== "arrow" && it.x != null && it.y != null
 
@@ -90,7 +92,7 @@ export function balancedWidth(sizes: Size[], gap: number): number {
   if (!sizes.length) return 0
   const widest = Math.max(...sizes.map((s) => s.w))
   const area = sizes.reduce((a, s) => a + (s.w + gap) * (s.h + gap), 0)
-  return Math.round(Math.min(MAX_AUTO_WIDTH, Math.max(widest, Math.sqrt(area * TARGET_ASPECT))))
+  return Math.round(Math.min(MAX_AUTO_WIDTH, Math.max(widest, MIN_AUTO_WIDTH, Math.sqrt(area * TARGET_ASPECT))))
 }
 
 interface Level {
