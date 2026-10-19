@@ -73,6 +73,10 @@ test("a long scenario label truncates instead of squeezing the step counter or c
   expect(closeBox!.x).toBeGreaterThanOrEqual(cardBox!.x)
   expect(closeBox!.x + closeBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 0.5)
 
+  // The close button is pinned to the card's top-right corner, whatever the header holds.
+  expect(closeBox!.y).toBeLessThan(cardBox!.y + 20)
+  expect(cardBox!.x + cardBox!.width - (closeBox!.x + closeBox!.width)).toBeLessThan(20)
+
   // The truncated chip still carries the full label for hover discovery.
   await expect(page.locator(".ps-chip", { hasText: /^Employee/ })).toHaveAttribute("title", longLabel)
 })
@@ -107,6 +111,61 @@ test("tour steps navigate the frame client-side, without reloading it", async ({
   expect(stamp).toBe(1)
   const navCount = await frame.evaluate((el: HTMLIFrameElement) => el.contentWindow?.performance.getEntriesByType("navigation").length)
   expect(navCount).toBe(1)
+})
+
+// The app gets the click. The tour used to swallow it and navigate the frame
+// to the next step's URL, so anything the click itself creates never existed.
+test("clicking a step's target reaches the app, and the tour advances without touching the frame", async ({ page }) => {
+  await page.goto("/stavy/?p=dashboard&d_role=manager&d_state=loaded&tour=manager-approves&ts=0")
+  const frame = page.locator("iframe.ps-frame")
+  await frame.evaluate((el: HTMLIFrameElement) => {
+    ;(el.contentWindow as unknown as { __stamp?: number }).__stamp = 1
+  })
+  const t0 = Date.now()
+  await page.frameLocator("iframe.ps-frame").locator('[data-proto="ViewQueueLink"]').click()
+  await expect(page).toHaveURL(/[?&]ts=1(&|$)/, { timeout: 1400 })
+  // In place: well before the 1.5 s fallback navigation could have run.
+  expect(Date.now() - t0).toBeLessThan(1400)
+  // The URL is the app's own (its link has no state param), not the viewer's rewrite of it.
+  const href = await frame.evaluate((el: HTMLIFrameElement) => el.contentWindow!.location.href)
+  expect(href).toMatch(/\/expenses\?role=manager$/)
+  expect(await frame.evaluate((el: HTMLIFrameElement) => (el.contentWindow as unknown as { __stamp?: number }).__stamp)).toBe(1)
+  await expect(page.locator(".ps-halo")).toBeVisible()
+})
+
+test("Next clicks the current target like a reviewer would", async ({ page }) => {
+  await page.goto("/stavy/?p=dashboard&d_role=manager&d_state=loaded&tour=manager-approves&ts=0")
+  await expect(page.locator(".ps-halo")).toBeVisible()
+  await page.getByRole("button", { name: "Next" }).click()
+  await expect(page).toHaveURL(/[?&]ts=1(&|$)/, { timeout: 1400 })
+  const href = await page.locator("iframe.ps-frame").evaluate((el: HTMLIFrameElement) => el.contentWindow!.location.href)
+  expect(href).toMatch(/\/expenses\?role=manager$/)
+})
+
+// A state the click itself creates (an open menu): the next step's target
+// exists only because the app got the click.
+test("a step whose target only exists after the click is reached without a reload", async ({ page }) => {
+  await page.route("**/stavy.json", async (route) => {
+    const manifest = await (await route.fetch()).json()
+    manifest.scenarios.push({
+      id: "open-menu",
+      label: "Open the filter",
+      steps: [
+        { page: "expenses", dims: { role: "manager", state: "loaded" }, target: "StatusFilter", title: "Open the filter" },
+        { page: "expenses", dims: { role: "manager", state: "loaded" }, target: "[role=option]", title: "Pick a status" },
+      ],
+    })
+    await route.fulfill({ json: manifest })
+  })
+  await page.goto("/stavy/?p=expenses&d_role=manager&d_state=loaded&tour=open-menu&ts=0")
+  await expect(page.locator(".ps-halo")).toBeVisible()
+  const t0 = Date.now()
+  await page.frameLocator("iframe.ps-frame").locator('[data-proto="StatusFilter"] button').click()
+  await expect(page).toHaveURL(/[?&]ts=1(&|$)/, { timeout: 1400 })
+  expect(Date.now() - t0).toBeLessThan(1400)
+  await expect(page.frameLocator("iframe.ps-frame").locator("[role=option]").first()).toBeVisible()
+  await expect(page.getByText("Pick a status")).toBeVisible()
+  await expect(page.locator(".ps-halo")).toBeVisible()
 })
 
 // Item 2 (adopter feedback): a deep link straight into a tour step, with no

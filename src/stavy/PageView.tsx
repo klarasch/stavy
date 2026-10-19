@@ -120,8 +120,15 @@ export function PageView() {
 
   /* ---- the frame follows the viewer URL, and the viewer follows the frame ---- */
   const desired = page ? appUrl(page, dims) : null
+  // A tour step reached by the app itself (a click opened a menu, moved on a
+  // page) changes the viewer URL but must not drive the frame: whatever the
+  // app now shows IS the step. One-shot, keyed by the URL it was set for.
+  const holdFrame = useRef<string | null>(null)
   useEffect(() => {
     if (!iframe || !page || !desired) return
+    const held = holdFrame.current
+    holdFrame.current = null
+    if (held === desired) return
     const cur = frameHref(iframe)
     const m = cur ? matchAppUrl(cur) : null
     // Already showing this exact state (e.g. we just followed the frame there): don't reload.
@@ -144,6 +151,9 @@ export function PageView() {
         return
       }
       setDrift(null)
+      // A tour keeps running while the app moves under it (the click on a step's
+      // target lands on a registered state before the tour has advanced).
+      if (scenario) return
       if (m.page.id !== page.id || !dimsEqual(m.dims, dims)) {
         // The user navigated inside the prototype onto a registered state: follow it.
         const { tour: _t, ts: _s, ...rest } = carry as Record<string, string>
@@ -181,6 +191,33 @@ export function PageView() {
   const cycleAnnot = () => setParam("a", annotMode === null ? "hover" : annotMode === "hover" ? "all" : null)
   const pageScenarios = manifest.scenarios.filter((s) => s.steps.some((st) => st.page === page.id))
   const exitUrl = pageUrl(page.id, dims, carry)
+
+  /** Tour: go to step `idx` by changing `ts` alone; the step supplies its own dims, the frame is left as the app made it. */
+  const advanceTourInPlace = (idx: number) => {
+    const st = scenario?.steps[idx]
+    const sp2 = new URLSearchParams(sp)
+    for (const k of [...sp2.keys()]) if (k.startsWith("d_") && !isWorkspaceDim(k.slice(2))) sp2.delete(k)
+    sp2.set("ts", String(idx))
+    const np = st && getPage(st.page)
+    if (np) holdFrame.current = appUrl(np, resolveDims(np, st.dims))
+    if (np) sp2.set("p", np.id)
+    setSp(sp2)
+  }
+  /** Tour: leave it with the app exactly as it is (the state becomes the viewer's own). */
+  const exitTourInPlace = () => {
+    const href = frameHref(iframe)
+    const m = href ? matchAppUrl(href) : null
+    const sp2 = new URLSearchParams(sp)
+    sp2.delete("tour")
+    sp2.delete("ts")
+    for (const k of [...sp2.keys()]) if (k.startsWith("d_") && !isWorkspaceDim(k.slice(2))) sp2.delete(k)
+    const tp = m ? m.page : page
+    const td = m ? m.dims : dims
+    holdFrame.current = appUrl(tp, resolveDims(tp, td))
+    sp2.set("p", tp.id)
+    for (const [d, v] of Object.entries(td)) if (!isWorkspaceDim(d)) sp2.set(`d_${d}`, v)
+    setSp(sp2)
+  }
 
   // Toolbar dock: manifest default, overridable per link (?tb=) and by dragging the grip.
   const tbParam = sp.get("tb") as ToolbarAnchor | null
@@ -283,7 +320,7 @@ export function PageView() {
           <CommentLayer iframe={iframe} doc={doc} pageId={page.id} dims={dims} placing={placing} onPlaced={() => setPlacing(false)} openId={openCommentId} onOpenChange={(id) => setParam("c", id)} />
         </div>
         {annotMode && page.annotations && <AnnotationOverlay annotations={page.annotations} iframe={iframe} doc={doc} mode={annotMode} />}
-        {scenario && <TourOverlay scenario={scenario} stepIdx={tourStep} iframe={iframe} doc={doc} exitUrl={exitUrl} carry={carry} />}
+        {scenario && <TourOverlay scenario={scenario} stepIdx={tourStep} iframe={iframe} doc={doc} exitUrl={exitUrl} carry={carry} onAdvanceInPlace={advanceTourInPlace} onExitInPlace={exitTourInPlace} />}
         {inspectOn && !hidden && shield && <Inspector host={shield} hit={hit} onClose={() => setParam("i", null)} />}
       </div>
 
