@@ -12,6 +12,7 @@
     "scan": "node scripts/scan.mjs",
     "check": "node scripts/validate.mjs --coverage --refs docs/PRD-118.md --require-schema",
     "init": "node scripts/init.mjs",
+    "migrate": "node scripts/migrate.mjs",
     "changelog": "node scripts/changelog.mjs",
     "handoff": "node scripts/handoff.mjs",
     "gen:tests": "node scripts/gen-tests.mjs",

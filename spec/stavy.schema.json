@@ -2,30 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/klarasch/stavy/raw/main/spec/stavy.schema.json",
   "title": "Stavy manifest",
-  "description": "A framework-agnostic description of a prototype workspace: dimensions, templates, pages, scenarios, prototypes (slices), notes, boards. See SPEC.md.",
+  "description": "A framework-agnostic description of a prototype workspace: pages (with named states or dimensions), scenarios, notes, and optional dimensions, templates, prototypes. Unknown extra fields are allowed everywhere. Boards live in stavy-content/boards/ (see stavy-board.schema.json). See SPEC.md.",
   "type": "object",
   "required": [
     "version",
     "product",
-    "dimensions",
-    "pages",
-    "scenarios"
+    "pages"
   ],
-  "additionalProperties": false,
   "properties": {
     "$schema": {
       "type": "string"
     },
     "version": {
       "type": "string",
-      "pattern": "^0\\.[12]"
+      "pattern": "^0\\.[123]"
     },
     "product": {
       "type": "object",
       "required": [
         "name"
       ],
-      "additionalProperties": false,
       "properties": {
         "name": {
           "type": "string",
@@ -42,7 +38,6 @@
     },
     "viewer": {
       "type": "object",
-      "additionalProperties": false,
       "properties": {
         "toolbar": {
           "enum": [
@@ -74,8 +69,10 @@
         },
         "viewport": {
           "type": "object",
-          "required": ["width", "height"],
-          "additionalProperties": false,
+          "required": [
+            "width",
+            "height"
+          ],
           "description": "The workspace page viewport: the size every kind:\"page\" state is rendered and captured at. Default 1920x1080, dpr 1. pages[].frame still overrides this per page.",
           "properties": {
             "width": {
@@ -95,7 +92,6 @@
         },
         "inspect": {
           "type": "object",
-          "additionalProperties": false,
           "description": "What the inspector should know about this workspace's design system (SPEC §1.8). Every field is optional: without any of it the inspector still reports computed values and the var() chain behind them. See docs/INSPECT-ADAPTERS.md.",
           "properties": {
             "kits": {
@@ -103,8 +99,9 @@
               "description": "Component libraries the prototype is built from, so their components can be named and their internals collapsed.",
               "items": {
                 "type": "object",
-                "required": ["name"],
-                "additionalProperties": false,
+                "required": [
+                  "name"
+                ],
                 "properties": {
                   "name": {
                     "type": "string",
@@ -142,20 +139,40 @@
               "description": "The type scale, for naming what an element's computed type is.",
               "items": {
                 "type": "object",
-                "required": ["name", "family", "size", "weight", "lineHeight"],
-                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "family",
+                  "size",
+                  "weight",
+                  "lineHeight"
+                ],
                 "properties": {
-                  "name": { "type": "string" },
-                  "family": { "type": "string", "description": "One family name, as it appears first in the computed font stack." },
-                  "size": { "type": "number", "description": "px" },
-                  "weight": { "type": "number" },
-                  "lineHeight": { "type": "number", "description": "A ratio (1.5) or px (21); values above 4 are read as px." }
+                  "name": {
+                    "type": "string"
+                  },
+                  "family": {
+                    "type": "string",
+                    "description": "One family name, as it appears first in the computed font stack."
+                  },
+                  "size": {
+                    "type": "number",
+                    "description": "px"
+                  },
+                  "weight": {
+                    "type": "number"
+                  },
+                  "lineHeight": {
+                    "type": "number",
+                    "description": "A ratio (1.5) or px (21); values above 4 are read as px."
+                  }
                 }
               }
             },
             "componentAttrs": {
               "type": "array",
-              "items": { "type": "string" },
+              "items": {
+                "type": "string"
+              },
               "description": "Attributes that mark UI-kit components in the DOM. Default [\"data-slot\",\"data-component\"]."
             },
             "module": {
@@ -175,7 +192,6 @@
           "label",
           "values"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "$ref": "#/$defs/id"
@@ -204,7 +220,6 @@
                 "id",
                 "label"
               ],
-              "additionalProperties": false,
               "properties": {
                 "id": {
                   "$ref": "#/$defs/valueId"
@@ -229,7 +244,6 @@
           "id",
           "label"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "$ref": "#/$defs/id"
@@ -266,10 +280,8 @@
         "type": "object",
         "required": [
           "id",
-          "label",
-          "url"
+          "label"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "$ref": "#/$defs/id"
@@ -296,7 +308,6 @@
               "width",
               "height"
             ],
-            "additionalProperties": false,
             "properties": {
               "width": {
                 "type": "integer",
@@ -311,7 +322,7 @@
           "url": {
             "type": "string",
             "minLength": 1,
-            "description": "Where the prototype renders this page: a path with {dim} placeholders, e.g. \"/expenses/exp-1?role={role}&state={state}\". Every dimension the page declares must appear as a placeholder — that is the whole binding contract."
+            "description": "Where the prototype renders this page: a path with {dim} placeholders, e.g. \"/expenses/exp-1?role={role}\". Optional when every state has its own url. Placeholders that are not dimensions (and dimensions never used) are warnings, not errors."
           },
           "template": {
             "$ref": "#/$defs/id",
@@ -335,16 +346,17 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": [
-                "dims"
-              ],
-              "additionalProperties": false,
+              "required": [],
               "properties": {
                 "dims": {
                   "$ref": "#/$defs/dims"
                 },
                 "note": {
                   "type": "string"
+                },
+                "state": {
+                  "$ref": "#/$defs/valueId",
+                  "description": "Shorthand for a named state: { \"state\": \"loading\" }"
                 }
               }
             }
@@ -358,7 +370,6 @@
                 "title",
                 "note"
               ],
-              "additionalProperties": false,
               "properties": {
                 "target": {
                   "$ref": "#/$defs/target"
@@ -370,6 +381,62 @@
                   "type": "string"
                 }
               }
+            }
+          },
+          "states": {
+            "type": "array",
+            "description": "Named states (SPEC 1.3a): each is a name and a URL (or url-template values). The loose alternative to dimensions.",
+            "items": {
+              "type": "object",
+              "required": [
+                "id"
+              ],
+              "properties": {
+                "id": {
+                  "$ref": "#/$defs/valueId"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The prototype URL for this state (path or absolute). Wins over dims."
+                },
+                "dims": {
+                  "$ref": "#/$defs/dims"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "hidden": {
+                  "type": "boolean",
+                  "description": "Registered (linkable, scannable) but not shown on the map by default."
+                }
+              }
+            }
+          },
+          "layout": {
+            "enum": [
+              "row",
+              "matrix"
+            ],
+            "description": "How the map lays out this page's states: a row (default) or a matrix over two axes."
+          },
+          "status": {
+            "type": "string",
+            "description": "Handover status chip. Free text; draft | review | ready are styled."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           }
         }
@@ -384,7 +451,6 @@
           "label",
           "steps"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "$ref": "#/$defs/id"
@@ -414,7 +480,6 @@
                 "page",
                 "title"
               ],
-              "additionalProperties": false,
               "properties": {
                 "page": {
                   "$ref": "#/$defs/id"
@@ -430,6 +495,10 @@
                 },
                 "note": {
                   "type": "string"
+                },
+                "state": {
+                  "$ref": "#/$defs/valueId",
+                  "description": "Named state of the page (pages with `states`)"
                 }
               }
             }
@@ -448,7 +517,6 @@
           "pages",
           "scenarios"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "$ref": "#/$defs/id"
@@ -483,7 +551,6 @@
           "text",
           "page"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "$ref": "#/$defs/id"
@@ -510,7 +577,6 @@
           },
           "offset": {
             "type": "object",
-            "additionalProperties": false,
             "properties": {
               "x": {
                 "type": "number"
@@ -531,7 +597,6 @@
           "id",
           "title"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "type": "string",
@@ -559,7 +624,6 @@
           "kind",
           "source"
         ],
-        "additionalProperties": false,
         "properties": {
           "id": {
             "$ref": "#/$defs/id"
@@ -598,7 +662,6 @@
                 "y",
                 "title"
               ],
-              "additionalProperties": false,
               "properties": {
                 "x": {
                   "$ref": "#/$defs/fraction"

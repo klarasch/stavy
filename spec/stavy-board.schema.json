@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/klarasch/stavy/raw/main/spec/stavy-board.schema.json",
+  "title": "Stavy board",
+  "description": "A free-form board: stavy-content/boards/<id>.json. Items reference screens/states/flows by id, or carry their own content (notes, Markdown, images, Mermaid). Unknown extra fields and unknown item types are allowed; tools report them as warnings.",
+  "type": "object",
+  "required": ["items"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "title": { "type": "string" },
+    "description": { "type": "string" },
+    "status": { "type": "string", "description": "draft | review | ready are styled; anything else shows as-is." },
+    "layout": {
+      "type": "object",
+      "description": "Auto-layout for unplaced top-level items.",
+      "properties": {
+        "direction": { "enum": ["row", "column"] },
+        "gap": { "type": "number" },
+        "maxWidth": { "type": "number" }
+      }
+    },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+  },
+  "$defs": {
+    "action": {
+      "type": "object",
+      "description": "An action performed before capturing: click, hover, focus, press, type + into, wait.",
+      "anyOf": [
+        { "required": ["click"] },
+        { "required": ["hover"] },
+        { "required": ["focus"] },
+        { "required": ["press"] },
+        { "required": ["type", "into"] },
+        { "required": ["wait"] }
+      ],
+      "properties": {
+        "click": { "type": "string" },
+        "hover": { "type": "string" },
+        "focus": { "type": "string" },
+        "press": { "type": "string" },
+        "type": { "type": "string" },
+        "into": { "type": "string" },
+        "wait": { "type": "number", "minimum": 0 }
+      }
+    },
+    "fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+    "callout": {
+      "type": "object",
+      "required": ["x", "y", "title"],
+      "properties": {
+        "x": { "$ref": "#/$defs/fraction" },
+        "y": { "$ref": "#/$defs/fraction" },
+        "w": { "$ref": "#/$defs/fraction" },
+        "h": { "$ref": "#/$defs/fraction" },
+        "title": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Unique within the board; arrows refer to it." },
+        "type": { "type": "string", "description": "screen | states | flow | markdown | note | section | image | mermaid | arrow" },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "w": { "type": "number" },
+        "h": { "type": "number" },
+        "title": { "type": "string" },
+        "note": { "type": "string" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "screen" } }, "required": ["type"] },
+          "then": {
+            "required": ["screen"],
+            "properties": {
+              "screen": { "type": "string" },
+              "state": { "type": "string" },
+              "dims": { "type": "object", "additionalProperties": { "type": "string" } },
+              "crop": { "type": "string" },
+              "do": { "type": "array", "items": { "$ref": "#/$defs/action" } },
+              "viewport": { "type": "object", "required": ["width", "height"], "properties": { "width": { "type": "number" }, "height": { "type": "number" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "states" } }, "required": ["type"] },
+          "then": {
+            "required": ["screen"],
+            "properties": {
+              "screen": { "type": "string" },
+              "states": { "type": "array", "items": { "type": "string" } },
+              "layout": { "enum": ["row", "grid"] },
+              "columns": { "type": "integer", "minimum": 1 },
+              "crop": { "type": "string" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "flow" } }, "required": ["type"] },
+          "then": { "required": ["flow"], "properties": { "flow": { "type": "string" }, "perRow": { "type": "integer", "minimum": 1 }, "collapsed": { "type": "boolean" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "markdown" } }, "required": ["type"] },
+          "then": { "properties": { "md": { "type": "string" }, "src": { "type": "string" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "note" } }, "required": ["type"] },
+          "then": {
+            "required": ["text"],
+            "properties": { "text": { "type": "string" }, "color": { "enum": ["yellow", "blue", "green", "pink", "purple", "gray"] }, "author": { "type": "string" } }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "section" } }, "required": ["type"] },
+          "then": {
+            "properties": {
+              "items": { "type": "array", "items": { "$ref": "#/$defs/item" } },
+              "layout": { "enum": ["row", "column", "grid"] },
+              "columns": { "type": "integer", "minimum": 1 },
+              "collapsed": { "type": "boolean" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "image" } }, "required": ["type"] },
+          "then": { "required": ["src"], "properties": { "src": { "type": "string" }, "alt": { "type": "string" }, "callouts": { "type": "array", "items": { "$ref": "#/$defs/callout" } } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "mermaid" } }, "required": ["type"] },
+          "then": { "required": ["code"], "properties": { "code": { "type": "string" } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "arrow" } }, "required": ["type"] },
+          "then": {
+            "required": ["from", "to"],
+            "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "label": { "type": "string" }, "style": { "enum": ["solid", "dashed"] } }
+          }
+        }
+      ]
+    }
+  }
+}

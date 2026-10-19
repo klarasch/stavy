@@ -6,14 +6,19 @@
 // summary. Whether targets *exist* is the scan's job (scripts/scan.mjs) —
 // the viewer never reads the prototype's source.
 //
-//   node scripts/validate.mjs [stavy.json] [--refs docs/PRD-118.md ...] [--coverage] [--snapshots <dir>] [--require-schema]
+//   node scripts/validate.mjs [stavy.json] [--refs docs/PRD-118.md ...] [--coverage] [--snapshots <dir>] [--require-schema] [--strict]
 //
-// Exit code 1 on errors; warnings never fail the run. Schema checking (spec/stavy.schema.json)
+// Exit code 1 on errors; warnings never fail the run. Loose by design (SPEC §0): the
+// errors are what would break the viewer (an unparsable file, a page that cannot be
+// rendered, a reference the manifest itself cannot resolve); everything about shape,
+// naming, boards and content is a warning. --strict promotes scan misses to errors. Schema checking (spec/stavy.schema.json)
 // needs ajv + ajv-formats — when either is missing it is skipped with a loud warning instead of
 // silently passing; --require-schema (use this in CI) turns that into an error.
 import { readFileSync, existsSync, statSync } from "node:fs"
 import { resolve, dirname, relative } from "node:path"
 import { pathToFileURL } from "node:url"
+import { CONTENT_DIR, STATE_DIM, instanceKey, normalizeManifest, resolveDims } from "./lib/model.mjs"
+import { loadBoards, walkItems } from "./lib/collect.mjs"
 
 // Core checking logic, importable so it can be unit tested without spawning a
 // process: takes the parsed manifest object and the directory it lives in
@@ -25,6 +30,104 @@ import { pathToFileURL } from "node:url"
 // newer ajv pulls in `fast-uri`, which some artifactories refuse (see
 // docs/ADOPTION.md, "Locked-down registries").
 export const AJV_PIN = "ajv@8.12.0 ajv-formats@2.1.1"
+
+const BOARD_TYPES = ["screen", "states", "flow", "markdown", "note", "section", "image", "mermaid", "arrow"]
+const ACTION_KEYS = ["click", "hover", "focus", "press", "type", "wait"]
+// A URL or a site path ("/figures/x.png"): not a file inside stavy-content/.
+const isUrl = (s) => /^([a-z]+:|\/)/i.test(s)
+
+/** stavy-content/index.json and boards/*.json: references resolve, ids are unique, shapes are plausible. */
+function validateContent(m, root, { err, warn, validateBoard }) {
+  const dir = resolve(root, CONTENT_DIR)
+  if (!existsSync(dir)) return
+  const pageIndex = new Map(m.pages.map((p) => [p.id, p]))
+  const flows = new Set(m.scenarios.map((sc) => sc.id))
+  const rel = (p) => relative(root, p)
+
+  let index = null
+  const indexFile = resolve(dir, "index.json")
+  if (existsSync(indexFile)) {
+    try {
+      index = JSON.parse(readFileSync(indexFile, "utf8"))
+      if (!index || typeof index !== "object" || Array.isArray(index)) {
+        warn(`${rel(indexFile)}: expected an object { boards, docs }`)
+        index = null
+      }
+    } catch (e) {
+      err(`${rel(indexFile)}: not valid JSON (${String(e.message ?? e).split("\n")[0]})`)
+    }
+  }
+  const { boards, problems } = loadBoards(root)
+  for (const p of problems) err(p)
+  const onDisk = new Set(boards.map((b) => b.id))
+  if (index) {
+    const seen = new Set()
+    for (const [i, b] of (Array.isArray(index.boards) ? index.boards : []).entries()) {
+      if (!b?.id) {
+        warn(`${rel(indexFile)} boards[${i}]: no id`)
+        continue
+      }
+      if (seen.has(b.id)) warn(`${rel(indexFile)}: board "${b.id}" is listed twice`)
+      seen.add(b.id)
+      if (!onDisk.has(b.id)) warn(`${rel(indexFile)}: board "${b.id}" has no ${CONTENT_DIR}/boards/${b.id}.json`)
+      if (!b.title) warn(`${rel(indexFile)}: board "${b.id}" has no title`)
+    }
+    for (const id of onDisk) if (!seen.has(id)) warn(`${CONTENT_DIR}/boards/${id}.json is not listed in ${CONTENT_DIR}/index.json`)
+    for (const [i, d] of (Array.isArray(index.docs) ? index.docs : []).entries()) {
+      if (!d?.id) warn(`${rel(indexFile)} docs[${i}]: no id`)
+      else if (!existsSync(resolve(dir, "docs", `${d.id}.md`))) warn(`${rel(indexFile)}: doc "${d.id}" has no ${CONTENT_DIR}/docs/${d.id}.md`)
+    }
+  }
+
+  for (const { id: boardId, board } of boards) {
+    const w = `board "${boardId}"`
+    if (!board || typeof board !== "object" || !Array.isArray(board.items)) {
+      warn(`${w}: expected { title, items: [...] }`)
+      continue
+    }
+    if (validateBoard && !validateBoard(board)) for (const e of validateBoard.errors ?? []) if (e.keyword !== "if") warn(`${w}: schema ${e.instancePath || "/"}: ${e.message}`)
+    const all = [...walkItems(board.items)]
+    const ids = new Set(all.map((it) => it.id).filter(Boolean))
+    const seen = new Set()
+    for (const it of all) {
+      const iw = `${w} item "${it.id ?? "?"}"`
+      if (it.id) {
+        if (seen.has(it.id)) warn(`${w}: duplicate item id "${it.id}"`)
+        seen.add(it.id)
+      }
+      if (!BOARD_TYPES.includes(it.type)) {
+        warn(`${iw}: unknown type "${it.type}" (${BOARD_TYPES.join(" | ")})`)
+        continue
+      }
+      if (it.type === "screen" || it.type === "states") {
+        const page = pageIndex.get(it.screen)
+        if (!page) {
+          warn(`${iw}: unknown screen "${it.screen}"`)
+          continue
+        }
+        const stateIds = new Set((page.states ?? []).map((s) => s.id))
+        const checkState = (ref) => {
+          if (page.states ? stateIds.has(ref) : false) return
+          if (/^\d+$/.test(ref) && Number(ref) < (page.instances?.length ?? 1)) return
+          warn(`${iw}: screen "${page.id}" has no state "${ref}"`)
+        }
+        if (it.type === "screen") {
+          if (it.state) checkState(it.state)
+          for (const [d, v] of Object.entries(it.dims ?? {})) if (!(d in (page.urlDims ?? page.dimensions)) || !(page.urlDims ?? page.dimensions)[d].includes(v)) warn(`${iw}: page "${page.id}" has no "${d}=${v}"`)
+          for (const a of it.do ?? []) if (!ACTION_KEYS.some((k) => k in a)) warn(`${iw}: unknown action ${JSON.stringify(a)} (${ACTION_KEYS.join(" | ")})`)
+          if (it.viewport && !(it.viewport.width > 0 && it.viewport.height > 0)) warn(`${iw}: viewport needs a positive width and height`)
+        } else for (const ref of (it.states ?? []).map(String)) checkState(ref)
+      } else if (it.type === "flow") {
+        if (!flows.has(it.flow)) warn(`${iw}: unknown flow "${it.flow}"`)
+      } else if (it.type === "arrow") {
+        for (const end of ["from", "to"]) if (!ids.has(it[end])) warn(`${iw}: ${end} "${it[end]}" is not an item on this board`)
+      } else if (it.type === "markdown" && it.src) {
+        const file = it.src.split("#")[0]
+        if (!isUrl(file) && !existsSync(resolve(dir, file)) && !existsSync(resolve(dir, "docs", file.endsWith(".md") ? file : `${file}.md`))) warn(`${iw}: markdown src "${it.src}" not found in ${CONTENT_DIR}/`)
+      } else if (it.type === "image" && it.src && !isUrl(it.src) && !existsSync(resolve(dir, it.src))) warn(`${iw}: image "${it.src}" not found in ${CONTENT_DIR}/`)
+    }
+  }
+}
 
 export async function validate(m, root, flags = { refs: [], coverage: false }) {
   const errors = []
@@ -47,11 +150,15 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     }
   }
   let schemaChecked = false
+  let validateBoard = null
+  const findSchema = (name) => [resolve(root, "spec", name), resolve(import.meta.dirname, name), resolve(import.meta.dirname, "../spec", name)].find(existsSync)
   if (ajvAvailable) {
-    const schemaPath = [resolve(root, "spec/stavy.schema.json"), resolve(import.meta.dirname, "stavy.schema.json"), resolve(import.meta.dirname, "../spec/stavy.schema.json")].find(existsSync)
+    const schemaPath = findSchema("stavy.schema.json")
+    const boardSchemaPath = findSchema("stavy-board.schema.json")
     if (schemaPath) {
       const ajv = new Ajv({ allErrors: true, strict: false })
       addFormats(ajv)
+      if (boardSchemaPath) validateBoard = ajv.compile(JSON.parse(readFileSync(boardSchemaPath, "utf8")))
       const validateSchema = ajv.compile(JSON.parse(readFileSync(schemaPath, "utf8")))
       if (!validateSchema(m)) for (const e of validateSchema.errors ?? []) err(`schema ${e.instancePath || "/"}: ${e.message}${e.params?.allowedValues ? ` (${e.params.allowedValues.join(" | ")})` : ""}`)
       schemaChecked = true
@@ -64,13 +171,10 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     else warn(`SCHEMA NOT CHECKED — install ${AJV_PIN} (npm i -D ${AJV_PIN})`)
   }
 
-  // `dimensions` is optional on a page (SPEC §1.3): a page with no axes is a
-  // normal page. Fill it in once so every check below can read it as an object.
-  for (const p of m.pages ?? []) if (!p.dimensions) p.dimensions = {}
-  // Required by the schema; defaulted here so a manifest missing them gets the schema error, not a crash.
-  m.dimensions ??= []
-  m.pages ??= []
-  m.scenarios ??= []
+  // Everything below reads the manifest the way the viewer does: normalised (named
+  // states become the hidden `_state` axis, defaults filled in). The schema check
+  // above saw the file as written. Work on a copy, so the caller's object is untouched.
+  m = normalizeManifest(structuredClone(m))
 
   const dimIndex = new Map(m.dimensions.map((d) => [d.id, new Set(d.values.map((v) => v.id))]))
   // Workspace-scoped axes (SPEC §1.1): one value for the whole workspace, so a
@@ -83,6 +187,17 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
 
   function checkDims(where, page, dims) {
     for (const [d, v] of Object.entries(dims ?? {})) {
+      if (d === STATE_DIM) {
+        if (page && !page.states?.some((s) => s.id === v)) warn(`${where}: page "${page.id}" has no state "${v}"`)
+        continue
+      }
+      // A named-states page keeps its template dimensions in urlDims.
+      const pageDims = page ? page.urlDims ?? page.dimensions : null
+      if (page && page.urlDims && d in page.urlDims) {
+        if (!dimIndex.has(d)) err(`${where}: unknown dimension "${d}"`)
+        else if (!pageDims[d].includes(v)) err(`${where}: page "${page.id}" does not allow "${d}=${v}"`)
+        continue
+      }
       if (!dimIndex.has(d)) err(`${where}: unknown dimension "${d}"`)
       else if (!dimIndex.get(d).has(v)) err(`${where}: "${v}" is not a declared value of dimension "${d}"`)
       if (page && !(d in page.dimensions)) err(`${where}: page "${page.id}" does not support dimension "${d}"`)
@@ -95,26 +210,44 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     const w = `page "${page.id}"`
     if (page.template && !templateIndex.has(page.template)) err(`${w}: template "${page.template}" is not registered`)
     if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(page.id)) err(`${w}: id must be kebab-case`)
-    // ---- the URL contract: every declared dimension reaches the prototype through the url template
-    if (typeof page.url !== "string" || !page.url) err(`${w}: no url — where does the prototype render this page?`)
-    else {
-      if (!/^(\/|[a-z]+:\/\/)/i.test(page.url)) err(`${w}: url must start with "/" (or be absolute): "${page.url}"`)
+    // ---- the URL contract. A page needs somewhere to render: its own url, or a url on every state.
+    // Whether placeholders and dimensions line up is the prototype's business: a warning here.
+    const allStatesHaveUrl = !!page.states?.length && page.states.every((st) => typeof st.url === "string" && st.url)
+    const urlDims = page.urlDims ?? (page.states ? {} : page.dimensions)
+    if (typeof page.url !== "string" || !page.url) {
+      if (!allStatesHaveUrl) err(`${w}: no url — where does the prototype render this page? (a page url, or a url on every state)`)
+    } else {
+      if (!/^(\/|[a-z]+:\/\/)/i.test(page.url)) warn(`${w}: url should start with "/" (or be absolute): "${page.url}"`)
       const placeholders = [...page.url.matchAll(/\{([a-zA-Z0-9_-]+)\}/g)].map((mm) => mm[1])
-      for (const d of placeholders) if (!(d in page.dimensions)) err(`${w}: url placeholder {${d}} is not a dimension this page declares`)
-      for (const d of Object.keys(page.dimensions)) if (!placeholders.includes(d)) err(`${w}: dimension "${d}" does not appear in url "${page.url}" — the prototype cannot render that axis`)
+      for (const d of placeholders) if (!(d in urlDims)) warn(`${w}: url placeholder {${d}} is not a dimension this page declares`)
+      for (const d of Object.keys(urlDims)) if (!placeholders.includes(d)) warn(`${w}: dimension "${d}" does not appear in url "${page.url}" — the prototype cannot render that axis`)
     }
+    const seenStates = new Set()
+    for (const st of page.states ?? []) {
+      if (!st.id) {
+        warn(`${w}: a state has no id`)
+        continue
+      }
+      if (seenStates.has(st.id)) warn(`${w}: duplicate state id "${st.id}"`)
+      seenStates.add(st.id)
+      if (!st.url && !page.url) warn(`${w} state "${st.id}": no url, and the page has none to fill`)
+      else if (st.url && !/^(\/|[a-z]+:\/\/)/i.test(st.url)) warn(`${w} state "${st.id}": url should start with "/" (or be absolute): "${st.url}"`)
+      checkDims(`${w} state "${st.id}"`, { ...page, states: undefined, dimensions: page.urlDims ?? {} }, st.dims)
+    }
+    if (page.layout && !["row", "matrix"].includes(page.layout)) warn(`${w}: unknown layout "${page.layout}" (row | matrix)`)
     if (!page.fidelity) warn(`${w}: no fidelity rung declared (static | navigable | interactive)`)
-    for (const [d, values] of Object.entries(page.dimensions)) {
+    for (const [d, values] of Object.entries(page.urlDims ?? page.dimensions)) {
       if (!dimIndex.has(d)) err(`${w}: unknown dimension "${d}"`)
       else for (const v of values) if (!dimIndex.get(d).has(v)) err(`${w}: "${d}=${v}" not declared`)
       if (isWorkspaceDim(d)) {
         if (page.defaults?.[d])
           warn(`${w}: default for workspace-scoped dimension "${d}" is ignored — the workspace value wins (SPEC §1.1)`)
-      } else if (!page.defaults?.[d]) {
+      } else if (!page.defaults?.[d] && !page.urlDefaults?.[d] && !page.states) {
         warn(`${w}: no default for dimension "${d}" (first value will be used)`)
       }
     }
     checkDims(`${w} defaults`, page, page.defaults)
+    checkDims(`${w} defaults`, page, page.urlDefaults)
     ;(page.instances ?? []).forEach((inst, i) => checkDims(`${w} instances[${i}]`, page, inst.dims))
     // No warning for a page without dimensions or instances: one screen at its
     // defaults is a page, and asking for more is what produced matrices nobody
@@ -215,26 +348,28 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     let scanned = 0
     for (const [key, entry] of Object.entries(index)) {
       scanned++
-      for (const t of entry.missing ?? []) err(`scan: ${key}: target "${t}" was not found in the rendered prototype`)
+      // A target missing from a rendered state is worth knowing, not a reason to fail: --strict makes it one.
+      for (const t of entry.missing ?? []) (flags.strict ? err : warn)(`scan: ${key}: target "${t}" was not found in the rendered prototype`)
       // The adopter changed the viewport knob (or a page's frame) without
       // rescanning: the canvas still shows the old capture, scaled to fit.
       const page = pageIndex.get(key.split("?")[0])
       const cur = currentViewport(page)
-      if (entry.width != null && entry.height != null && (entry.width !== cur.width || entry.height !== cur.height))
+      // A cropped or other-viewport variant has a size of its own.
+      if (!key.includes("#") && entry.width != null && entry.height != null && (entry.width !== cur.width || entry.height !== cur.height))
         warn(`scan: snapshot for ${key} was captured at ${entry.width}×${entry.height}, page viewport is ${cur.width}×${cur.height} — run scan`)
     }
-    const pinned = m.pages.flatMap((p) => (p.instances ?? [{ dims: {} }]).map((inst) => {
-      const dims = Object.fromEntries(Object.keys(p.dimensions).map((d) => [d, inst.dims[d] ?? p.defaults?.[d] ?? p.dimensions[d][0]]))
-      return `${p.id}?${Object.entries(dims).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join("&")}`
-    }))
+    const pinned = m.pages.flatMap((p) => (p.instances ?? [{ dims: {} }]).map((inst) => instanceKey(p.id, resolveDims(p, inst.dims))))
     const unscanned = pinned.filter((k) => !index[k])
-    if (unscanned.length) warn(`scan: ${unscanned.length} pinned instance(s) have no snapshot yet — run \`npm run scan\` (e.g. ${unscanned[0]})`)
+    if (unscanned.length) warn(`scan: ${unscanned.length} pinned state(s) have no snapshot yet — the viewer asks for them in dev; or run \`npm run scan\` (e.g. ${unscanned[0]})`)
     console.log(`scan: ${scanned} state(s) in ${relative(root, indexPath)}`)
   } else {
-    warn(`scan: no ${relative(root, indexPath)} yet — run \`npm run scan\` against the dev server to check targets and render the canvas`)
+    warn(`scan: no ${relative(root, indexPath)} yet — snapshots are a cache: the dev viewer fills it on demand, or run \`npm run scan\` against the dev server`)
   }
 
-  // ---- boards (and figures: boards anchored to a page, SPEC §1.7)
+  // ---- stavy-content: the index and every board file (warnings; only unparsable JSON is an error)
+  validateContent(m, root, { err, warn, validateBoard })
+
+  // ---- legacy boards (and figures: boards anchored to a page, SPEC §1.7)
   const boardIds = new Set()
   const pageIds = new Set(m.pages.map((p) => p.id))
   for (const b of m.boards ?? []) {
@@ -303,13 +438,14 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
 
 async function main() {
   const argv = process.argv.slice(2)
-  const flags = { refs: [], coverage: false, snapshots: null, requireSchema: false }
+  const flags = { refs: [], coverage: false, snapshots: null, requireSchema: false, strict: false }
   const positional = []
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--refs") {
       while (argv[i + 1] && !argv[i + 1].startsWith("--")) flags.refs.push(argv[++i])
     } else if (argv[i] === "--coverage") flags.coverage = true
     else if (argv[i] === "--require-schema") flags.requireSchema = true
+    else if (argv[i] === "--strict") flags.strict = true
     else if (argv[i] === "--snapshots") flags.snapshots = resolve(argv[++i])
     else positional.push(argv[i])
   }

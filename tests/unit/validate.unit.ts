@@ -100,25 +100,27 @@ describe("validate: the URL contract", () => {
     expect(errors.some((e) => e.includes("no url"))).toBe(true)
   })
 
-  it("errors when a declared dimension is missing from the url template", async () => {
-    const { errors } = await run((m) => {
+  it("warns (not errors) when a declared dimension is missing from the url template", async () => {
+    const { errors, warnings } = await run((m) => {
       m.pages[0].url = "/simple"
     })
-    expect(errors.some((e) => e.includes('dimension "role" does not appear in url'))).toBe(true)
+    expect(warnings.some((e) => e.includes('dimension "role" does not appear in url'))).toBe(true)
+    expect(errors).toEqual([])
   })
 
-  it("errors when the url references a dimension the page does not declare", async () => {
-    const { errors } = await run((m) => {
+  it("warns (not errors) when the url references a dimension the page does not declare", async () => {
+    const { errors, warnings } = await run((m) => {
       m.pages[0].url = "/simple?role={role}&theme={theme}"
     })
-    expect(errors.some((e) => e.includes("placeholder {theme} is not a dimension"))).toBe(true)
+    expect(warnings.some((e) => e.includes("placeholder {theme} is not a dimension"))).toBe(true)
+    expect(errors).toEqual([])
   })
 
-  it("errors when the url is relative", async () => {
-    const { errors } = await run((m) => {
+  it("warns when the url is relative", async () => {
+    const { warnings } = await run((m) => {
       m.pages[0].url = "simple?role={role}"
     })
-    expect(errors.some((e) => e.includes('url must start with "/"'))).toBe(true)
+    expect(warnings.some((e) => e.includes('url should start with "/"'))).toBe(true)
   })
 
   it("accepts a page without a template", async () => {
@@ -138,9 +140,12 @@ describe("validate: the URL contract", () => {
 })
 
 describe("validate: last scan results", () => {
-  it("reports targets the scan could not find in the rendered prototype", async () => {
-    const { errors } = await run(undefined, { refs: [], coverage: false, snapshots: snapsMissing })
-    expect(errors.some((e) => e.includes('scan: simple-page?role=user: target "SubmitButton" was not found'))).toBe(true)
+  it("warns about targets the scan could not find, and errors with --strict", async () => {
+    const loose = await run(undefined, { refs: [], coverage: false, snapshots: snapsMissing })
+    expect(loose.warnings.some((e) => e.includes('scan: simple-page?role=user: target "SubmitButton" was not found'))).toBe(true)
+    expect(loose.errors).toEqual([])
+    const strict = await run(undefined, { refs: [], coverage: false, snapshots: snapsMissing, strict: true } as any)
+    expect(strict.errors.some((e) => e.includes('target "SubmitButton" was not found'))).toBe(true)
   })
 
   it("warns when there is no scan yet", async () => {
@@ -152,7 +157,7 @@ describe("validate: last scan results", () => {
     const { warnings } = await run((m) => {
       m.pages[0].instances = [{ dims: { role: "user" } }, { dims: { role: "admin" } }]
     })
-    expect(warnings.some((w) => w.includes("1 pinned instance(s) have no snapshot yet"))).toBe(true)
+    expect(warnings.some((w) => w.includes("1 pinned state(s) have no snapshot yet"))).toBe(true)
   })
 
   it("warns when a snapshot's captured size no longer matches the page's viewport", async () => {
@@ -186,12 +191,14 @@ describe("validate: JSON schema", () => {
     expect(errors.some((e) => e.startsWith("schema"))).toBe(true)
   })
 
-  it("flags an additional (unknown) top-level property", async () => {
+  it("allows unknown extra fields (the model is open)", async () => {
     const { errors } = await run((m) => {
-      // @ts-expect-error deliberately invalid
+      // @ts-expect-error deliberately extra
       m.notAField = true
+      // @ts-expect-error deliberately extra
+      m.pages[0].myOwnField = { anything: 1 }
     })
-    expect(errors.some((e) => e.startsWith("schema"))).toBe(true)
+    expect(errors).toEqual([])
   })
 
   it("flags a version that doesn't match the expected pattern", async () => {

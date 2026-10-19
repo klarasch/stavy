@@ -110,6 +110,12 @@ describe("install and update", () => {
       "public/stavy/VERSION",
       "scripts/stavy/scan.mjs",
       "scripts/stavy/lib/viewport.mjs", // scan.mjs imports it
+      "scripts/stavy/lib/model.mjs", // scan, validate, migrate and the dev plugin share it
+      "scripts/stavy/lib/model.d.mts",
+      "scripts/stavy/lib/collect.mjs",
+      "scripts/stavy/vite-plugin.mjs",
+      "scripts/stavy/migrate.mjs",
+      "scripts/stavy/stavy-board.schema.json",
       "scripts/stavy/stavy.schema.json",
       ".claude/skills/stavy/SKILL.md",
       "STAVY.md",
