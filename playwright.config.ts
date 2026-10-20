@@ -10,4 +10,11 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${port}`, viewport: { width: 1280, height: 832 } },
   webServer: { command: `npm run dev -- --port ${port} --strictPort`, url: `http://localhost:${port}`, reuseExistingServer: true, timeout: 30_000 },
   reporter: [["list"]],
+  // Specs that rewrite workspace files run last, on their own: a live viewer
+  // reloads its manifest when stavy.json changes, which would otherwise race
+  // whatever unrelated test is open in parallel.
+  projects: [
+    { name: "viewer", testIgnore: /writes\.spec\.ts/ },
+    { name: "writes", testMatch: /writes\.spec\.ts/, dependencies: ["viewer"] },
+  ],
 })

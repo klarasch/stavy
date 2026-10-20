@@ -42,14 +42,15 @@ test("a long row wraps at six cards", async ({ page }) => {
   await page.goto("/stavy/?view=map")
   const cards = page.locator('[data-toc="page:expense-detail"] [data-instance]')
   await expect.poll(() => cards.count()).toBeGreaterThan(6)
-  // Cards sharing a parent row: no row holds more than six.
-  const counts = await cards.evaluateAll((els) => {
-    const by = new Map<Element, number>()
-    for (const e of els) by.set(e.parentElement!, (by.get(e.parentElement!) ?? 0) + 1)
-    return [...by.values()]
-  })
-  expect(Math.max(...counts)).toBeLessThanOrEqual(6)
-  expect(counts.length).toBeGreaterThan(1)
+  // Cards sharing a parent row: no row holds more than six. Polled, because the
+  // canvas may still be mounting cards when the count first passes six.
+  const rows = () =>
+    cards.evaluateAll((els) => {
+      const by = new Map<Element, number>()
+      for (const e of els) by.set(e.parentElement!, (by.get(e.parentElement!) ?? 0) + 1)
+      return [...by.values()]
+    })
+  await expect.poll(async () => { const c = await rows(); return c.length > 1 && Math.max(...c) <= 6 }).toBe(true)
 })
 
 test("a flow collapses and expands", async ({ page }) => {

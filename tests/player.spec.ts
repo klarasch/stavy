@@ -112,9 +112,16 @@ test("a long scenario label truncates instead of squeezing the step counter or c
   expect(counterBox).not.toBeNull()
   expect(counterBox!.height).toBeLessThan(24)
 
+  // The card repositions once the step's halo is measured: wait for that, then
+  // read both boxes in one frame so they describe the same layout.
+  await expect(page.locator(".ps-halo")).toBeVisible()
   const closeButton = page.getByTitle("Exit tour")
-  const closeBox = await closeButton.boundingBox()
-  const cardBox = await card.boundingBox()
+  await expect(closeButton).toBeVisible()
+  const { closeBox, cardBox } = await page.evaluate(() => {
+    const c = document.querySelector('[title="Exit tour"]')!.getBoundingClientRect()
+    const k = (document.querySelector('[title="Exit tour"]')!.closest(".ps-glass-strong") as HTMLElement).getBoundingClientRect()
+    return { closeBox: { x: c.x, y: c.y, width: c.width, height: c.height }, cardBox: { x: k.x, y: k.y, width: k.width, height: k.height } }
+  })
   expect(closeBox).not.toBeNull()
   expect(cardBox).not.toBeNull()
   expect(closeBox!.x).toBeGreaterThanOrEqual(cardBox!.x)
