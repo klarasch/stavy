@@ -124,8 +124,46 @@ export interface InspectAdapter {
   designSystems: DesignSystemAdapter[]
 }
 
+/** The adapter interface version this viewer implements. A module declares the one it was written against. */
+export const INSPECT_API_VERSION = 1
+
+/** What a panel section renderer is given: the selected element and what the inspector already worked out about it. */
+export interface PanelSectionContext {
+  /** The selected element, in the frame's document */
+  el: Element
+  /** The selected component (innermost non-internal by default), with its props as rendered — `hideProps` already applied */
+  component: { name: string; kit?: string; props: Record<string, unknown> } | null
+  /** Every component from the element outward, innermost first */
+  stack: Array<{ name: string; kit?: string; internal?: boolean }>
+  /** The frame's document and window (use `win.getComputedStyle`, never the host's) */
+  doc: Document
+  win: Window | null
+  /** The screen the frame shows, and its dimension values */
+  page: { id: string; label: string; template?: string }
+  dims: Record<string, string>
+}
+
+export interface PanelRow {
+  label: string
+  value: string
+  /** Text a copy button next to the row puts on the clipboard */
+  copy?: string
+}
+
+export interface PanelSectionResult {
+  title: string
+  rows: PanelRow[]
+}
+
+/** A module-provided panel section. Return null to hide it for this element. Must not throw (if it does, the section shows the error). */
+export type PanelSectionRenderer = (ctx: PanelSectionContext) => PanelSectionResult | null
+
 /** What a code adapter module default-exports: partials merged over the built-in defaults. */
 export interface InspectAdapterModule {
+  /** The adapter interface version the module targets; currently 1. */
+  apiVersion?: number
   framework?: Partial<FrameworkAdapter>
   designSystem?: Partial<DesignSystemAdapter>
+  /** Extra panel sections by id; place them with `viewer.inspect.panel.sections` (otherwise they come last). */
+  panel?: Record<string, PanelSectionRenderer>
 }

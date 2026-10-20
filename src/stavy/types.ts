@@ -283,9 +283,53 @@ export interface InspectSettings {
   /**
    * A same-origin ES module the viewer imports at startup, default-exporting
    * `{ framework?, designSystem? }` partials merged over the built-in adapter.
-   * Only for what the data above cannot say.
+   * Only for what the data above cannot say. The module should also export
+   * `apiVersion: 1` (on the default export); the viewer warns on a mismatch.
    */
   module?: string
+  /**
+   * Which component frames are framework plumbing (dropped from the stack) and
+   * which are headless primitives (collapsed as a kit's internals). Patterns are
+   * regular expressions as strings, tested against the component name with any
+   * bundler digit suffix removed. Added to the built-in lists unless
+   * `keepDefaults` is false.
+   */
+  internals?: InspectInternals
+  /** What the inspect panel shows, in which order, and which links and copy buttons it offers. */
+  panel?: InspectPanelSettings
+}
+
+export interface InspectInternals {
+  /** Component names never shown on the stack (framework and router plumbing). */
+  exclude?: string[]
+  /** Headless primitives a kit wraps: collapsed behind "+N internals" when a kit renders them. Only consulted when `kits` are declared. */
+  primitives?: string[]
+  /** Keep the built-in patterns and add these to them (default true). False replaces them. */
+  keepDefaults?: boolean
+}
+
+/** Built-in panel sections, plus any section id a `viewer.inspect.module` exports under `panel`. */
+export type InspectSectionId = "component" | "props" | "tokens" | "type" | "spacing" | "classes" | "accessibility" | "source" | "url" | (string & {})
+
+export interface InspectPanelSettings {
+  /** Sections in display order; a section left out is hidden. Default: every built-in section, then the module's. */
+  sections?: InspectSectionId[]
+  /** Props never shown (in the props table or the copied JSX): exact names, or regexes written as "/pattern/flags". */
+  hideProps?: string[]
+  /** Links shown for the selected component. `{name}`, `{kebab}` and `{kit}` are filled in; a link whose placeholder has no value is left out. */
+  links?: InspectLink[]
+  /** Which copy buttons the panel offers. Default all three. */
+  copy?: Array<"jsx" | "token" | "class">
+}
+
+export interface InspectLink {
+  label: string
+  /** e.g. "https://ds.example.com/components/{kebab}" or "https://storybook.example.com/?path=/docs/{kit}-{name}" */
+  href: string
+  /** Only for components whose name matches this regular expression. */
+  match?: string
+  /** Only for components of this kit (by `kits[].name`). */
+  kit?: string
 }
 
 /** Workspace-level viewer defaults (a product/design system picks these once; viewers may override per link). */

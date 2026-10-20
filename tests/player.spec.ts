@@ -140,7 +140,7 @@ test("the inspector resolves the element under the pointer inside the frame", as
   const target = await page.frameLocator("iframe.ps-frame").locator('[data-proto="ApproveButton"]').boundingBox()
   expect(target).not.toBeNull()
   await page.mouse.move(target!.x + target!.width / 2, target!.y + target!.height / 2)
-  await expect(page.getByText("ApproveButton", { exact: true })).toBeVisible()
+  await expect(page.locator('.ps-inspect-panel [data-section="selection"]').getByText("ApproveButton", { exact: true })).toBeVisible()
 })
 
 // Item 1 (adopter feedback): tour steps used to rewrite the iframe's `src`,
@@ -315,24 +315,151 @@ test.describe("inspector", () => {
     return { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 }
   }
 
-  // The panel is fixed in a corner over the frame and grows as it fills, so
-  // hovering something in that corner used to put the panel under the pointer
-  // that summoned it — the hover read fine and the click landed on the panel.
-  test("clicking pins the selection, even where the panel would cover it", async ({ page }) => {
+  // The panel docks into its own space: the frame keeps its viewport width,
+  // scaled to fit beside it, so nothing of the prototype is ever under it.
+  test("the docked panel never overlaps the frame, on any side", async ({ page }) => {
     await page.goto("/stavy/?p=expense-detail&d_role=manager&d_lifecycle=submitted&i=1")
     const panel = page.locator(".ps-inspect-panel")
+    const frame = page.locator("iframe.ps-frame")
     await expect(panel).toBeVisible()
-    // A target in the panel's own corner: the case that used to fail.
+    const overlaps = async () => {
+      const a = (await panel.boundingBox())!
+      const b = (await frame.boundingBox())!
+      return a.x < b.x + b.width - 1 && b.x < a.x + a.width - 1 && a.y < b.y + b.height - 1 && b.y < a.y + a.height - 1
+    }
+    await expect(panel).toHaveAttribute("data-side", "right")
+    expect(await overlaps()).toBe(false)
+    // Scaled, not reflowed: the frame's own viewport is still the full width.
+    const inner = await frame.evaluate((el: HTMLIFrameElement) => el.contentWindow!.innerWidth)
+    expect(inner).toBe(page.viewportSize()!.width)
+    for (const side of ["left", "bottom", "right"]) {
+      await panel.getByTitle(`Dock ${side}`).click()
+      await expect(panel).toHaveAttribute("data-side", side)
+      expect(await overlaps()).toBe(false)
+    }
+    // Resizable from its inner edge; side and width are remembered across reloads.
+    await panel.getByTitle("Dock left").click()
+    const handle = (await panel.locator(".ps-inspect-resize").boundingBox())!
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + 200)
+    await page.mouse.down()
+    await page.mouse.move(handle.x + 120, handle.y + 200, { steps: 4 })
+    await page.mouse.up()
+    const wide = (await panel.boundingBox())!.width
+    expect(wide).toBeGreaterThan(440)
+    expect(await overlaps()).toBe(false)
+    await page.reload()
+    await expect(page.locator(".ps-inspect-panel")).toHaveAttribute("data-side", "left")
+    expect(Math.abs((await page.locator(".ps-inspect-panel").boundingBox())!.width - wide)).toBeLessThan(2)
+  })
+
+  test("clicking pins exactly the hovered element; Esc unpins; the app never sees the click", async ({ page }) => {
+    await page.goto("/stavy/?p=expenses&d_role=manager&d_state=loaded&i=1")
+    const panel = page.locator(".ps-inspect-panel")
+    const cell = page.frameLocator("iframe.ps-frame").locator('[data-proto="ExpenseRow:exp-2101"] td').nth(1)
+    const box = (await cell.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await expect(page.locator(".ps-inspect-tag")).toBeVisible()
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    await expect(panel.locator(".ps-inspect-status")).toHaveText("pinned")
+    // The row opens an expense in the app; while inspecting, it must not.
+    await expect(page).toHaveURL(/p=expenses(&|$)/)
+    await expect(panel.locator('[data-section="selection"] .ps-crumb[data-on="true"]')).toHaveText(/^td/)
+    await expect(panel.locator(".ps-crumb", { hasText: /^TableCell$/ })).toBeVisible()
+    await expect(page.locator('.ps-inspect-outline[data-kind="pinned"]')).toBeVisible()
+    // Clicking in the panel never re-targets.
+    await panel.locator('[data-section="classes"]').click()
+    await expect(panel.locator('[data-section="selection"] .ps-crumb[data-on="true"]')).toHaveText(/^td/)
+    // ↑ walks to the parent, ↓ back down to where it came from.
+    await page.keyboard.press("ArrowUp")
+    await expect(panel.locator('[data-section="selection"] .ps-crumb[data-on="true"]')).toHaveText("ExpenseRow:exp-2101")
+    await page.keyboard.press("ArrowDown")
+    await expect(panel.locator('[data-section="selection"] .ps-crumb[data-on="true"]')).toHaveText(/^td/)
+    await page.keyboard.press("Escape")
+    await expect(panel.locator(".ps-inspect-status")).toHaveText("hover, click to pin")
+    await expect(page).toHaveURL(/i=1/) // Esc unpinned; it did not close inspect
+  })
+
+  test("a pin follows its element when the prototype scrolls", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 380 })
+    await page.goto("/stavy/?p=expenses&d_role=manager&d_state=loaded&i=1")
+    const frame = page.frameLocator("iframe.ps-frame")
+    const cell = frame.locator('[data-proto="ExpenseRow:exp-2101"] td').first()
+    const box = (await cell.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    const outline = page.locator('.ps-inspect-outline[data-kind="pinned"]')
+    await expect(outline).toBeVisible()
+    const before = (await outline.boundingBox())!
+    await page.locator("iframe.ps-frame").evaluate((el: HTMLIFrameElement) => {
+      const w = el.contentWindow!
+      const d = w.document
+      const inner = Array.from(d.querySelectorAll("*")).filter(
+        (n) => n.scrollHeight > n.clientHeight + 20 && /(auto|scroll)/.test(w.getComputedStyle(n).overflowY)
+      )
+      const scroller = inner[inner.length - 1] ?? d.scrollingElement!
+      scroller.scrollTop += 40
+    })
+    await expect.poll(async () => (await outline.boundingBox())?.y ?? before.y).toBeLessThan(before.y - 10)
+    const after = (await outline.boundingBox())!
+    const moved = (await cell.boundingBox())!
+    expect(Math.abs(after.y - moved.y)).toBeLessThan(2)
+    await expect(page.locator(".ps-inspect-status")).toHaveText("pinned")
+  })
+
+  test("with an element pinned, hovering another shows the distance between them", async ({ page }) => {
+    await page.goto("/stavy/?p=expenses&d_role=manager&d_state=loaded&i=1")
+    const frame = page.frameLocator("iframe.ps-frame")
+    const row = frame.locator('[data-proto="ExpenseRow:exp-2101"] td').first()
+    const r = (await row.boundingBox())!
+    await page.mouse.move(r.x + r.width / 2, r.y + r.height / 2)
+    await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2)
+    await expect(page.locator(".ps-inspect-status")).toHaveText("pinned")
+    // A cell two rows down: a vertical gap between them.
+    const other = frame.locator("tbody tr").nth(3).locator("td").first()
+    const o = (await other.boundingBox())!
+    await page.mouse.move(o.x + o.width / 2, o.y + o.height / 2)
+    const label = page.locator(".ps-measure-label").first()
+    await expect(label).toBeVisible()
+    await expect(label).toHaveText(/^\d+(\.\d)?px$/)
+    // Labels are in the prototype's own px, not the scaled screen px.
+    const gap = await frame.locator("tbody").evaluate((tb) => {
+      const rows = tb.querySelectorAll("tr")
+      const first = Array.from(rows).find((x) => x.getAttribute("data-proto") === "ExpenseRow:exp-2101")!
+      return Math.round(rows[3].getBoundingClientRect().top - first.getBoundingClientRect().bottom)
+    })
+    const values = (await page.locator(".ps-measure-label").allTextContents()).map((t) => Math.round(parseFloat(t)))
+    expect(values).toContain(gap)
+  })
+
+  // A team shapes the panel from data: which sections, in which order, links per component.
+  test("viewer.inspect.panel hides a section and adds a component link", async ({ page }) => {
+    await page.route("**/stavy.json", async (route) => {
+      const manifest = await (await route.fetch()).json()
+      manifest.viewer = {
+        ...manifest.viewer,
+        inspect: {
+          ...manifest.viewer?.inspect,
+          panel: {
+            sections: ["component", "props", "tokens", "type", "spacing", "accessibility", "url"],
+            hideProps: ["/^on[A-Z]/"],
+            links: [{ label: "Docs", href: "https://ds.example.com/components/{kebab}" }],
+          },
+        },
+      }
+      await route.fulfill({ json: manifest })
+    })
+    await page.goto("/stavy/?p=expense-detail&d_role=manager&d_lifecycle=submitted&i=1")
     const at = await targetCentre(page, "ApproveButton")
-    expect(at.x).toBeGreaterThan(page.viewportSize()!.width - 400)
     await page.mouse.move(at.x, at.y)
-    await expect(page.getByText("ApproveButton", { exact: true })).toBeVisible()
-    await expect(panel).toHaveAttribute("data-side", "left") // stepped aside
     await page.mouse.click(at.x, at.y)
-    await expect(panel.getByText("pinned", { exact: true })).toBeVisible()
-    // Pinned, the panel holds still — it is what the pointer is reaching for now.
-    await page.mouse.move(at.x - 4, at.y)
-    await expect(panel).toHaveAttribute("data-side", "left")
+    const panel = page.locator(".ps-inspect-panel")
+    await expect(panel.locator(".ps-inspect-status")).toHaveText("pinned")
+    await expect(panel.locator('[data-section="classes"]')).toHaveCount(0)
+    await expect(panel.locator('[data-section="source"]')).toHaveCount(0)
+    await expect(panel.locator('[data-section="accessibility"]')).toBeVisible()
+    await expect(panel.getByRole("link", { name: "Docs" })).toHaveAttribute("href", "https://ds.example.com/components/button")
+    // onClick is hidden from the JSX as well as from the props table.
+    await expect(panel.locator("pre")).not.toContainText("onClick")
   })
 
   // The demo is a CSS-variables design system like any other: the token behind
@@ -348,6 +475,7 @@ test.describe("inspector", () => {
     // The React component, with the props its author wrote.
     await expect(panel.locator(".ps-crumb", { hasText: /^Button$/ })).toBeVisible()
     await expect(panel.locator("pre")).toContainText("<Button onClick=")
+    await expect(panel.locator('[data-section="props"]')).toContainText("onClick")
 
     // Background: a real value, and the custom property it resolves to.
     const background = panel.locator(".ps-kv div", { has: page.locator("dt", { hasText: /^background$/ }) })
@@ -361,6 +489,10 @@ test.describe("inspector", () => {
   // the module are stubbed here, so the demo itself ships neither.
   test("a viewer.inspect.module is imported and merged over the built-in adapter", async ({ page }) => {
     const module = `export default {
+      apiVersion: 1,
+      panel: {
+        probe: (ctx) => ({ title: "Probe section", rows: [{ label: "component", value: ctx.component ? ctx.component.name : "none", copy: "x" }] }),
+      },
       designSystem: {
         detect: () => true,
         provenance: (el, prop) => ({ token: "--probe-token", chain: ["var(--probe-" + prop + ")"], raw: "probe", inheritedFrom: null }),
@@ -384,5 +516,8 @@ test.describe("inspector", () => {
     await expect(panel).toContainText("var(--probe-background-color)")
     // …while everything it did not override keeps working.
     await expect(panel.locator(".ps-crumb", { hasText: /^Button$/ })).toBeVisible()
+    // A module may add panel sections; unplaced, they come after the built-in ones.
+    await expect(panel.locator('[data-section="probe"]')).toContainText("Probe section")
+    await expect(panel.locator('[data-section="probe"]')).toContainText("Button")
   })
 })

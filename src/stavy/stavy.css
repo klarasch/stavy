@@ -425,9 +425,40 @@
 .ps-props dt { color: var(--ps-muted); } .ps-props dd { margin: 0; overflow-wrap: anywhere; }
 .ps-copy { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ps-border); background: transparent; color: var(--ps-muted); font: inherit; font-size: 10.5px; cursor: pointer; }
 .ps-copy:hover { color: var(--ps-fg); background: var(--ps-hover); }
-/* the inspect panel steps aside rather than covering the pointer that summoned it */
-.ps-inspect-panel { transition: left 120ms ease, right 120ms ease; }
-@media (prefers-reduced-motion: reduce) { .ps-inspect-panel { transition: none; } }
+/* The inspect panel: docked into its own space in the player (never over the
+   frame), or on the window edge as an overlay on the canvas. */
+.ps-inspect-panel { display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; }
+.ps-inspect-panel[data-side="right"] { border-left: 1px solid var(--ps-border); }
+.ps-inspect-panel[data-side="left"] { border-right: 1px solid var(--ps-border); }
+.ps-inspect-panel[data-side="bottom"] { border-top: 1px solid var(--ps-border); }
+.ps-inspect-panel[data-placement="overlay"] { box-shadow: 0 0 32px rgba(0, 0, 0, 0.18); }
+.ps-inspect-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.ps-inspect-resize { position: absolute; z-index: 1; touch-action: none; }
+.ps-inspect-resize[data-side="right"] { left: -3px; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
+.ps-inspect-resize[data-side="left"] { right: -3px; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
+.ps-inspect-resize[data-side="bottom"] { top: -3px; left: 0; right: 0; height: 7px; cursor: ns-resize; }
+.ps-inspect-resize:hover { background: var(--ps-focus-soft); }
+.ps-inspect-dockbtn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; border: 0; background: transparent; color: var(--ps-muted); cursor: pointer; }
+.ps-inspect-dockbtn:hover { background: var(--ps-hover); color: var(--ps-fg); }
+.ps-inspect-dockbtn[data-on="true"] { background: var(--ps-hover); color: var(--ps-fg); }
+.ps-crumb[data-proto-crumb="true"] { color: var(--ps-focus); }
+.ps-kv dd[data-missing="true"] { color: #dc2626; }
+/* outlines, the hover tag and redlines, clipped to the frame they describe */
+.ps-inspect-clip { position: absolute; overflow: hidden; }
+.ps-inspect-outline { position: absolute; box-sizing: border-box; border-radius: 2px; }
+.ps-inspect-outline[data-kind="hover"] { outline: 1.5px dashed var(--ps-focus); outline-offset: -1px; background: var(--ps-focus-soft); }
+.ps-inspect-outline[data-kind="pinned"] { outline: 2px solid var(--ps-focus); outline-offset: -1px; }
+.ps-inspect-tag { position: absolute; display: inline-flex; align-items: center; gap: 6px; height: 18px; padding: 0 6px; border-radius: 4px; background: var(--ps-focus); color: #fff; font: 500 10.5px/18px ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
+.ps-inspect-tag b { font-weight: 600; }
+.ps-inspect-tag-size { opacity: 0.8; font-variant-numeric: tabular-nums; }
+.ps-measure-line { position: absolute; background: #f2443b; }
+.ps-measure-line[data-dir="h"] { height: 1px !important; }
+.ps-measure-line[data-dir="v"] { width: 1px !important; }
+.ps-measure-label { position: absolute; transform: translate(-50%, -50%); padding: 0 4px; border-radius: 3px; background: #f2443b; color: #fff; font: 600 10px/16px ui-sans-serif, system-ui, sans-serif; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* the player while inspecting: the frame keeps its viewport width, scaled to fit beside the panel */
+.ps-inspect-slot { position: absolute; z-index: 3; }
+.ps-player[data-inspect-scaled] { overflow: hidden; }
+.ps-player[data-inspect-scaled] > .ps-frame { transform-origin: 0 0; }
 .ps-comp-stack { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; font-size: 11px; color: var(--ps-muted); }
 
 /* ---- canvas areas: named regions that read at any zoom ---- */

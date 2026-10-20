@@ -53,6 +53,9 @@ function computed(el) {
  * ------------------------------------------------------------------ */
 
 export default {
+  /** The adapter interface this file was written against. The viewer warns (and still loads it) on a mismatch. */
+  apiVersion: 1,
+
   designSystem: {
     /** Shown in the panel. */
     name: "Acme",
@@ -158,6 +161,25 @@ export default {
      */
     componentStack(el, stopAt) {
       return []
+    },
+  },
+
+  /**
+   * Extra panel sections, by id. Place them with
+   * `viewer.inspect.panel.sections` (e.g. ["component", "acme-usage", "tokens"]);
+   * a section not listed there comes after the built-in ones. Return null to
+   * hide the section for this element. Delete this half if you need none.
+   *
+   * ctx: { el, component: { name, kit?, props } | null, stack, doc, win, page: { id, label, template? }, dims }
+   * returns: { title, rows: [{ label, value, copy? }] } | null
+   */
+  panel: {
+    "acme-usage"(ctx) {
+      if (!ctx.component?.kit) return null
+      return {
+        title: "Acme usage",
+        rows: [{ label: "import", value: `import { ${ctx.component.name} } from "@acme/ui"`, copy: `import { ${ctx.component.name} } from "@acme/ui"` }],
+      }
     },
   },
 }

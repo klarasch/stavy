@@ -177,7 +177,67 @@
             },
             "module": {
               "type": "string",
-              "description": "Same-origin ES module the viewer imports at startup, default-exporting { framework?, designSystem? } partials merged over the built-in adapter. Only for what the data above cannot say."
+              "description": "Same-origin ES module the viewer imports at startup, default-exporting { apiVersion: 1, framework?, designSystem?, panel? }: partials merged over the built-in adapter, and extra panel sections by id. Only for what the data cannot say. The viewer warns when apiVersion does not match the one it implements."
+            },
+            "internals": {
+              "type": "object",
+              "description": "Which component frames are framework plumbing (dropped from the stack) and which are headless primitives (collapsed as a kit's internals). Patterns are regular expressions tested against the component name without a bundler digit suffix. Added to the built-in lists unless keepDefaults is false.",
+              "properties": {
+                "exclude": {
+                  "type": "array",
+                  "items": { "type": "string", "format": "regex" },
+                  "description": "Component names never shown on the stack, e.g. \"^Acme(Theme|Telemetry)\"."
+                },
+                "primitives": {
+                  "type": "array",
+                  "items": { "type": "string", "format": "regex" },
+                  "description": "Headless primitives a kit wraps; collapsed behind \"+N internals\" when a kit renders them. Only consulted when kits are declared."
+                },
+                "keepDefaults": {
+                  "type": "boolean",
+                  "description": "Keep the built-in patterns and add these (default true). False replaces them."
+                }
+              }
+            },
+            "panel": {
+              "type": "object",
+              "description": "What the inspect panel shows, in which order, and which links and copy buttons it offers.",
+              "properties": {
+                "sections": {
+                  "type": "array",
+                  "items": {
+                    "anyOf": [
+                      { "enum": ["component", "props", "tokens", "type", "spacing", "classes", "accessibility", "source", "url"] },
+                      { "type": "string", "description": "A section id exported by viewer.inspect.module under `panel`." }
+                    ]
+                  },
+                  "description": "Sections in display order; a section left out is hidden. Default: every built-in section, then the module's."
+                },
+                "hideProps": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "description": "Props never shown (props table and copied JSX): exact names, or regular expressions written as \"/pattern/flags\", e.g. \"/^on[A-Z]/\"."
+                },
+                "links": {
+                  "type": "array",
+                  "description": "Links shown for the selected component. {name}, {kebab} and {kit} are filled in; a link whose placeholder has no value is left out.",
+                  "items": {
+                    "type": "object",
+                    "required": ["label", "href"],
+                    "properties": {
+                      "label": { "type": "string" },
+                      "href": { "type": "string", "description": "e.g. \"https://ds.example.com/components/{kebab}\"" },
+                      "match": { "type": "string", "format": "regex", "description": "Only for components whose name matches." },
+                      "kit": { "type": "string", "description": "Only for components of this kit (kits[].name)." }
+                    }
+                  }
+                },
+                "copy": {
+                  "type": "array",
+                  "items": { "enum": ["jsx", "token", "class"] },
+                  "description": "Which copy buttons the panel offers. Default all three."
+                }
+              }
             }
           }
         },

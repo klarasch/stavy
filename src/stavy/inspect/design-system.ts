@@ -15,6 +15,8 @@
 
 import type { ClassKind, ClassSource, DesignSystemAdapter, Kit, TypeMetrics, TypeScaleEntry } from "./types"
 import { pixelTokens, provenanceFor, rootHasProperties, documentDeclaresToken, type TokenPatterns } from "./cssom"
+import type { InternalsPatterns } from "./react"
+import type { PanelConfig } from "./config"
 
 /** A workspace's compiled `viewer.inspect` settings (see `./config`). */
 export interface InspectConfig {
@@ -26,6 +28,10 @@ export interface InspectConfig {
   typeScale: TypeScaleEntry[]
   componentAttrs: string[]
   module?: string
+  /** Framework plumbing and headless primitives (`viewer.inspect.internals`); defaults when absent */
+  internals?: InternalsPatterns
+  /** `viewer.inspect.panel`, compiled; defaults when absent */
+  panel?: PanelConfig
 }
 
 /** Properties whose value is inherited when the element does not set one itself. */

@@ -643,7 +643,7 @@ export function CanvasPage() {
     <CanvasViewportContext.Provider value={canvasViewport}>
     <CanvasInspectContext.Provider value={inspectCtx}>
     <div className="h-screen relative overflow-hidden">
-      <PanZoom ref={pz} initial={initialT.current} onCommit={setT} onLive={onLive} contentRef={(el) => { contentElRef.current = el; if (el !== contentEl) setContentEl(el) }}>
+      <PanZoom ref={pz} initial={initialT.current} onCommit={setT} onLive={onLive} contentRef={(el) => { contentElRef.current = el; if (el && el !== contentEl) setContentEl(el) }}>
         <div
           data-canvas-root
           className={cn("ps flex flex-col items-start gap-14 p-12", wireframe && "proto-wireframe", inspect && "ps-inspect-on")}

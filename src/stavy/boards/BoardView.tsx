@@ -1,8 +1,10 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
-import { ChevronDown, ChevronRight, Layers, Maximize2, MessageCircle, MessageCirclePlus, Minus, Pencil, Play, Plus, Redo2, Undo2 } from "../icons"
+import { ChevronDown, ChevronRight, Crosshair, Layers, Maximize2, MessageCircle, MessageCirclePlus, Minus, Pencil, Play, Plus, Redo2, Undo2 } from "../icons"
 import { cn } from "../cn"
-import { loadBoard, manifest } from "../manifest"
+import { getPage, getTemplate, loadBoard, manifest, resolveDims } from "../manifest"
+import { Inspector, type FrameHit } from "../overlays/Inspector"
+import { elementAt } from "../frame"
 import { useContentRev, useDev, writeContent } from "../dev"
 import { Chip, HelpButton, PsButton, PsDivider, ShortcutsSheet, ThemeToggle, cycleTheme, isTyping, useChrome, useHotkeys } from "../chrome"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "../canvas/PanZoom"
@@ -287,7 +289,23 @@ export function BoardView() {
     }),
     []
   )
-  const inspectCtx = useMemo<CanvasInspect>(() => ({ on: false, live: liveMode, hold: null }), [liveMode])
+  // Inspect on a board: the same panel as the map, docked to the window edge.
+  // Off while editing — the pointer belongs to the editor then.
+  const inspect = sp.get("i") === "1" && !editMode
+  const [hold, setHold] = useState<HTMLIFrameElement | null>(null)
+  const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null)
+  const inspectCtx = useMemo<CanvasInspect>(() => ({ on: inspect, live: liveMode, hold }), [inspect, liveMode, hold])
+  const inspectHit = useCallback((e: MouseEvent): FrameHit | null => {
+    const card = (e.target as Element | null)?.closest<HTMLElement>("[data-instance]")
+    const iframe = card?.querySelector("iframe")
+    if (!card || !iframe) return null
+    const el = elementAt(iframe, e.clientX, e.clientY)
+    if (!el) return null
+    const [pageId, qs] = (card.getAttribute("data-instance") ?? "").split("?")
+    const page = getPage(pageId)
+    if (!page) return null
+    return { el, iframe, ctx: { page, template: getTemplate(page.template), dims: resolveDims(page, Object.fromEntries(new URLSearchParams(qs ?? ""))) } }
+  }, [])
   const fmtZoom = (k: number) => (k >= 1 ? `${k.toFixed(1)}×` : `${Math.round(k * 100)}%`)
   const onLive = useCallback((lt: Transform) => {
     if (zoomLabel.current) zoomLabel.current.textContent = fmtZoom(lt.k)
@@ -672,10 +690,12 @@ export function BoardView() {
     "+": () => pz.current?.zoomBy(1.5, true),
     "=": () => pz.current?.zoomBy(1.5, true),
     "-": () => pz.current?.zoomBy(1 / 1.5, true),
+    i: () => setFlag("i", sp.get("i") !== "1"),
     Escape: () => {
       if (placing) setPlacing(false)
       else if (openCommentId) setParam("c", null)
       else if (commentsOpen) setParam("comments", null)
+      else if (inspect) setFlag("i", false)
       else if (editing) setEditing(null)
       else if (selection.size) setSelection(new Set())
       else setHidden(false)
@@ -753,8 +773,11 @@ export function BoardView() {
             }
           }}
         >
-          <PanZoom ref={pz} initial={initialT.current} onCommit={setT} onLive={onLive} contentRef={(el) => (contentElRef.current = el)}>
-            <div data-canvas-root className={cn("ps ps-board-root", wireframe && "proto-wireframe", editMode && "is-editing")} style={{ width: bbox.x + bbox.w, height: bbox.y + bbox.h }}>
+          <PanZoom ref={pz} initial={initialT.current} onCommit={setT} onLive={onLive} contentRef={(el) => {
+            contentElRef.current = el
+            if (el?.parentElement && el.parentElement !== viewportEl) setViewportEl(el.parentElement)
+          }}>
+            <div data-canvas-root className={cn("ps ps-board-root", wireframe && "proto-wireframe", editMode && "is-editing", inspect && "ps-inspect-on")} style={{ width: bbox.x + bbox.w, height: bbox.y + bbox.h }}>
               {board && (
                 <BoardHeading board={board} x={bbox.x} y={bbox.y} editMode={editMode} onPatch={(p) => commit({ ...board, ...p })} />
               )}
@@ -797,6 +820,7 @@ export function BoardView() {
               }}
             />
           )}
+          {inspect && !hidden && viewportEl && <Inspector host={viewportEl} hit={inspectHit} onClose={() => setFlag("i", false)} onPinChange={setHold} />}
 
           {marquee && (
             <div
@@ -865,6 +889,9 @@ export function BoardView() {
                     <PsDivider />
                   </>
                 )}
+                <PsButton active={inspect} tip="Inspect: hover a screen to read its live DOM" keys={["I"]} tipBelow disabled={editMode} onClick={() => setFlag("i", !inspect)}>
+                  <Crosshair /> Inspect
+                </PsButton>
                 <PsButton active={liveMode} tip="Live frames instead of snapshots for cards near the viewport" keys={["L"]} tipBelow onClick={() => setFlag("live", !liveMode)}>
                   <Play /> Live
                 </PsButton>
