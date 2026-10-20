@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
-import { ChevronDown, ChevronRight, Layers, Maximize2, Minus, Pencil, Play, Plus, Redo2, Undo2 } from "../icons"
+import { ChevronDown, ChevronRight, Layers, Maximize2, MessageCircle, MessageCirclePlus, Minus, Pencil, Play, Plus, Redo2, Undo2 } from "../icons"
 import { cn } from "../cn"
 import { loadBoard, manifest } from "../manifest"
 import { useContentRev, useDev, writeContent } from "../dev"
@@ -15,6 +15,9 @@ import { AddPalette, type NewItem } from "./Palette"
 import { PageSwitcher } from "./PageSwitcher"
 import { rememberView } from "./store"
 import { resolveShot } from "./resolve"
+import { SurfaceCommentLayer } from "../comments/SurfaceCommentLayer"
+import { CommentsPanel } from "../comments/CommentsPanel"
+import { useComments } from "../comments/store"
 
 /**
  * An authored board (stavy-content/boards/<id>.json): a free-form canvas page
@@ -197,6 +200,19 @@ export function BoardView() {
   }
   const [selection, setSelection] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<Editing>(null)
+  /* ---- comments: on an item or a point of the board ---- */
+  const { comments } = useComments()
+  const [placing, setPlacing] = useState(false)
+  const commentsOpen = sp.get("comments") === "1"
+  const openCommentId = sp.get("c")
+  const setParam = (k: string, v: string | null) => {
+    const next = new URLSearchParams(sp)
+    if (v == null) next.delete(k)
+    else next.set(k, v)
+    setSp(next, { replace: true })
+  }
+  const boardComments = comments.filter((c) => c.board === id && !c.resolved).length
+  const itemIdOf = useCallback((el: Element) => el.getAttribute("data-item-id"), [])
   useEffect(() => {
     if (!editMode) {
       setSelection(new Set())
@@ -645,6 +661,7 @@ export function BoardView() {
   })
 
   useHotkeys({
+    m: () => setPlacing((p) => !p),
     e: () => writable && setFlag("e", !editMode),
     l: () => setFlag("live", !liveMode),
     w: () => setFlag("w", !wireframe),
@@ -656,7 +673,10 @@ export function BoardView() {
     "=": () => pz.current?.zoomBy(1.5, true),
     "-": () => pz.current?.zoomBy(1 / 1.5, true),
     Escape: () => {
-      if (editing) setEditing(null)
+      if (placing) setPlacing(false)
+      else if (openCommentId) setParam("c", null)
+      else if (commentsOpen) setParam("comments", null)
+      else if (editing) setEditing(null)
       else if (selection.size) setSelection(new Set())
       else setHidden(false)
     },
@@ -759,6 +779,25 @@ export function BoardView() {
               {guides?.y != null && <div className="ps-guide ps-guide-h" style={{ top: guides.y }} />}
             </div>
           </PanZoom>
+          {board && (
+            <SurfaceCommentLayer
+              surface={id}
+              itemSelector="[data-item-id]"
+              itemIdOf={itemIdOf}
+              itemLabel={(iid) => {
+                const it = findItem(board.items, iid) as { title?: string } | undefined
+                return it?.title
+              }}
+              placing={placing}
+              onPlaced={() => setPlacing(false)}
+              openId={openCommentId}
+              onOpenChange={(cid) => setParam("c", cid)}
+              reveal={(x, y) => {
+                const k = Math.max(pz.current?.get().k ?? 0.5, 0.5)
+                pz.current?.set({ k, x: window.innerWidth / 2 - x * k, y: window.innerHeight / 2 - y * k }, true)
+              }}
+            />
+          )}
 
           {marquee && (
             <div
@@ -831,6 +870,22 @@ export function BoardView() {
                   <Play /> Live
                 </PsButton>
                 <PsDivider />
+                <PsButton
+                  icon
+                  active={placing}
+                  tip="Leave a comment: click an item or the board"
+                  keys={["M"]}
+                  tipBelow
+                  onClick={() => setPlacing((p) => !p)}
+                  style={placing ? { color: "var(--ps-comment)", background: "var(--ps-comment-soft)" } : undefined}
+                >
+                  <MessageCirclePlus />
+                </PsButton>
+                <PsButton icon active={commentsOpen} tip="Comments" tipBelow onClick={() => setParam("comments", commentsOpen ? null : "1")} className="relative">
+                  <MessageCircle />
+                  {boardComments > 0 && <span className="ps-ccount">{boardComments}</span>}
+                </PsButton>
+                <PsDivider />
                 <PsButton icon tip="Zoom out" keys={["−"]} tipBelow onClick={() => pz.current?.zoomBy(1 / 1.5, true)}>
                   <Minus />
                 </PsButton>
@@ -862,6 +917,7 @@ export function BoardView() {
                       ] as Array<[string, string]>)
                     : []),
                   ["Live frames", "L"],
+                  ["Leave a comment", "M"],
                   ["Wireframe", "W"],
                   ["Theme", "T"],
                   ["Zoom in / out", "+ −"],
@@ -870,6 +926,18 @@ export function BoardView() {
                   ["This sheet", "?"],
                 ]}
               />
+
+              {commentsOpen && (
+                <CommentsPanel
+                  wireframe={wireframe}
+                  here={{ label: board?.title ?? id, test: (c) => c.board === id, open: (c) => setParam("c", c.id) }}
+                  onClose={() => setParam("comments", null)}
+                  onAdd={() => {
+                    setParam("comments", null)
+                    setPlacing(true)
+                  }}
+                />
+              )}
 
               {editMode && (
                 <div className="ps ps-glass absolute bottom-4 left-4 z-20 rounded-xl px-3 py-1.5 flex items-center gap-4 text-[11px]" style={{ color: "var(--ps-muted)" }} data-ps-ui>
