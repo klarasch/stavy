@@ -203,7 +203,7 @@ export function BoardView() {
       setEditing(null)
     }
   }, [editMode])
-  // Collapse state is a viewing choice; in edit mode it is also written to the file.
+  // Flow strips can collapse to a list (a viewing choice; in edit mode also written to the file). Sections are plain frames.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const toggleCollapsed = (it: BoardItem) => {
     const cur = collapsed[it.id] ?? !!(it as { collapsed?: boolean }).collapsed
@@ -685,10 +685,9 @@ export function BoardView() {
         onPatch: (patch: Record<string, unknown>) => setItem(it.id, patch),
       }
       if (it.type === "section") {
-        const isCollapsed = !!it.collapsed
         return (
-          <SectionFrame key={it.id} {...common} collapsed={isCollapsed} onToggle={() => toggleCollapsed(it)} measure={measure}>
-            {!isCollapsed && renderItems(it.items ?? [])}
+          <SectionFrame key={it.id} {...common} measure={measure}>
+            {renderItems(it.items ?? [])}
           </SectionFrame>
         )
       }
@@ -1102,26 +1101,14 @@ function TextEditor({ item, onPatch, onDone }: { item: Extract<BoardItem, { type
   )
 }
 
-const SectionFrame = memo(function SectionFrame(props: FrameProps & { collapsed: boolean; onToggle: () => void }) {
-  const { item, box, editMode, editing, setEditing, onPatch, collapsed, onToggle, children } = props
+const SectionFrame = memo(function SectionFrame(props: FrameProps) {
+  const { item, box, editMode, editing, setEditing, onPatch, children } = props
   const s = item as SectionItem
   return (
-    <div data-item-id={s.id} data-item-type="section" data-toc={`section:${s.id}`} className={cn("ps-section", collapsed && "is-collapsed", editMode && "is-editable")} style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
+    <div data-item-id={s.id} data-item-type="section" data-toc={`section:${s.id}`} className={cn("ps-section", editMode && "is-editable")} style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
       <EditChrome {...props} />
       <div className="ps-section-title" data-ps-ui>
         <span className="ps-section-pill">
-          <button
-            type="button"
-            className="ps-section-toggle"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggle()
-            }}
-            title={collapsed ? "Expand" : "Collapse"}
-          >
-            {collapsed ? <ChevronRight /> : <ChevronDown />}
-          </button>
           {editing === "title" ? (
             <InlineInput
               value={s.title}
@@ -1140,11 +1127,6 @@ const SectionFrame = memo(function SectionFrame(props: FrameProps & { collapsed:
           )}
         </span>
       </div>
-      {collapsed && (
-        <button type="button" className="ps-section-collapsed" onPointerDown={(e) => e.stopPropagation()} onClick={onToggle}>
-          {(s.items ?? []).filter((i) => i.type !== "arrow").length} items · show
-        </button>
-      )}
       <div className="ps-section-body" style={{ left: SECTION_PAD.side, top: SECTION_PAD.top }}>
         {children}
       </div>

@@ -421,6 +421,7 @@ export interface SectionItem extends ItemBase {
   items?: BoardItem[]
   layout?: "row" | "column" | "grid"
   columns?: number
+  /** Ignored: sections are plain frames (kept so older boards still parse). */
   collapsed?: boolean
 }
 

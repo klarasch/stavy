@@ -11,7 +11,7 @@ import type { BoardItem, SectionItem } from "../types"
  *  - The rest flow in the order written, starting under the placed ones:
  *    rows that wrap (default), a single column, or a grid.
  *  - A section's size is its children's bounding box plus its frame, unless
- *    it carries its own `w` / `h`; a collapsed section is just its title bar.
+ *    it carries its own `w` / `h`; 
  * Arrows take no space and are ignored here (see `arrowPath`).
  */
 
@@ -42,8 +42,6 @@ export interface BoardLayout {
 
 /** A section's frame around its children (its title sits above the frame, like a Figma section). */
 export const SECTION_PAD = { top: 32, side: 28, bottom: 28 }
-/** Height of a collapsed section (a one-line summary). */
-export const SECTION_COLLAPSED_H = 48
 export const BOARD_GAP = 72
 export const SECTION_GAP = 28
 /** A balanced board reads like a page from orbit: aim the wrap width at this aspect ratio. */
@@ -155,7 +153,6 @@ function flow(
 function sizeOf(item: BoardItem, sizes: Sizes, nested: Map<string, Level>): Size {
   if (item.type === "section") {
     const inner = nested.get(item.id)!
-    if (item.collapsed) return { w: item.w ?? Math.max(320, inner.w + SECTION_PAD.side * 2), h: SECTION_COLLAPSED_H }
     return {
       w: item.w ?? Math.max(320, inner.w + SECTION_PAD.side * 2),
       h: item.h ?? Math.max(160, inner.h + SECTION_PAD.top + SECTION_PAD.bottom),
@@ -219,7 +216,7 @@ export function layoutBoard(items: BoardItem[], sizes: Sizes = {}, opts: LayoutO
       if (it.type === "arrow" || hidden) continue
       const b = local[it.id]
       abs[it.id] = { ...b, x: b.x + ox, y: b.y + oy }
-      if (it.type === "section") walk(it.items ?? [], ox + b.x + SECTION_PAD.side, oy + b.y + SECTION_PAD.top, !!it.collapsed)
+      if (it.type === "section") walk(it.items ?? [], ox + b.x + SECTION_PAD.side, oy + b.y + SECTION_PAD.top, false)
     }
   }
   walk(items, 0, 0, false)

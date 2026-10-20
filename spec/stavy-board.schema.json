@@ -119,7 +119,7 @@
               "items": { "type": "array", "items": { "$ref": "#/$defs/item" } },
               "layout": { "enum": ["row", "column", "grid"] },
               "columns": { "type": "integer", "minimum": 1 },
-              "collapsed": { "type": "boolean" }
+              "collapsed": { "type": "boolean", "description": "Ignored: sections are plain frames." }
             }
           }
         },
