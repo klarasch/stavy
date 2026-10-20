@@ -3,7 +3,7 @@ import { createPortal } from "react-dom"
 import { X, Crosshair, Copy, Check, ExternalLink, PanelLeft, PanelRight, PanelBottom } from "../icons"
 import { Chip, Keys, isTyping } from "../chrome"
 import type { PageDef, TemplateDef } from "../types"
-import { valueLabel, dimensionLabel, appUrl, manifest, appBase, ownTargetId } from "../manifest"
+import { valueLabel, dimensionLabel, appUrl, manifest, appBase, ownTargetId, STATE_DIM, stateLabel } from "../manifest"
 import {
   componentStack as componentStackOf,
   designSystemFor,
@@ -124,6 +124,42 @@ function elementLabel(el: Element) {
 
 function crumbLabel(el: Element) {
   return ownTargetId(el) ?? el.tagName.toLowerCase() + (el.classList[0] && !/[[:]/.test(el.classList[0]) ? "." + el.classList[0] : "")
+}
+
+/**
+ * A plain-text pointer to one element, for pasting into a chat with an agent:
+ * which screen and state, the app URL that renders it, the nearest target id
+ * and the path from it, the text it shows, and the components it sits in —
+ * enough for the agent to open the state and grep its way to the code.
+ */
+export function elementReference(el: Element, ctx: { page: { id: string; label: string; states?: { id: string }[] } & Parameters<typeof appUrl>[0]; dims: Record<string, string> }, stack: CompFrame[]): string {
+  const page = ctx.page
+  const stateId = ctx.dims[STATE_DIM]
+  const state = stateId
+    ? `${stateLabel(page, stateId)} (${page.id}/${stateId})`
+    : Object.entries(ctx.dims).map(([d, v]) => `${dimensionLabel(d)}: ${valueLabel(d, v)}`).join(", ") || "default"
+  // Nearest element carrying a target id, and the CSS-ish steps from it down to `el`.
+  let anchor: Element | null = el
+  while (anchor && !ownTargetId(anchor)) anchor = anchor.parentElement
+  const steps: string[] = []
+  for (let cur: Element | null = el; cur && cur !== anchor; cur = cur.parentElement) {
+    const parent: Element | null = cur.parentElement
+    const same = parent ? [...parent.children].filter((c) => c.tagName === cur!.tagName) : []
+    steps.unshift(cur.tagName.toLowerCase() + (same.length > 1 ? `:nth-of-type(${same.indexOf(cur) + 1})` : ""))
+    if (!parent || parent.tagName === "BODY") break
+  }
+  const where = anchor ? `[data-proto="${ownTargetId(anchor)}"]${steps.length ? " › " + steps.join(" › ") : ""}` : steps.join(" › ")
+  const text = (el.textContent ?? "").replace(/\s+/g, " ").trim()
+  const comps = stack.filter((c) => !c.internal).slice(0, 3).map((c) => c.name)
+  return [
+    `Stavy reference — ${page.label} · ${state}`,
+    `App URL: ${appUrl(page as Parameters<typeof appUrl>[0], ctx.dims)}`,
+    `Element: ${where}${text ? ` — "${text.length > 80 ? text.slice(0, 77) + "…" : text}"` : ""}`,
+    comps.length ? `Component: ${comps.join(" in ")}` : null,
+    `Viewer: ${location.href}`,
+  ]
+    .filter(Boolean)
+    .join("\n")
 }
 
 /** Child indices from the document element down to `el`. */
@@ -1057,6 +1093,11 @@ export function Inspector({
           {pinned ? "pinned" : "hover, click to pin"}
         </span>
         <span className="ml-auto flex items-center gap-0.5">
+          {pinned && ctx && subject && (
+            <span className="mr-1.5" title="Copy a pointer to this element (screen, state, URL, target, component) to paste into a chat with an agent">
+              <CopyButton text={elementReference(subject, ctx, stack)} label="copy reference" />
+            </span>
+          )}
           {(["left", "bottom", "right"] as DockSide[]).map((s) => (
             <button
               key={s}
