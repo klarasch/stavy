@@ -150,7 +150,8 @@ export function elementReference(el: Element, ctx: { page: { id: string; label: 
   }
   const where = anchor ? `[data-proto="${ownTargetId(anchor)}"]${steps.length ? " › " + steps.join(" › ") : ""}` : steps.join(" › ")
   const text = (el.textContent ?? "").replace(/\s+/g, " ").trim()
-  const comps = stack.filter((c) => !c.internal).slice(0, 3).map((c) => c.name)
+  // Components only: host elements show up in the stack as bare tag names (TD, TR).
+  const comps = stack.filter((c) => !c.internal && !/^[A-Z0-9]+$/.test(c.name) && /^[A-Z]/.test(c.name)).slice(0, 3).map((c) => c.name)
   return [
     `Stavy reference — ${page.label} · ${state}`,
     `App URL: ${appUrl(page as Parameters<typeof appUrl>[0], ctx.dims)}`,
