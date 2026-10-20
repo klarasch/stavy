@@ -29,7 +29,7 @@ import {
 } from "./manifest"
 import { TourOverlay, stepUrl } from "./overlays/TourOverlay"
 import { AnnotationOverlay } from "./overlays/AnnotationOverlay"
-import { Inspector, type FrameHit } from "./overlays/Inspector"
+import { Inspector, useInspectDock, type FrameHit } from "./overlays/Inspector"
 import { PsButton, PsDivider, PsSelect, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "./chrome"
 import type { ToolbarAnchor } from "./types"
 import { CommentLayer } from "./comments/CommentLayer"
@@ -63,6 +63,16 @@ export function PageView() {
   const { hidden, theme, setTheme, setHidden } = useChrome()
   const [iframe, setIframe] = useState<HTMLIFrameElement | null>(null)
   const [shield, setShield] = useState<HTMLDivElement | null>(null)
+  const [inspectSlot, setInspectSlot] = useState<HTMLDivElement | null>(null)
+  const [viewportEl, setViewportEl] = useState<HTMLDivElement | null>(null)
+  const [vp, setVp] = useState<{ w: number; h: number } | null>(null)
+  const [dock, setDock] = useInspectDock()
+  useEffect(() => {
+    if (!viewportEl) return
+    const ro = new ResizeObserver(() => setVp({ w: viewportEl.clientWidth, h: viewportEl.clientHeight }))
+    ro.observe(viewportEl)
+    return () => ro.disconnect()
+  }, [viewportEl])
   const doc = useFrameDocument(iframe)
   const [dimPanel, setDimPanel] = useState(false)
   const [drag, setDrag] = useState<{ dx: number; dy: number; target: ToolbarAnchor } | null>(null)
@@ -337,14 +347,38 @@ export function PageView() {
     [iframe, page, template, dims]
   )
 
+  // Inspect docks a panel into its own space. Beside the frame (left/right) the
+  // frame keeps the viewport width it had and is scaled down to fit, so the
+  // prototype never reflows while inspecting and nothing of it is covered; a
+  // bottom dock only takes height.
+  const panelOn = inspectOn && !hidden
+  const playerStyle: React.CSSProperties = {}
+  const slotStyle: React.CSSProperties = {}
+  const frameStyle: React.CSSProperties = veil ? { visibility: "hidden" } : {}
+  let scaled = false
+  if (panelOn) {
+    if (dock.side === "bottom") {
+      playerStyle.bottom = dock.height
+      Object.assign(slotStyle, { left: 0, right: 0, bottom: 0, height: dock.height })
+    } else {
+      playerStyle[dock.side] = dock.width
+      Object.assign(slotStyle, { top: 0, bottom: 0, [dock.side]: 0, width: dock.width })
+      if (vp && vp.w > dock.width) {
+        const k = (vp.w - dock.width) / vp.w
+        scaled = true
+        Object.assign(frameStyle, { width: vp.w, height: vp.h / k, transform: `scale(${k})` })
+      }
+    }
+  }
+
   return (
     <div className="h-screen relative">
-      <div className="ps-viewport h-full relative" data-bar={isBar ? barSide : undefined}>
-        <div className="ps-player">
+      <div ref={setViewportEl} className="ps-viewport h-full relative" data-bar={isBar ? barSide : undefined}>
+        <div className="ps-player" style={playerStyle} data-inspect-scaled={scaled ? "true" : undefined}>
           {/* No `src` prop: the effect above loads every requested state itself
               (loadFrame — a fresh document, so the app boots into exactly that
               state) and veils the frame until it has settled. */}
-          <iframe ref={setIframe} className="ps-frame" title={page.label} style={veil ? { visibility: "hidden" } : undefined} />
+          <iframe ref={setIframe} className="ps-frame" title={page.label} style={frameStyle} />
           {veil && (
             <div className="ps-frame-veil" aria-hidden>
               {veil.src && <img src={veil.src} alt="" />}
@@ -355,7 +389,10 @@ export function PageView() {
         </div>
         {annotMode && page.annotations && <AnnotationOverlay annotations={page.annotations} iframe={iframe} doc={doc} mode={annotMode} />}
         {scenario && <TourOverlay scenario={scenario} stepIdx={tourStep} iframe={iframe} doc={doc} exitUrl={exitUrl} carry={carry} onAdvanceInPlace={advanceTourInPlace} onExitInPlace={exitTourInPlace} />}
-        {inspectOn && !hidden && shield && <Inspector host={shield} hit={hit} onClose={() => setParam("i", null)} />}
+        {panelOn && <div ref={setInspectSlot} className="ps-inspect-slot" style={slotStyle} />}
+        {panelOn && shield && (
+          <Inspector host={shield} hit={hit} onClose={() => setParam("i", null)} placement="docked" slot={inspectSlot} dock={dock} onDock={setDock} />
+        )}
       </div>
 
       {!hidden && (
