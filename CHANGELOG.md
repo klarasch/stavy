@@ -5,6 +5,46 @@ prints the sections between the release a repo last took and the one it is
 taking, so write each entry for that reader: what they get, and what, if
 anything, they have to do.
 
+## 0.3.0-alpha.1 — 2026-10-20
+
+An alpha of the lean core: authored boards and docs, editing on the dev
+server, a static publish. Expect rough edges; report them.
+
+**What you get**
+
+- **Named states.** A screen can list `states` as named URLs (one `?scene=` param
+  is the recommended shape). Dimensions are optional; the map shows rows, and a
+  matrix only with `layout: "matrix"`. No more placeholder cells.
+- **Boards and Docs** in `public/stavy-content/`: free-form boards (screens at
+  any state, crops, `do: [{click}]` captures, flows, Markdown, notes, sections,
+  images, Mermaid, arrows) and Markdown docs with `stavy:` embeds. A **Home**
+  page with links, changelog, decisions and recent commits.
+- **Editing on the dev server** (add the plugin, below): move and resize board
+  items, edit text, add items, edit screen/state titles and notes on the Map,
+  links on Home. Everything is saved to files in your repo.
+- **Comments anywhere**: precise to the element in the player, on boards, the
+  map and docs. Saved to `stavy-content/comments.json` on the dev server; in a
+  published build they stay in the reviewer's browser and travel as a link or
+  `.md` you import.
+- **Inspect** docks beside the frame (never covers it), pins reliably, measures
+  distances, has **copy reference** for pasting into a chat, and is shaped per
+  design system with `viewer.inspect.panel` / `internals`. Adapters keep working;
+  to test yours on this release, follow §9 of `docs/INSPECT-ADAPTERS.md`.
+- **Fast and stable**: scans are incremental WebP (only new/changed states), on
+  demand from the viewer; every requested state loads fresh and shows its
+  snapshot until it settles; tours let your clicks through to the app.
+- **`npm run stavy:publish`**: a static build that carries its own snapshots.
+
+**What to do**
+
+1. Update: `npm run stavy:update` (or unpack this release and run its `init`).
+2. Add the dev plugin to `vite.config`:
+   `import stavy from "./scripts/stavy/vite-plugin.mjs"` and `plugins: [..., stavy({ root: "public", snapshots: "public/snapshots" })]`.
+3. Snapshots are now a gitignored cache: `git rm -r --cached public/snapshots` if you committed them.
+4. Optional: `npm run stavy:migrate` turns 0.2 boards and notes into a board file.
+5. If your app uses Tailwind v4 and saving a board reloads the page, add
+   `@source not "../public/stavy-content";` to your main CSS.
+
 ## 0.2.2 — 2026-09-14
 
 Tour fixes from adopting 0.2.1. Nothing to do on your side.
