@@ -1,3 +1,4 @@
+import { EditableText } from "./EditableText"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { Layers, MessageSquare, Crosshair, Play, PencilRuler, ChevronLeft, SlidersHorizontal, RotateCcw, GripVertical, MessageCircle, MessageCirclePlus, PanelBottom, PictureInPicture2, ExternalLink } from "./icons"
@@ -408,7 +409,7 @@ export function PageView() {
               <ChevronLeft />
               <Layers style={{ color: "var(--ps-accent)" }} />
             </PsButton>
-            <span className="font-semibold text-[13px] px-1.5 whitespace-nowrap">{page.label}</span>
+            <span className="font-semibold text-[13px] px-1.5 whitespace-nowrap"><EditableText path={["pages", page.id, "label"]} value={page.label} /></span>
             {template && <Chip sm mono>{template.id}</Chip>}
             {drift && (
               <Chip sm className="ps-chip-warn ps-drift" title={`The prototype navigated to ${drift}, which is not a registered state. Reset to return to this page's state.`}>

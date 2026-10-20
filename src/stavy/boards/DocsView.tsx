@@ -16,6 +16,8 @@ import { createDoc, docHref, useContentIndex } from "./store"
  * state and opens it). With the dev endpoint a doc can be edited as plain
  * Markdown and saved back.
  */
+const docPath = (d: { src?: string } | undefined, id: string) => d?.src ?? `docs/${id}.md`
+
 export function DocsView() {
   const [sp] = useSearchParams()
   const navigate = useNavigate()
@@ -26,7 +28,7 @@ export function DocsView() {
   const docs = index.docs ?? []
   const id = sp.get("doc") || docs[0]?.id || ""
   const current = docs.find((d) => d.id === id)
-  const { text, error } = useMarkdownSource(id ? `docs/${id}.md` : undefined)
+  const { text, error } = useMarkdownSource(id ? docPath(current, id) : undefined)
   const [editing, setEditing] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [newTitle, setNewTitle] = useState<string | null>(null)
@@ -36,7 +38,7 @@ export function DocsView() {
     if (editing == null) return
     setSaving(true)
     try {
-      await writeContent(`docs/${id}.md`, editing)
+      await writeContent(docPath(current, id), editing)
       setEditing(null)
     } catch (e) {
       alert(String((e as Error).message ?? e))
@@ -118,7 +120,7 @@ export function DocsView() {
           {editing != null ? (
             <textarea className="ps-docs-editor ps-mono" value={editing} onChange={(e) => setEditing(e.target.value)} autoFocus spellCheck />
           ) : error ? (
-            <div className="ps-docs-page ps-sub">{current ? `Could not load docs/${id}.md (${error})` : `No doc “${id}”.`}</div>
+            <div className="ps-docs-page ps-sub">{current ? `Could not load ${docPath(current, id)} (${error})` : `No doc “${id}”.`}</div>
           ) : text == null ? (
             id ? <div className="ps-docs-page"><div className="ps-skeleton" style={{ height: 240 }} /></div> : null
           ) : (

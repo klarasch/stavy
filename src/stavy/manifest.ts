@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react"
 import type { BoardDef, BoardFile, ContentIndex, Dimension, Manifest, PageDef, Scenario, SnapshotEntry, SnapshotIndex } from "./types"
 import {
   normalizeManifest,
@@ -107,12 +108,49 @@ function snapshotsBase() {
   return `${workspaceBase || appBase}/snapshots`
 }
 
+let manifestSrc = ""
+let manifestText = ""
+let manifestRevN = 0
+const manifestListeners = new Set<() => void>()
+
+/** Bumps whenever the manifest was re-read and changed (`reloadManifest`). Components that show manifest text subscribe to it. */
+export function useManifestRev(): number {
+  return useSyncExternalStore(
+    (l) => (manifestListeners.add(l), () => manifestListeners.delete(l)),
+    () => manifestRevN
+  )
+}
+
+/**
+ * Re-read stavy.json (after an in-viewer edit, or when the dev endpoint says
+ * the file changed). Only a real change installs a new manifest and notifies.
+ */
+export async function reloadManifest(): Promise<boolean> {
+  if (!manifestSrc) return false
+  try {
+    const res = await fetch(manifestSrc, { cache: "no-store" })
+    if (!res.ok) return false
+    const text = await res.text()
+    if (text === manifestText) return false
+    const next = JSON.parse(text) as Manifest
+    manifestText = text
+    setManifest(next)
+    manifestRevN++
+    manifestListeners.forEach((l) => l())
+    return true
+  } catch {
+    return false // keep what we have
+  }
+}
+
 /** Load the manifest (and the optional snapshot index). Call once before rendering. */
 export async function loadManifest(url?: string): Promise<Manifest> {
   const src = url ?? `${appBase}/stavy.json`
   const res = await fetch(src, { cache: "no-store" })
   if (!res.ok) throw new Error(`${src} → ${res.status}`)
-  setManifest((await res.json()) as Manifest)
+  manifestSrc = src
+  manifestText = await res.text()
+  setManifest(JSON.parse(manifestText) as Manifest)
   workspaceBase = new URL(src, location.href).pathname.replace(/\/[^/]*$/, "")
   await Promise.all([reloadSnapshotIndex(), loadContentIndex()])
   return manifest
@@ -157,9 +195,9 @@ export function frameOf(page: PageDef): { width: number; height: number } {
 /* URLs                                                                */
 /* ------------------------------------------------------------------ */
 
-/** URL of the canvas (the viewer home), optionally carrying mode flags (e.g. `w=1`). */
+/** URL of the map (the generated canvas), optionally carrying mode flags (e.g. `w=1`). */
 export function canvasUrl(extra?: Record<string, string>): string {
-  const qs = extra ? new URLSearchParams(extra).toString() : ""
+  const qs = new URLSearchParams({ view: "map", ...(extra ?? {}) }).toString()
   return `${viewerHref}${qs ? `?${qs}` : ""}`
 }
 

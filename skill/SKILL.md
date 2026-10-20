@@ -1,6 +1,6 @@
 ---
 name: stavy
-description: Keep a Stavy workspace true and tell the prototype's story on it — register screens and their named states, write flows, compose boards (screens, component crops, flows, Markdown, notes, diagrams) and Markdown handover docs, resolve viewer comments, and keep a changelog. Use when the user works on a prototype or app that has a stavy.json, asks to add a screen/state/flow/board/doc, to document something for developers, to prepare a review or handover, or to act on Stavy comments. Works with any framework — Stavy never imports the app's code.
+description: Keep a Stavy workspace true and tell the prototype's story on it — register screens and their named states, write flows, compose boards (screens, component crops, flows, Markdown, notes, diagrams) and Markdown handover docs, resolve viewer comments, and keep a changelog and decision log. Use when the user works on a prototype or app that has a stavy.json, asks to add a screen/state/flow/board/doc, to document something for developers, to prepare a review or handover, or to act on Stavy comments. Works with any framework — Stavy never imports the app's code.
 ---
 
 # Stavy skill
@@ -17,7 +17,9 @@ wins over this file.
 ```
 stavy.json                     the screen registry: screens, their states, flows, viewer settings
 stavy-content/
-  index.json                   which boards and docs exist, in order
+  index.json                   which boards and docs exist, in order; `links` (PRD, tickets, Figma, repo) for Home
+  changelog.md                 what changed on the map, newest first (listed in Docs, shown on Home)
+  decisions.md                 the decision log (listed in Docs, shown on Home)
   boards/<id>.json             free-form boards (you compose, humans refine)
   docs/<id>.md                 Markdown handover docs (the source for spec text)
   assets/                      images and SVGs you or people add
@@ -104,7 +106,9 @@ How to compose:
 - **Spec text lives in docs.** If the rules for a component are long, write
   them in `docs/<id>.md` and embed the section: `{ "type": "markdown",
   "src": "docs/import.md#errors" }`. One source, no drift.
-- Register every new board in `stavy-content/index.json`.
+- Register every new board in `stavy-content/index.json`. Keep its `links`
+  (`{ "title", "url", "kind"? }`) true when the person mentions a PRD, ticket
+  or Figma file: Home shows them.
 - **Respect human edits.** People move, resize and annotate in the viewer.
   Patch items by `id`; never rewrite a board wholesale, never drop fields you
   don't know, never move an item that has `x`/`y` unless asked. Don't edit
@@ -142,11 +146,26 @@ change the doc in the same step. Docs read fine on a git host too.
 
 ## Changelog
 
-After each change the person would want to know about, append to
-`STAVY-CHANGELOG.md` (newest first, under today's date or the current
-version): what changed on the map (screens, states, flows, boards) and *why*,
-in one line each, from the conversation. "Cut a version" = add a version
-heading above the dated entries. Skip pure refactors.
+After each change the person would want to know about, add to
+`stavy-content/changelog.md` (newest first, under today's date or the current
+version, `## 2026-10-20`): what changed on the map (screens, states, flows,
+boards) and *why*, in one line each, from the conversation. Skip pure
+refactors. Home shows the latest entries.
+
+## Decision log
+
+When the person makes a design decision in conversation, record it in
+`stavy-content/decisions.md`, newest first:
+
+```md
+## 2026-10-20 — Rejecting an expense always asks for a reason
+**Why:** what made this the choice, in their words.
+**Alternatives:** what else was on the table.
+**Status:** decided
+```
+
+Status is `decided`, `open` or `superseded`. Record only what the person
+actually decided; never invent a decision or its reasons, and ask if unsure.
 
 ## Comments
 

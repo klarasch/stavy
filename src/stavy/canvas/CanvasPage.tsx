@@ -26,6 +26,8 @@ import { Inspector, type FrameHit } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
 import { useComments } from "../comments/store"
 import { useScan } from "../snapshots"
+import { EditableText } from "../EditableText"
+import { useManifestRev } from "../manifest"
 import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "../chrome"
 import type { BoardDef, PageDef, Scenario } from "../types"
 
@@ -70,7 +72,7 @@ function cardScale(page: PageDef) {
 function Area({
   title, kind, icon, tocId, children, className,
 }: {
-  title: string
+  title: React.ReactNode
   kind?: string
   icon: React.ReactNode
   tocId?: string
@@ -99,6 +101,18 @@ function Area({
 /* the page asks for `layout: "matrix"` and two axes vary.             */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Where a card's note lives in stavy.json. A named state owns its note (the
+ * instance copy made when the manifest is read carries the same text); an
+ * instance with a note of its own, or a page without states, edits the
+ * instance entry. No path when the file has no such entry to edit.
+ */
+function notePathOf(page: PageDef, inst: { idx: number; note?: string; full: Record<string, string> }): (string | number)[] | undefined {
+  const st = page.states?.find((x) => x.id === inst.full[STATE_DIM])
+  if (st && (inst.note === undefined || inst.note === st.note)) return ["pages", page.id, "states", st.id, "note"]
+  return page.instances ? ["pages", page.id, "instances", inst.idx, "note"] : undefined
+}
+
 const PageGroup = memo(function PageGroup({
   page, showNotes, wireframe, wdims, linkExtra, figures,
 }: {
@@ -125,6 +139,7 @@ const PageGroup = memo(function PageGroup({
     // Instances pinned to another value of a workspace axis belong to another
     // world; the rest are rendered at the active value.
     const instances = (page.instances ?? [{ dims: {} }])
+      .map((i, idx) => ({ ...i, idx }))
       .filter((i) => Object.entries(wOver).every(([d, v]) => !i.dims[d] || i.dims[d] === v))
       .map((i) => ({ ...i, full: resolveDims(page, { ...i.dims, ...wOver }) }))
     // Only what differs between these cards is worth drawing (a workspace axis
@@ -192,7 +207,11 @@ const PageGroup = memo(function PageGroup({
           </h3>
         </span>
       </div>
-      {page.description && <p className="ps-sub mb-4 max-w-2xl">{page.description}</p>}
+      {page.description && (
+        <p className="ps-sub mb-4 max-w-2xl">
+          <EditableText path={["pages", page.id, "description"]} value={page.description} />
+        </p>
+      )}
 
       <div className="flex flex-col gap-8">
         {!matrix && (
@@ -206,6 +225,8 @@ const PageGroup = memo(function PageGroup({
                     dims={inst.full}
                     label={page.states ? stateLabel(page, inst.full[STATE_DIM]) : undefined}
                     note={inst.note ?? page.states?.find((x) => x.id === inst.full[STATE_DIM])?.note}
+                    labelPath={page.states ? ["pages", page.id, "states", inst.full[STATE_DIM], "label"] : undefined}
+                    notePath={notePathOf(page, inst)}
                     scale={scale}
                     frame={page.frame}
                     chips={varying.filter((d) => d !== STATE_DIM)}
@@ -328,7 +349,7 @@ function RowFragment({
   colDim?: string
   rowDim?: string
   groupDims: Record<string, string>
-  find: (c: string | null, r: string | null) => { full: Record<string, string>; note?: string } | undefined
+  find: (c: string | null, r: string | null) => { idx: number; full: Record<string, string>; note?: string } | undefined
   w: number
   h: number
   scale: number
@@ -356,6 +377,7 @@ function RowFragment({
               pageId={page.id}
               dims={inst.full}
               note={inst.note}
+              notePath={notePathOf(page, inst)}
               scale={scale}
               frame={page.frame}
               annotations={page.annotations}
@@ -406,7 +428,7 @@ function ScenarioLane({ sc, wdims, linkExtra }: { sc: Scenario; wdims: Record<st
           <button className="ps-lane-toggle" data-open={open ? "true" : undefined} aria-expanded={open} title={open ? "Collapse this flow" : "Expand this flow"} onClick={() => setOpen(!open)}>
             <ChevronRight />
           </button>
-          <h3 className="ps-h3">{sc.label}</h3>
+          <h3 className="ps-h3"><EditableText path={["scenarios", sc.id, "label"]} value={sc.label} /></h3>
           <Chip sm>{sc.steps.length} step{sc.steps.length === 1 ? "" : "s"}</Chip>
           {sc.persona && <Chip sm className="capitalize">{sc.persona}</Chip>}
           {sc.refs?.map((r) => (
@@ -414,7 +436,11 @@ function ScenarioLane({ sc, wdims, linkExtra }: { sc: Scenario; wdims: Record<st
           ))}
         </div>
       </span>
-      {open && sc.description && <p className="ps-sub mb-4 max-w-2xl">{sc.description}</p>}
+      {open && sc.description && (
+        <p className="ps-sub mb-4 max-w-2xl">
+          <EditableText path={["scenarios", sc.id, "description"]} value={sc.description} />
+        </p>
+      )}
       {open && (
         <div className="flex flex-col gap-5">
           {chunk(steps, STEPS_PER_ROW).map((rw, ri) => (
@@ -440,6 +466,8 @@ function ScenarioLane({ sc, wdims, linkExtra }: { sc: Scenario; wdims: Record<st
                         chips={laneDims.filter((d) => d in page!.dimensions && d !== STATE_DIM)}
                         label={st.title}
                         note={st.note}
+                        labelPath={st.title ? ["scenarios", sc.id, "steps", i, "title"] : undefined}
+                        notePath={["scenarios", sc.id, "steps", i, "note"]}
                         href={pageUrl(st.page, dims, { tour: sc.id, ts: String(i), ...linkExtra })}
                       />
                     </div>
@@ -457,6 +485,7 @@ function ScenarioLane({ sc, wdims, linkExtra }: { sc: Scenario; wdims: Record<st
 /* ------------------------------------------------------------------ */
 
 export function CanvasPage() {
+  useManifestRev() // re-render when a title or note was edited
   const [sp, setSp] = useSearchParams()
   const { hidden } = useChrome()
   const [t, setT] = useState<Transform>(() => parseView(sp.get("v")) ?? INITIAL)
@@ -649,7 +678,7 @@ export function CanvasPage() {
               )}
               <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
                 {section.pages.map((page) => (
-                  <Area key={page.id} title={page.label} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
+                  <Area key={page.id} title={<EditableText path={["pages", page.id, "label"]} value={page.label} />} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
                     <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} figures={pageFigures(page.id)} />
                   </Area>
                 ))}
@@ -661,7 +690,7 @@ export function CanvasPage() {
           {components.length > 0 && (
             <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
               {components.map((page) => (
-                <Area key={page.id} title={page.label} kind="component" icon={<Boxes />} tocId={`page:${page.id}`}>
+                <Area key={page.id} title={<EditableText path={["pages", page.id, "label"]} value={page.label} />} kind="component" icon={<Boxes />} tocId={`page:${page.id}`}>
                   <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} figures={pageFigures(page.id)} />
                 </Area>
               ))}

@@ -24,7 +24,7 @@ test("states render as a wrapping row: no placeholders, named states labelled, a
     ]
     delete p.instances
   })
-  await page.goto("/stavy/")
+  await page.goto("/stavy/?view=map")
   const area = page.locator('[data-toc="page:submit-expense"]')
   await expect(area).toHaveCount(1)
   await expect(area.locator("[data-instance]")).toHaveCount(4)
@@ -39,7 +39,7 @@ test("states render as a wrapping row: no placeholders, named states labelled, a
 })
 
 test("a long row wraps at six cards", async ({ page }) => {
-  await page.goto("/stavy/")
+  await page.goto("/stavy/?view=map")
   const cards = page.locator('[data-toc="page:expense-detail"] [data-instance]')
   await expect.poll(() => cards.count()).toBeGreaterThan(6)
   // Cards sharing a parent row: no row holds more than six.
@@ -53,7 +53,7 @@ test("a long row wraps at six cards", async ({ page }) => {
 })
 
 test("a flow collapses and expands", async ({ page }) => {
-  await page.goto("/stavy/")
+  await page.goto("/stavy/?view=map")
   const lane = page.locator('[data-toc="scenario:employee-submits"]')
   await expect(lane.locator("[data-instance]")).toHaveCount(7)
   await lane.locator(".ps-lane-toggle").dispatchEvent("click")
@@ -72,7 +72,7 @@ test("with the dev endpoint, a card without a snapshot can be captured and all s
   })
   // No snapshot for the first expenses card: it shows the placeholder.
   await page.route("**/snapshots/index.json", (route) => route.fulfill({ json: {} }))
-  await page.goto("/stavy/")
+  await page.goto("/stavy/?view=map")
   const card = page.locator('[data-toc="page:expenses"] [data-instance]').first()
   await card.locator(".ps-capture").dispatchEvent("click")
   await expect.poll(() => posted.length).toBe(1)

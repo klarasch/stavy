@@ -82,6 +82,11 @@ node stavy/scripts/init.mjs ../my-prototype-repo
   areas (the site map, scenarios, one per page/component, boards) with titles
   that stay readable from orbit, clustered into sections by `group`, plus a
   table of contents to jump around.
+- **Home** — the front page when `stavy-content/index.json` exists: what
+  this is, links (PRD, tickets, Figma, repo), boards and docs as cards, what
+  changed (`changelog.md`), decisions (`decisions.md`), and, in dev, recent
+  commits. With the dev server, links and the titles, state labels and notes
+  on the Map are editable in place (double-click).
 - **Boards** — IA, flow and state diagrams (Mermaid), images, notes:
   supporting material next to the prototype, explicitly outside the contract.
 - **Figures** — a board anchored to a page sits *inside* that page's area,

@@ -8,6 +8,8 @@ import { cn } from "../cn"
 import { useComments } from "../comments/store"
 import { useScan, useSnapshotRev } from "../snapshots"
 import { RotateCcw } from "../icons"
+import { EditableText } from "../EditableText"
+import type { ManifestPath } from "../dev"
 
 const EMPTY_CHIPS: string[] = []
 
@@ -39,6 +41,8 @@ export const InstanceCard = memo(function InstanceCard({
   chips = EMPTY_CHIPS,
   wireframe = false,
   label,
+  labelPath,
+  notePath,
 }: {
   pageId: string
   dims: Record<string, string>
@@ -59,6 +63,9 @@ export const InstanceCard = memo(function InstanceCard({
   wireframe?: boolean
   /** A title under the card (a state's name, a flow step's title). */
   label?: string
+  /** Where `label` / `note` live in stavy.json: double-click edits them in the dev server. */
+  labelPath?: ManifestPath
+  notePath?: ManifestPath
 }) {
   useSnapshotRev() // re-render when an on-demand scan refreshed the index
   const vp = frame ?? pageViewport()
@@ -215,11 +222,13 @@ export const InstanceCard = memo(function InstanceCard({
         </div>
       )}
       {label && (
-        <div className="text-[11.5px] font-medium leading-snug px-0.5">{label}</div>
+        <div className="text-[11.5px] font-medium leading-snug px-0.5">
+          <EditableText path={labelPath} value={label} />
+        </div>
       )}
-      {note && (
-        <p className="text-[11px] leading-snug px-0.5" style={{ color: "var(--ps-muted)" }}>
-          {note}
+      {(note || notePath) && (
+        <p className="ps-card-note text-[11px] leading-snug px-0.5" style={{ color: "var(--ps-muted)" }}>
+          <EditableText path={notePath} value={note} placeholder="Add a note" multiline />
         </p>
       )}
     </div>
@@ -237,5 +246,7 @@ export const InstanceCard = memo(function InstanceCard({
   (a.chips ?? EMPTY_CHIPS).join("|") === (b.chips ?? EMPTY_CHIPS).join("|") &&
   a.wireframe === b.wireframe &&
   a.label === b.label &&
+  (a.labelPath ?? []).join("/") === (b.labelPath ?? []).join("/") &&
+  (a.notePath ?? []).join("/") === (b.notePath ?? []).join("/") &&
   a.frame?.width === b.frame?.width &&
   a.frame?.height === b.frame?.height)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { arrowPath, balancedWidth, ensureIds, estimateSize, layoutBoard, mapItems, SECTION_COLLAPSED_H, SECTION_PAD, snap } from "../../src/stavy/boards/layout"
+import { arrowPath, balancedWidth, ensureIds, estimateSize, layoutBoard, mapItems, SECTION_PAD, snap } from "../../src/stavy/boards/layout"
 import type { BoardItem } from "../../src/stavy/types"
 
 const note = (id: string, extra: Partial<BoardItem> = {}): BoardItem => ({ id, type: "note", text: id, ...extra }) as BoardItem
@@ -96,10 +96,10 @@ describe("sections", () => {
     expect(local.c).toMatchObject({ x: 0, y: 78 })
   })
 
-  it("collapse to their title bar and hide their children's boxes", () => {
+  it("ignore a stored collapsed flag: plain frames, children laid out", () => {
     const { local, abs } = layoutBoard([section({ collapsed: true }, [note("a")])], sizes(["a"]))
-    expect(local.s.h).toBe(SECTION_COLLAPSED_H)
-    expect(abs.a).toBeUndefined()
+    expect(local.s.h).toBeGreaterThan(48)
+    expect(abs.a).toBeDefined()
   })
 
   it("never measure themselves (their size comes from the children)", () => {

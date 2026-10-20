@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { StavyLayer } from "../toplayer"
-import { Check, ChevronDown, FileText, Map as MapIcon, Pencil, Plus, Presentation, Trash2 } from "../icons"
+import { BookOpen, Check, ChevronDown, FileText, Map as MapIcon, Pencil, Plus, Presentation, Trash2 } from "../icons"
 import { useDev } from "../dev"
-import { boardHref, createBoard, docHref, mapHref, rememberView, removeBoard, renameBoard, useContentIndex } from "./store"
+import { boardHref, createBoard, docHref, homeHref, mapHref, rememberView, removeBoard, renameBoard, useContentIndex } from "./store"
 import type { BoardFile } from "../types"
 
-export type PageRef = { kind: "map" } | { kind: "board"; id: string } | { kind: "docs" }
+export type PageRef = { kind: "home" } | { kind: "map" } | { kind: "board"; id: string } | { kind: "docs" }
 
 /**
  * The page switcher in the canvas chrome, next to the product name:
@@ -27,8 +27,9 @@ export function PageSwitcher({ current, board }: { current: PageRef; board?: Boa
   const [at, setAt] = useState<{ left: number; top: number } | null>(null)
   const boards = index.boards ?? []
   const docs = index.docs ?? []
+  const hasHome = Object.keys(index).length > 0
   const currentBoard = current.kind === "board" ? boards.find((b) => b.id === current.id) : undefined
-  const name = current.kind === "map" ? "Map" : current.kind === "docs" ? "Docs" : board?.title ?? currentBoard?.title ?? current.id
+  const name = current.kind === "home" ? "Home" : current.kind === "map" ? "Map" : current.kind === "docs" ? "Docs" : board?.title ?? currentBoard?.title ?? current.id
 
   useEffect(() => {
     if (!open) return
@@ -53,7 +54,7 @@ export function PageSwitcher({ current, board }: { current: PageRef; board?: Boa
     close()
     // Leave a bookmark: switching back lands where this page was looked at.
     const v = new URLSearchParams(location.search).get("v")
-    if (v && current.kind !== "docs") rememberView(current.kind === "map" ? "map" : `b:${current.id}`, v)
+    if (v && current.kind !== "docs" && current.kind !== "home") rememberView(current.kind === "map" ? "map" : `b:${current.id}`, v)
     navigate(href)
   }
 
@@ -108,6 +109,12 @@ export function PageSwitcher({ current, board }: { current: PageRef; board?: Boa
       {open && at && (
         <StavyLayer>
         <div ref={menu} className="ps ps-menu ps-switch-menu" role="menu" style={{ left: at.left, top: at.top }}>
+          {hasHome && (
+            <button type="button" role="menuitem" className="ps-menu-item" onClick={() => go(homeHref())}>
+              <BookOpen className="ps-menu-icon" /> Home
+              {current.kind === "home" && <Check className="ps-menu-check" />}
+            </button>
+          )}
           <button type="button" role="menuitem" className="ps-menu-item" onClick={() => go(mapHref())}>
             <MapIcon className="ps-menu-icon" /> Map
             {current.kind === "map" && <Check className="ps-menu-check" />}

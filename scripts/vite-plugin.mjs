@@ -12,14 +12,19 @@
 //   DELETE /__stavy/content/<path>  remove one
 //   POST   /__stavy/scan            { keys?: string[], all?: boolean } → re-capture those states in the background
 //   GET    /__stavy/scan            the running / last scan
+//   PATCH  /__stavy/manifest        { path, value } → set ONE text field of stavy.json (titles, labels, notes;
+//                                   see scripts/lib/patch.mjs for the allowed paths). Read fresh, set, write back.
+//   GET    /__stavy/git-log         ?limit=20[&path=…] → [{ hash, date, author, subject }], [] outside a repo
 // and, when stavy.json is not inside public/, serves /stavy.json and
 // /stavy-content/** from where they are.
 //
-// It never writes to stavy.json or to app code: hand edits and agent edits
-// to the screen registry can't collide.
+// It never rewrites stavy.json wholesale or touches app code: the only change
+// it makes to the screen registry is the single text field PATCH names, read
+// fresh from disk, so hand edits and agent edits can't collide.
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, writeFileSync, createReadStream } from "node:fs"
 import { dirname, extname, join, relative, resolve, sep } from "node:path"
-import { spawn } from "node:child_process"
+import { execFile, spawn } from "node:child_process"
+import { applyPatch } from "./lib/patch.mjs"
 
 const MAX_BODY = 15 * 1024 * 1024
 const TYPES = {
@@ -182,6 +187,34 @@ export default function stavy(opts = {}) {
             if (keys !== "all" && keys.length === 0) return json(res, 400, { ok: false, error: "keys or all required" })
             runScan(keys)
             return json(res, 202, { ok: true, queued: scan.running })
+          }
+          if (route === "manifest") {
+            if (req.method !== "PATCH") return json(res, 405, { ok: false })
+            const body = JSON.parse((await readBody(req)).toString() || "{}")
+            const raw = readFileSync(manifestPath, "utf8")
+            const m = JSON.parse(raw)
+            applyPatch(m, body.path, body.value) // throws (→ 400) for anything but the allowed text fields
+            writeFileSync(manifestPath, JSON.stringify(m, null, 2) + (raw.endsWith("\n") ? "\n" : ""))
+            bump()
+            return json(res, 200, { ok: true, rev })
+          }
+          if (route === "git-log") {
+            if (req.method !== "GET") return json(res, 405, { ok: false })
+            const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 20))
+            const sub = url.searchParams.get("path")
+            const args = ["log", `-n${limit}`, "--pretty=format:%H%x1f%aI%x1f%an%x1f%s"]
+            if (sub) args.push("--", sub)
+            const out = await new Promise((ok) =>
+              execFile("git", args, { cwd: dirname(manifestPath), maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => ok(err ? "" : stdout)),
+            )
+            const rows = out
+              .split("\n")
+              .filter(Boolean)
+              .map((l) => {
+                const [hash, date, author, subject] = l.split("\x1f")
+                return { hash, date, author, subject }
+              })
+            return json(res, 200, rows)
           }
           if (route.startsWith("content/")) {
             const file = contentPath(route.slice("content/".length))
