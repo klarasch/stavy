@@ -330,10 +330,19 @@ test.describe("inspector", () => {
       await expect(panel).toHaveAttribute("data-side", side)
       expect(await overlaps()).toBe(false)
     }
-    // The side is remembered across reloads.
+    // Resizable from its inner edge; side and width are remembered across reloads.
     await panel.getByTitle("Dock left").click()
+    const handle = (await panel.locator(".ps-inspect-resize").boundingBox())!
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + 200)
+    await page.mouse.down()
+    await page.mouse.move(handle.x + 120, handle.y + 200, { steps: 4 })
+    await page.mouse.up()
+    const wide = (await panel.boundingBox())!.width
+    expect(wide).toBeGreaterThan(440)
+    expect(await overlaps()).toBe(false)
     await page.reload()
     await expect(page.locator(".ps-inspect-panel")).toHaveAttribute("data-side", "left")
+    expect(Math.abs((await page.locator(".ps-inspect-panel").boundingBox())!.width - wide)).toBeLessThan(2)
   })
 
   test("clicking pins exactly the hovered element; Esc unpins; the app never sees the click", async ({ page }) => {
