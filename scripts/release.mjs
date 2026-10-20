@@ -88,6 +88,8 @@ const files = [
   "docs/UPDATING.md",
   "docs/ADOPTION.md",
   "docs/INSPECT-ADAPTERS.md",
+  "docs/COMMENTS.md",
+  "skill/PROTOTYPING.md",
   "docs/inspect-adapter.template.js",
 ]
 for (const f of files) {
