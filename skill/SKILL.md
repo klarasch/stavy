@@ -115,6 +115,10 @@ How to compose:
 ## Reference (field names)
 
 - Flows live under `scenarios` in stavy.json; a board's `flow` item takes the scenario `id`.
+- Flow steps: `page`, `state` (or `dims`), `title`, `note`?, `target`?, `via`?. The player always loads a step's
+  registered state fresh, so every step should be its own state URL. Only for a step that exists purely in
+  component state (a menu the previous click opened, no URL) add `"via": "click"`: the tour then waits for its
+  target after the click instead of loading a URL.
 - Board file: `{ "title", "description"?, "status"?, "items": [...] }`. Every item has `id`, `type`, optional `x`/`y`/`w`/`h`, `title`, `note`.
   - `screen`: `screen` (page id), `state` or `dims`, `crop`?, `do`?, `viewport`?
   - `states`: `screen`, `states`? (ids), `layout`? (`row`|`grid`), `columns`?, `crop`?
