@@ -24,6 +24,8 @@ import {
   pageInWorkspace,
   stateLabel,
   STATE_DIM,
+  snapshotEntry,
+  snapshotUrl,
 } from "./manifest"
 import { TourOverlay, stepUrl } from "./overlays/TourOverlay"
 import { AnnotationOverlay } from "./overlays/AnnotationOverlay"
@@ -33,7 +35,7 @@ import type { ToolbarAnchor } from "./types"
 import { CommentLayer } from "./comments/CommentLayer"
 import { CommentsPanel } from "./comments/CommentsPanel"
 import { useComments } from "./comments/store"
-import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt, navigateFrame } from "./frame"
+import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt, loadFrame, settleFrame } from "./frame"
 
 /** Docked, full-width bottom bar unless the manifest sets `viewer.toolbar`. */
 const DEFAULT_ANCHOR: ToolbarAnchor = "bar-bottom"
@@ -124,6 +126,34 @@ export function PageView() {
   // page) changes the viewer URL but must not drive the frame: whatever the
   // app now shows IS the step. One-shot, keyed by the URL it was set for.
   const holdFrame = useRef<string | null>(null)
+  // While a state the viewer asked for loads and settles, the frame is veiled:
+  // the reviewer sees that state's snapshot (or nothing), never the boot,
+  // the skeletons or the entrance animation — then the live frame, finished.
+  const [veil, setVeil] = useState<{ src: string | null } | null>(null)
+  const loadSeq = useRef(0)
+  const loadState = useCallback(
+    (frame: HTMLIFrameElement, href: string) => {
+      const seq = ++loadSeq.current
+      const entry = page ? snapshotEntry(page, dims) : undefined
+      const w = frame.clientWidth
+      // The snapshot only stands in when it was captured at this width — at any
+      // other width the live layout differs and the swap would visibly jump.
+      const cover = page && entry && !entry.missing?.length && Math.abs(entry.width - w) <= 4 ? snapshotUrl(page, dims) : null
+      setVeil({ src: cover })
+      const onLoad = () => {
+        frame.removeEventListener("load", onLoad)
+        void settleFrame(frame).then(() => {
+          if (loadSeq.current === seq) setVeil(null)
+        })
+      }
+      frame.addEventListener("load", onLoad)
+      // Never leave a veil up if the load event is lost.
+      setTimeout(() => loadSeq.current === seq && setVeil(null), 6000)
+      loadFrame(frame, href)
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [page, dims]
+  )
   useEffect(() => {
     if (!iframe || !page || !desired) return
     const held = holdFrame.current
@@ -133,7 +163,7 @@ export function PageView() {
     const m = cur ? matchAppUrl(cur) : null
     // Already showing this exact state (e.g. we just followed the frame there): don't reload.
     if (m && m.page.id === page.id && dimsEqual(m.dims, dims)) return
-    navigateFrame(iframe, desired)
+    loadState(iframe, desired)
     setDrift(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [iframe, desired])
@@ -274,7 +304,7 @@ export function PageView() {
     setSp(next, { replace: true })
   }
   const resetFrame = () => {
-    if (iframe && desired) iframe.src = desired
+    if (iframe && desired) loadState(iframe, desired)
     setDrift(null)
   }
 
@@ -311,11 +341,15 @@ export function PageView() {
     <div className="h-screen relative">
       <div className="ps-viewport h-full relative" data-bar={isBar ? barSide : undefined}>
         <div className="ps-player">
-          {/* No `src` prop: the effect above loads the first state and then drives
-              later ones through the frame's own router (navigateFrame). A React-
-              managed `src` would rewrite the attribute on every dims change, and
-              the browser treats that as a document load. */}
-          <iframe ref={setIframe} className="ps-frame" title={page.label} />
+          {/* No `src` prop: the effect above loads every requested state itself
+              (loadFrame — a fresh document, so the app boots into exactly that
+              state) and veils the frame until it has settled. */}
+          <iframe ref={setIframe} className="ps-frame" title={page.label} style={veil ? { visibility: "hidden" } : undefined} />
+          {veil && (
+            <div className="ps-frame-veil" aria-hidden>
+              {veil.src && <img src={veil.src} alt="" />}
+            </div>
+          )}
           {inspectOn && !hidden && <div ref={setShield} className="ps-shield" data-mode="inspect" />}
           <CommentLayer iframe={iframe} doc={doc} pageId={page.id} dims={dims} placing={placing} onPlaced={() => setPlacing(false)} openId={openCommentId} onOpenChange={(id) => setParam("c", id)} />
         </div>

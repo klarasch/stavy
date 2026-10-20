@@ -142,6 +142,13 @@ export interface ScenarioStep {
   page: string
   /** A named state of the page (shorthand for `dims: { _state: … }`) */
   state?: string
+  /**
+   * How the tour reaches this step. Default: by its URL — the player loads the
+   * registered state fresh unless the app already navigated there. "click":
+   * the step lives in component state (a menu opened by the previous click)
+   * and its target appearing after that click is enough.
+   */
+  via?: "url" | "click"
   /** Dimension overrides for this step (defaults fill the rest) */
   dims?: Record<string, string>
   /** Target to highlight; omit for an "observe" step */

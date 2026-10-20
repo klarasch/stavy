@@ -542,6 +542,9 @@
 /* the player: one frame filling the viewport under the floating chrome */
 .ps-player { position: absolute; inset: 0; }
 .ps-player > .ps-frame { width: 100%; height: 100%; }
+/* A requested state settling behind its own snapshot (PageView loadState). */
+.ps-frame-veil { position: absolute; inset: 0; background: var(--ps-canvas-bg); pointer-events: none; overflow: hidden; }
+.ps-frame-veil > img { display: block; width: 100%; height: auto; }
 /* a transparent shield over a frame: swallows pointer events so the viewer can hit-test instead */
 .ps-shield { position: absolute; inset: 0; z-index: 2; }
 .ps-shield[data-mode="inspect"] { cursor: crosshair; }

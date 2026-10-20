@@ -77,6 +77,71 @@ export function navigateFrame(iframe: HTMLIFrameElement, src: string): void {
   iframe.src = src
 }
 
+/**
+ * Load a state the viewer asked for: a real document load, never a history
+ * push. Prototypes commonly read their state (`?scene=…`, seeds, open panels)
+ * once at boot, so only a fresh document is guaranteed to show exactly the
+ * requested state. `replace` keeps the frame's own history clean.
+ */
+export function loadFrame(iframe: HTMLIFrameElement, src: string): void {
+  const win = frameWin(iframe)
+  try {
+    if (win && win.location.href !== "about:blank") {
+      win.location.replace(src)
+      return
+    }
+  } catch {
+    /* cross-origin: fall through */
+  }
+  iframe.src = src
+}
+
+const FREEZE_ID = "stavy-freeze-motion"
+const FREEZE_CSS = "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;scroll-behavior:auto!important}"
+
+/**
+ * Show a freshly loaded state as its final frame: entrance animations and
+ * transitions are skipped while it settles, then motion is restored so the
+ * reviewer's own interactions animate normally. Resolves once the document is
+ * quiet (fonts loaded, no DOM mutations for `quiet` ms) or after `max` ms.
+ */
+export async function settleFrame(iframe: HTMLIFrameElement, { quiet = 150, max = 2500 } = {}): Promise<void> {
+  const d = frameDoc(iframe)
+  if (!d?.documentElement) return
+  let style = d.getElementById(FREEZE_ID)
+  if (!style) {
+    style = d.createElement("style")
+    style.id = FREEZE_ID
+    style.textContent = FREEZE_CSS
+    ;(d.head ?? d.documentElement).appendChild(style)
+  }
+  const started = Date.now()
+  try {
+    await Promise.race([d.fonts?.ready, new Promise((r) => setTimeout(r, max))])
+  } catch {
+    /* no font loading API */
+  }
+  await new Promise<void>((done) => {
+    let t: ReturnType<typeof setTimeout>
+    const finish = () => {
+      mo.disconnect()
+      clearTimeout(t)
+      clearTimeout(cap)
+      done()
+    }
+    const arm = () => {
+      clearTimeout(t)
+      t = setTimeout(finish, quiet)
+    }
+    const mo = new MutationObserver(arm)
+    mo.observe(d.documentElement, { childList: true, subtree: true, attributes: true, characterData: true })
+    const cap = setTimeout(finish, Math.max(0, max - (Date.now() - started)))
+    arm()
+  })
+  // Restore motion on the next frame, after layout has taken the final state.
+  requestAnimationFrame(() => style?.remove())
+}
+
 /** Rendered scale of the frame: on the canvas the iframe is CSS-scaled, so 1 frame px ≠ 1 screen px. */
 export function frameScale(iframe: HTMLIFrameElement): number {
   const w = iframe.offsetWidth

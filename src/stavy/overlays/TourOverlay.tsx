@@ -40,11 +40,17 @@ function isClickable(el: Element): boolean {
   }
 }
 
-/** Is the frame already showing what `next` asks for: its target is there, or the frame is at its state. */
+/**
+ * Did the app itself reach `next`? Only when the frame is at the next step's
+ * registered state — a target being present proves nothing (two steps often
+ * share one, and a live app can wander off the registered path). A step
+ * marked `via: "click"` lives in component state with no URL of its own:
+ * there, its target appearing is the signal. Anything else is loaded fresh.
+ */
 function stepSatisfied(iframe: HTMLIFrameElement, next: ScenarioStep): boolean {
   const d = frameDoc(iframe)
   if (!d) return false
-  if (next.target && findTarget(d, next.target)) return true
+  if (next.via === "click" && next.target && findTarget(d, next.target)) return true
   const href = frameHref(iframe)
   const m = href ? matchAppUrl(href) : null
   const np = getPage(next.page)
@@ -100,6 +106,7 @@ export function TourOverlay({
 
     let disposed = false
     let scrolled = false
+    let followUntil = 0
     let observedDoc: Document | null = null
     let mo: MutationObserver | null = null
     let missTimer: ReturnType<typeof setTimeout> | null = null
@@ -151,11 +158,28 @@ export function TourOverlay({
       }
       const next = hostRect(el, iframe)
       setRect((prev) => (prev && sameRect(prev, next) ? prev : next))
+      // Dialogs and drawers scale or slide in without mutating the DOM, so for
+      // a moment after the target appears, follow it every frame.
+      if (!followUntil) {
+        followUntil = Date.now() + 900
+        const follow = () => {
+          if (disposed || Date.now() > followUntil) return
+          const d2 = frameDoc(iframe)
+          const el2 = d2 && findTarget(d2, step.target!)
+          if (el2) {
+            const r = hostRect(el2, iframe)
+            setRect((prev) => (prev && sameRect(prev, r) ? prev : r))
+          }
+          requestAnimationFrame(follow)
+        }
+        requestAnimationFrame(follow)
+      }
     }
 
     check()
     const onLoad = () => {
       activity = Date.now()
+      followUntil = 0
       check()
     }
     iframe.addEventListener("load", onLoad)

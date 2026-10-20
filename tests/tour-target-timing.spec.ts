@@ -13,25 +13,29 @@ import { test, expect } from "@playwright/test"
 test("a late-mounting tour target gets its halo once it appears, and viewers never see a 'not found' banner", async ({ page }) => {
   // Start on a different page than the scenario's first step (dashboard) —
   // this is the case from the bug report, not a fresh deep link into the step.
+  // Arm a one-shot interceptor in every frame document (the player loads each
+  // requested state as a fresh document): as soon as ViewQueueLink
+  // (manager-approves step 0's target, on the dashboard page) is inserted,
+  // whisk it away and reinsert it ~4.2s later.
+  await page.addInitScript(() => {
+    if (window === window.top) return
+    const arm = () => {
+      const obs = new MutationObserver(() => {
+        const el = document.querySelector('[data-proto="ViewQueueLink"]')
+        if (!el) return
+        const parent = el.parentElement!
+        const clone = el.cloneNode(true) as Element
+        el.remove()
+        obs.disconnect()
+        setTimeout(() => parent.appendChild(clone), 4200)
+      })
+      obs.observe(document.documentElement, { childList: true, subtree: true })
+    }
+    if (document.documentElement) arm()
+    else document.addEventListener("DOMContentLoaded", arm, { once: true })
+  })
   await page.goto("/stavy/?p=expenses&d_role=manager&d_state=loaded")
   await expect(page.frameLocator("iframe.ps-frame").locator('[data-proto="ExpenseRow:exp-2101"]')).toBeVisible()
-
-  // Arm a one-shot interceptor inside the (still same, live) frame document:
-  // as soon as ViewQueueLink (manager-approves step 0's target, on the
-  // dashboard page) is inserted, whisk it away and reinsert it ~4.2s later.
-  await page.frameLocator("iframe.ps-frame").locator("html").evaluate((html) => {
-    const doc = html.ownerDocument!
-    const obs = new MutationObserver(() => {
-      const el = doc.querySelector('[data-proto="ViewQueueLink"]')
-      if (!el) return
-      const parent = el.parentElement!
-      const clone = el.cloneNode(true) as Element
-      el.remove()
-      obs.disconnect()
-      setTimeout(() => parent.appendChild(clone), 4200)
-    })
-    obs.observe(doc.documentElement, { childList: true, subtree: true })
-  })
 
   // This is the reported repro path: launch the scenario via the player's
   // Play menu (a client-side navigation onto a different page), not a fresh

@@ -363,6 +363,20 @@ async function capture(page, s, consoleErrors) {
 if (selected.length) {
   const browser = await chromium.launch()
   const ctx = await browser.newContext({ deviceScaleFactor: dpr, colorScheme: dark ? "dark" : "light", reducedMotion: "reduce" })
+  // Captures show each state's final frame: entrance animations and transitions
+  // are skipped (reducedMotion alone only helps apps that honour it). The viewer
+  // does the same while a requested state settles (frame.ts settleFrame).
+  await ctx.addInitScript(() => {
+    const css = "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;scroll-behavior:auto!important}"
+    const add = () => {
+      const st = document.createElement("style")
+      st.id = "stavy-freeze-motion"
+      st.textContent = css
+      ;(document.head ?? document.documentElement).appendChild(st)
+    }
+    if (document.documentElement) add()
+    else document.addEventListener("DOMContentLoaded", add, { once: true })
+  })
   // Scan navigates the same frame mid-fetch, which the browser reports as an
   // AbortError on that request — not a bug in the prototype.
   const isOwnNavigationAbort = (s) => /AbortError/.test(s) && /signal is aborted/i.test(s)
