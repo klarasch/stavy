@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react"
-import { appBase, contentUrl, workspaceBase } from "./manifest"
+import { appBase, contentUrl, reloadManifest, workspaceBase } from "./manifest"
 
 /**
  * The dev endpoint (scripts/vite-plugin.mjs). When the prototype's dev server
@@ -89,6 +89,43 @@ export async function requestScan(keys: string[] | "all"): Promise<void> {
     body: JSON.stringify(keys === "all" ? { all: true } : { keys }),
   })
   if (!r.ok) throw new Error(`scan → ${r.status}`)
+}
+
+/** A text field of stavy.json the viewer may edit (see scripts/lib/patch.mjs for the allowed paths). */
+export type ManifestPath = (string | number)[]
+
+/** Set one text field of stavy.json through the dev endpoint, then re-read the manifest. */
+export async function patchManifest(path: ManifestPath, value: string): Promise<void> {
+  const r = await fetch(api("manifest"), {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path, value }),
+  })
+  if (!r.ok) throw new Error(`edit → ${r.status} ${await r.text()}`)
+  await reloadManifest()
+}
+
+/** Keep the viewer's manifest true when stavy.json changes on disk (an agent or a hand edit). */
+export function useManifestSync() {
+  const h = useDev()
+  useEffect(() => {
+    if (h?.rev) void reloadManifest()
+  }, [h?.rev])
+}
+
+export type RepoCommit = { hash: string; date: string; author: string; subject: string }
+
+/** Recent commits from the dev endpoint; null when it is absent (static hosting). */
+export async function fetchCommits(limit = 10, path?: string): Promise<RepoCommit[] | null> {
+  try {
+    const q = new URLSearchParams({ limit: String(limit), ...(path ? { path } : {}) })
+    const r = await fetch(api(`git-log?${q}`), { cache: "no-store" })
+    if (!r.ok || !(r.headers.get("content-type") ?? "").includes("json")) return null
+    const rows = await r.json()
+    return Array.isArray(rows) ? (rows as RepoCommit[]) : null
+  } catch {
+    return null
+  }
 }
 
 export { contentUrl }

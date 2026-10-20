@@ -4,6 +4,7 @@ import { CanvasPage } from "./canvas/CanvasPage"
 import { PageView } from "./PageView"
 import { ChromeProvider, EyeToggle } from "./chrome"
 import { CommentsProvider } from "./comments/store"
+import { useManifestSync } from "./dev"
 
 // Boards and docs are their own chunks (with the Markdown renderer): the map and the player never pay for them.
 const BoardView = lazy(() => import("./boards/BoardView").then((m) => ({ default: m.BoardView })))
@@ -36,6 +37,7 @@ function Root() {
 }
 
 export function StavyApp() {
+  useManifestSync()
   return (
     <ChromeProvider>
       <CommentsProvider>

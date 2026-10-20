@@ -758,3 +758,10 @@
   display: block; width: 100%; max-width: 820px; height: 100%; margin: 0 auto; padding: 28px 32px; resize: none; outline: none;
   background: var(--ps-glass-strong); color: var(--ps-fg); border: 1px solid var(--ps-border); border-radius: 18px; font-size: 13px; line-height: 1.6;
 }
+
+/* text that can be rewritten in the dev server (double-click) */
+.ps-editable { border-radius: 4px; cursor: text; }
+.ps-editable:hover { background: var(--ps-hover); }
+.ps-editable.is-empty { opacity: 0; font-style: italic; }
+[data-instance]:hover .ps-editable.is-empty { opacity: .6; }
+textarea.ps-inline-input { resize: none; width: 100%; font: inherit; }
