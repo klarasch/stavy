@@ -118,6 +118,7 @@ export function copiedFiles() {
     "scripts/stavy/lib/model.mjs": "scripts/lib/model.mjs",
     "scripts/stavy/lib/model.d.mts": "scripts/lib/model.d.mts",
     "scripts/stavy/lib/collect.mjs": "scripts/lib/collect.mjs",
+    "scripts/stavy/lib/patch.mjs": "scripts/lib/patch.mjs", // the dev plugin imports it
     "scripts/stavy/vite-plugin.mjs": "scripts/vite-plugin.mjs",
     "scripts/stavy/migrate.mjs": "scripts/migrate.mjs",
     "scripts/stavy/gen-tests.mjs": "scripts/gen-tests.mjs",
