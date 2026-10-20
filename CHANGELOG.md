@@ -5,7 +5,7 @@ prints the sections between the release a repo last took and the one it is
 taking, so write each entry for that reader: what they get, and what, if
 anything, they have to do.
 
-## 0.3.0-alpha.1 — 2026-10-20
+## 0.3.0 — 2026-10-20 (alpha)
 
 An alpha of the lean core: authored boards and docs, editing on the dev
 server, a static publish. Expect rough edges; report them.
