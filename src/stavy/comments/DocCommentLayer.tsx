@@ -236,7 +236,15 @@ export function DocCommentLayer({
   }, [article])
 
   const open = markers.find((m) => m.c.id === openId) ?? null
-  const openRect = open && article ? (article.querySelector(`[data-comment-id="${CSS.escape(open.c.id)}"]`)?.getBoundingClientRect() ?? null) : null
+  // Measured after commit: the open thread sits by its margin marker, which is
+  // drawn in this same render — reading it during render would find nothing the
+  // first time and leave the thread closed until something else re-rendered.
+  const [openRect, setOpenRect] = useState<DOMRect | null>(null)
+  useLayoutEffect(() => {
+    const el = open && article ? article.querySelector(`[data-comment-id="${CSS.escape(open.c.id)}"]`) : null
+    const r = el?.getBoundingClientRect() ?? null
+    setOpenRect((prev) => (prev && r && prev.left === r.left && prev.bottom === r.bottom ? prev : r))
+  })
 
   return (
     <>

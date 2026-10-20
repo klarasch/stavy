@@ -136,7 +136,12 @@ test("inspect on the canvas pins a card's element in a panel docked to the windo
   const at = { x: box.x + box.width / 2, y: box.y + box.height / 3 }
   await page.mouse.move(at.x, at.y)
   await expect(card.locator("iframe")).toHaveCount(1)
-  await expect(page.locator(".ps-inspect-tag")).toBeVisible()
+  // The card's live frame loads after the pointer arrives; hover reports only
+  // once its document is there, so keep nudging the pointer until it does.
+  await expect.poll(async () => {
+    await page.mouse.move(at.x + Math.random(), at.y)
+    return page.locator(".ps-inspect-tag").isVisible()
+  }, { intervals: [200], timeout: 8000 }).toBe(true)
   await page.mouse.move(at.x + 2, at.y)
   await page.mouse.click(at.x + 2, at.y)
   const panel = page.locator(".ps-inspect-panel")

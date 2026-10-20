@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { appBase, contentUrl, reloadManifest, workspaceBase } from "./manifest"
 
 /**
@@ -108,8 +108,18 @@ export async function patchManifest(path: ManifestPath, value: string): Promise<
 /** Keep the viewer's manifest true when stavy.json changes on disk (an agent or a hand edit). */
 export function useManifestSync() {
   const h = useDev()
+  // The first rev seen is the state the manifest was just loaded at; only later ones are changes.
+  const seen = useRef<number | null>(null)
   useEffect(() => {
-    if (h?.rev) void reloadManifest()
+    if (!h?.rev) return
+    if (seen.current === null) {
+      seen.current = h.rev
+      return
+    }
+    if (h.rev !== seen.current) {
+      seen.current = h.rev
+      void reloadManifest()
+    }
   }, [h?.rev])
 }
 

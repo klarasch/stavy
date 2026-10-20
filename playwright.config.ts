@@ -14,7 +14,9 @@ export default defineConfig({
   // reloads its manifest when stavy.json changes, which would otherwise race
   // whatever unrelated test is open in parallel.
   projects: [
-    { name: "viewer", testIgnore: /writes\.spec\.ts/ },
+    { name: "viewer", testIgnore: /(writes|comments)\.spec\.ts/ },
     { name: "writes", testMatch: /writes\.spec\.ts/, dependencies: ["viewer"] },
+    // Comments share one stavy-content/comments.json: their own group, after the manifest writes.
+    { name: "comments", testMatch: /comments\.spec\.ts/, dependencies: ["writes"] },
   ],
 })

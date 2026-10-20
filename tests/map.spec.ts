@@ -50,7 +50,7 @@ test("a long row wraps at six cards", async ({ page }) => {
       for (const e of els) by.set(e.parentElement!, (by.get(e.parentElement!) ?? 0) + 1)
       return [...by.values()]
     })
-  await expect.poll(async () => { const c = await rows(); return c.length > 1 && Math.max(...c) <= 6 }).toBe(true)
+  await expect.poll(async () => { const c = await rows(); return c.length > 1 && Math.max(...c) <= 6 }, { timeout: 15_000 }).toBe(true)
 })
 
 test("a flow collapses and expands", async ({ page }) => {

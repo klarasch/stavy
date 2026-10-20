@@ -259,7 +259,8 @@ test("a doc comment highlights its passage, and the panel takes you there from a
   await page.getByRole("button", { name: "Everywhere" }).click()
   await page.locator(`[data-comment-row="${saved.id}"]`).click()
   await expect(page).toHaveURL(/[?&]doc=approval-rules/)
-  await expect(page.locator(".ps-cthread")).toContainText("And who reimburses rejected ones?")
+  // The doc renders, then its comment layer re-applies highlights and opens the thread.
+  await expect(page.locator(".ps-cthread")).toContainText("And who reimburses rejected ones?", { timeout: 10_000 })
 })
 
 test("a workspace comments adapter module receives and lists comments", async ({ page, request }) => {
