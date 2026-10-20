@@ -1035,7 +1035,6 @@ export function Inspector({
     </div>
   )
   const rel = (r: Rect, c: Rect): Rect => ({ left: r.left - c.left, top: r.top - c.top, width: r.width, height: r.height })
-  const tagBelow = geo.hover && geo.hoverClip ? geo.hover.top - geo.hoverClip.top < 22 : false
 
   const panelEl = (
     <div
@@ -1132,38 +1131,45 @@ export function Inspector({
               geo.hoverClip,
               <>
                 {!(pinned && hover?.el === subject) && <div className="ps-inspect-outline" data-kind="hover" style={rel(geo.hover, geo.hoverClip)} />}
-                {lines.map((l, i) => {
-                  const x = l.x1 - geo.hoverClip!.left
-                  const y = l.y1 - geo.hoverClip!.top
-                  const w = l.dir === "h" ? l.x2 - l.x1 : 0
-                  const h = l.dir === "v" ? l.y2 - l.y1 : 0
-                  return (
-                    <div key={i} className="contents">
-                      <div className="ps-measure-line" data-dir={l.dir} style={{ left: x, top: y, width: w, height: h }} />
-                      <div className="ps-measure-label" style={{ left: x + w / 2, top: y + h / 2 }}>
-                        {l.value}px
-                      </div>
-                    </div>
-                  )
-                })}
-                {lines.length === 0 && (
+                {lines.map((l, i) => (
                   <div
-                    className="ps-inspect-tag"
-                    style={{
-                      left: Math.max(0, geo.hover.left - geo.hoverClip.left),
-                      top: tagBelow ? geo.hover.top - geo.hoverClip.top + geo.hover.height + 4 : geo.hover.top - geo.hoverClip.top - 22,
-                    }}
-                  >
-                    {hoverName && <b>{hoverName}</b>}
-                    <span>{hover ? (hoverName ? "" : hover.el.tagName.toLowerCase()) : ""}</span>
-                    <span className="ps-inspect-tag-size">
-                      {Math.round(geo.hover.width / geo.k)} × {Math.round(geo.hover.height / geo.k)}
-                    </span>
-                  </div>
-                )}
+                    key={i}
+                    className="ps-measure-line"
+                    data-dir={l.dir}
+                    style={{ left: l.x1 - geo.hoverClip!.left, top: l.y1 - geo.hoverClip!.top, width: l.x2 - l.x1, height: l.y2 - l.y1 }}
+                  />
+                ))}
               </>,
               "hover"
             )}
+          {/* Labels and the tag sit outside the clip — a small card must not cut them — but only for what is inside it. */}
+          {geo.hoverClip &&
+            lines.map((l, i) => {
+              const x = (l.x1 + l.x2) / 2
+              const y = (l.y1 + l.y2) / 2
+              const c = geo.hoverClip!
+              if (x < c.left || x > c.left + c.width || y < c.top || y > c.top + c.height) return null
+              return (
+                <div key={i} className="ps-measure-label" style={{ left: x, top: y }}>
+                  {l.value}px
+                </div>
+              )
+            })}
+          {hover && geo.hover && geo.hoverClip && lines.length === 0 && (() => {
+            const c = geo.hoverClip
+            const r = geo.hover
+            if (r.left > c.left + c.width || r.left + r.width < c.left || r.top > c.top + c.height || r.top + r.height < c.top) return null
+            const above = Math.max(r.top, c.top) - 22
+            const top = above >= 0 ? above : Math.min(r.top + r.height, c.top + c.height) + 4
+            return (
+              <div className="ps-inspect-tag" style={{ left: Math.max(c.left, r.left), top }}>
+                <b>{hoverName ?? hover.el.tagName.toLowerCase()}</b>
+                <span className="ps-inspect-tag-size">
+                  {Math.round(r.width / geo.k)} × {Math.round(r.height / geo.k)}
+                </span>
+              </div>
+            )
+          })()}
         </div>,
         document.body
       )}
