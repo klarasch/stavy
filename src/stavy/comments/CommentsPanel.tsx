@@ -2,24 +2,46 @@ import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { X, MessageCircle, Link as LinkIcon, FileText, Upload, Trash2, Check, Braces } from "../icons"
 import { PsButton, Kbd } from "../chrome"
-import { getPage, pageUrl } from "../manifest"
-import { useComments, shareUrl, toMarkdown, decodePayload, describeAnchor, timeAgo, downloadText } from "./store"
+import { useComments, shareUrl, toMarkdown, decodePayload, describeAnchor, timeAgo, downloadText, commentHref, initials, type Comment } from "./store"
 import { manifest } from "../manifest"
 import { useDev } from "../dev"
 
-/** The list of all comments in the workspace, with share / import actions. */
-export function CommentsPanel({ onClose, onAdd, wireframe }: { onClose: () => void; onAdd?: () => void; wireframe?: boolean }) {
-  const { comments, importMany, clearAll, author, setAuthor } = useComments()
+export interface CommentsHere {
+  /** What "here" is, e.g. the page's or board's name */
+  label: string
+  test: (c: Comment) => boolean
+  /** Open a comment that is here without navigating (select it in place) */
+  open?: (c: Comment) => void
+}
+
+const STORAGE_NOTE = {
+  file: "Saved to stavy-content/comments.json",
+  local: "Kept in this browser: share with Link or .md",
+  module: "Saved through the workspace's comments adapter",
+} as const
+
+/**
+ * Every comment in the workspace — player, map, boards, docs — with "here"
+ * (this page, board or doc) vs "everywhere", open/resolved, and share /
+ * import actions. Clicking a comment takes you to its place and opens it.
+ */
+export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: () => void; onAdd?: () => void; wireframe?: boolean; here?: CommentsHere }) {
+  const { comments, importMany, clearAll, author, setAuthor, mode } = useComments()
   const navigate = useNavigate()
   const writable = !!useDev()?.writable
   const [filter, setFilter] = useState<"open" | "resolved" | "all">("open")
+  const [scope, setScope] = useState<"here" | "everywhere">(() => (here && comments.some((c) => here.test(c)) ? "here" : "everywhere"))
   const [flash, setFlash] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [importText, setImportText] = useState("")
 
   const list = useMemo(
-    () => comments.filter((c) => (filter === "all" ? true : filter === "open" ? !c.resolved : c.resolved)).sort((a, b) => b.createdAt - a.createdAt),
-    [comments, filter]
+    () =>
+      comments
+        .filter((c) => (filter === "all" ? true : filter === "open" ? !c.resolved : c.resolved))
+        .filter((c) => !here || scope === "everywhere" || here.test(c))
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [comments, filter, scope, here]
   )
   const say = (msg: string) => {
     setFlash(msg)
@@ -49,8 +71,18 @@ export function CommentsPanel({ onClose, onAdd, wireframe }: { onClose: () => vo
             </button>
           ))}
         </div>
+        {here && (
+          <div className="ps-seg" data-ps-scope>
+            <button data-on={scope === "here" ? "true" : undefined} onClick={() => setScope("here")} title={`Only ${here.label}`}>
+              Here
+            </button>
+            <button data-on={scope === "everywhere" ? "true" : undefined} onClick={() => setScope("everywhere")} title="Player, map, boards and docs">
+              Everywhere
+            </button>
+          </div>
+        )}
         {onAdd && (
-          <PsButton primary className="ml-auto h-7" onClick={onAdd} tip="Place a comment on this page" keys={["M"]}>
+          <PsButton primary className="ml-auto h-7" onClick={onAdd} tip="Place a comment here" keys={["M"]}>
             New comment
           </PsButton>
         )}
@@ -61,7 +93,7 @@ export function CommentsPanel({ onClose, onAdd, wireframe }: { onClose: () => vo
           <div className="px-4 py-8 text-center ps-sub">
             {comments.length === 0 ? (
               <>
-                No comments yet. On a page, press <Kbd>M</Kbd> and click anywhere to leave one.
+                No comments yet. Press <Kbd>M</Kbd> and click anything (a page, a board, a doc) to leave one.
               </>
             ) : (
               "Nothing here."
@@ -69,16 +101,21 @@ export function CommentsPanel({ onClose, onAdd, wireframe }: { onClose: () => vo
           </div>
         ) : (
           list.map((c) => {
-            const page = getPage(c.page)
+            const isHere = !!here?.test(c)
             return (
               <button
                 key={c.id}
                 className="w-full text-left px-4 py-2.5 flex gap-2.5 cursor-pointer ps-crow"
-                onClick={() => navigate(pageUrl(c.page, c.dims, { c: c.id, ...(wireframe ? { w: "1" } : {}) }))}
-                title="Open on the page"
+                data-here={isHere && scope === "everywhere" ? "true" : undefined}
+                data-comment-row={c.id}
+                onClick={() => {
+                  if (isHere && here?.open) here.open(c)
+                  else navigate(commentHref(c, wireframe ? { w: "1" } : {}))
+                }}
+                title="Open it where it is"
               >
                 <span className="ps-cbubble" style={{ position: "static", transform: "none", flexShrink: 0 }} data-resolved={c.resolved ? "true" : undefined}>
-                  {(c.author || "?").slice(0, 2).toUpperCase()}
+                  {initials(c.author || "?")}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5 text-[11px]" style={{ color: "var(--ps-muted)" }}>
@@ -88,7 +125,7 @@ export function CommentsPanel({ onClose, onAdd, wireframe }: { onClose: () => vo
                   </span>
                   <span className="block text-[12.5px] leading-snug mt-0.5 line-clamp-2">{c.body}</span>
                   <span className="block text-[10.5px] mt-1 truncate" style={{ color: "var(--ps-faint)" }}>
-                    {page ? describeAnchor(c) : c.page}
+                    {describeAnchor(c)}
                     {c.replies.length > 0 && ` · ${c.replies.length} repl${c.replies.length === 1 ? "y" : "ies"}`}
                   </span>
                 </span>
@@ -187,6 +224,9 @@ export function CommentsPanel({ onClose, onAdd, wireframe }: { onClose: () => vo
             defaultValue={author}
             onBlur={(e) => setAuthor(e.target.value.trim())}
           />
+        </div>
+        <div className="text-[10.5px]" style={{ color: "var(--ps-faint)" }} data-ps-storage={mode}>
+          {STORAGE_NOTE[mode]}
         </div>
         {flash && (
           <div className="text-[11px]" style={{ color: "var(--ps-comment)" }}>

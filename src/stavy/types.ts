@@ -310,6 +310,13 @@ export interface ViewerDefaults {
   viewport?: { width: number; height: number; dpr?: number }
   /** What the inspector should know about this workspace's design system. */
   inspect?: InspectSettings
+  /**
+   * Where comments are kept (docs/COMMENTS.md): "file" (stavy-content/comments.json
+   * via the dev endpoint), "local" (this browser), or a same-origin ES module
+   * exporting async list(), save(comment), update(id, patch). Default: "file"
+   * when the dev endpoint is writable, else "local".
+   */
+  comments?: { adapter?: "file" | "local" | { module: string } }
 }
 
 export interface Manifest {

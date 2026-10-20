@@ -26,6 +26,7 @@ export const Braces = icon("<path d=\"M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0
 export const Check = icon("<path d=\"M20 6 9 17l-5-5\"></path>")
 export const CheckCircle2 = icon("<circle cx=\"12\" cy=\"12\" r=\"10\"></circle><path d=\"m9 12 2 2 4-4\"></path>")
 export const ChevronDown = icon("<path d=\"m6 9 6 6 6-6\"></path>")
+export const ChevronUp = icon("<path d=\"m18 15-6-6-6 6\"></path>")
 export const ChevronLeft = icon("<path d=\"m15 18-6-6 6-6\"></path>")
 export const ChevronRight = icon("<path d=\"m9 18 6-6-6-6\"></path>")
 export const CircleDashed = icon("<path d=\"M10.1 2.182a10 10 0 0 1 3.8 0\"></path><path d=\"M13.9 21.818a10 10 0 0 1-3.8 0\"></path><path d=\"M17.609 3.721a10 10 0 0 1 2.69 2.7\"></path><path d=\"M2.182 13.9a10 10 0 0 1 0-3.8\"></path><path d=\"M20.279 17.609a10 10 0 0 1-2.7 2.69\"></path><path d=\"M21.818 10.1a10 10 0 0 1 0 3.8\"></path><path d=\"M3.721 6.391a10 10 0 0 1 2.7-2.69\"></path><path d=\"M6.391 20.279a10 10 0 0 1-2.69-2.7\"></path>")

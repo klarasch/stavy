@@ -180,6 +180,36 @@
               "description": "Same-origin ES module the viewer imports at startup, default-exporting { framework?, designSystem? } partials merged over the built-in adapter. Only for what the data above cannot say."
             }
           }
+        },
+        "comments": {
+          "type": "object",
+          "description": "Where comments are kept (docs/COMMENTS.md). Default: \"file\" (stavy-content/comments.json via the dev endpoint) when it is writable, else \"local\" (this browser).",
+          "properties": {
+            "adapter": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "file",
+                    "local"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "module"
+                  ],
+                  "properties": {
+                    "module": {
+                      "type": "string",
+                      "description": "Same-origin ES module URL exporting async list(), save(comment), update(id, patch) and optionally remove(id)."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
         }
       }
     },

@@ -165,6 +165,30 @@ export function elementAt(iframe: HTMLIFrameElement, clientX: number, clientY: n
   return doc.elementFromPoint((clientX - fr.left) / k, (clientY - fr.top) / k)
 }
 
+/** An element's box as fractions (0–1) of its document's scroll size: a position that survives a reload. */
+export function docFracBox(el: Element): { x: number; y: number; w: number; h: number } | null {
+  const d = el.ownerDocument
+  const win = d.defaultView
+  const W = d.documentElement.scrollWidth
+  const H = d.documentElement.scrollHeight
+  if (!win || !W || !H) return null
+  const r = el.getBoundingClientRect()
+  const f = (n: number) => Math.round(n * 10000) / 10000
+  return { x: f((r.left + win.scrollX) / W), y: f((r.top + win.scrollY) / H), w: f(r.width / W), h: f(r.height / H) }
+}
+
+/** The host-viewport rect of a box stored with `docFracBox`, in this frame's current document. */
+export function hostRectOfFrac(box: { x: number; y: number; w: number; h: number }, iframe: HTMLIFrameElement): HostRect | null {
+  const d = frameDoc(iframe)
+  const win = d?.defaultView
+  if (!d || !win) return null
+  const W = d.documentElement.scrollWidth
+  const H = d.documentElement.scrollHeight
+  const fr = iframe.getBoundingClientRect()
+  const k = frameScale(iframe)
+  return { left: fr.left + (box.x * W - win.scrollX) * k, top: fr.top + (box.y * H - win.scrollY) * k, width: box.w * W * k, height: box.h * H * k }
+}
+
 /**
  * The frame's document as React state: updates on every load (hard
  * navigation swaps the document) and is re-checked on an interval so a load

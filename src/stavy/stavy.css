@@ -505,6 +505,25 @@
 .ps-crow { border: 0; background: transparent; font: inherit; color: inherit; }
 .ps-crow:hover { background: var(--ps-hover); }
 .ps-crow + .ps-crow { border-top: 1px solid var(--ps-border); }
+.ps-crow[data-here="true"] { box-shadow: inset 2px 0 0 var(--ps-comment); }
+/* placing: the element a comment will attach to */
+.ps-ctarget { position: absolute; border: 1.5px solid var(--ps-comment); background: color-mix(in srgb, var(--ps-comment) 8%, transparent); border-radius: 3px; }
+.ps-ctarget-tag { position: absolute; left: -1.5px; bottom: 100%; margin-bottom: 3px; padding: 1px 6px; border-radius: 5px; background: var(--ps-comment); color: var(--ps-comment-fg); font-size: 10.5px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.ps-cquote { border-left: 2px solid var(--ps-comment); padding-left: 8px; margin: 0; }
+/* boards and the map: pins live in board space, counter-scaled so they read at any zoom */
+.ps-cpin { position: absolute; z-index: 40; width: 0; height: 0; }
+.ps-cpin > .ps-cbubble { position: absolute; left: 0; bottom: 0; transform: scale(var(--ps-inv, 1)); transform-origin: left bottom; }
+.ps-csurface-shield { position: absolute; inset: 0; z-index: 30; cursor: crosshair; }
+.ps-csurface-hover { position: absolute; z-index: 29; pointer-events: none; border: calc(1.5px * var(--ps-inv, 1)) solid var(--ps-comment); border-radius: 10px; background: color-mix(in srgb, var(--ps-comment) 6%, transparent); }
+/* docs: anchored passages and their markers in the margin */
+.ps-chl { background: color-mix(in srgb, var(--ps-comment) 22%, transparent); border-bottom: 2px solid var(--ps-comment); border-radius: 2px; cursor: pointer; color: inherit; }
+.ps-chl[data-resolved="true"] { background: transparent; border-bottom-style: dotted; }
+.ps-chl[data-open="true"] { background: color-mix(in srgb, var(--ps-comment) 38%, transparent); }
+.ps-cblock { box-shadow: -10px 0 0 -7px var(--ps-comment); }
+.ps-docs-placing .ps-docs-md > * { cursor: crosshair; }
+.ps-docs-placing .ps-docs-md > *:hover { outline: 1.5px solid var(--ps-comment); outline-offset: 3px; border-radius: 3px; }
+.ps-cmargin { position: absolute; right: -40px; }
+.ps-cadd { position: fixed; z-index: var(--ps-z-chrome); }
 
 /* ---- crisp after zoom: promote to a layer only while gesturing, re-raster at rest ---- */
 .is-panning .ps-canvas-content { will-change: transform; }

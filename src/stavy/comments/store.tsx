@@ -1,13 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import { manifest, getPage, valueLabel, dimensionLabel, pageUrl, canvasUrl, findTarget, contentUrl } from "../manifest"
+import { manifest, getPage, valueLabel, dimensionLabel, pageUrl, canvasUrl, contentUrl, contentIndex, targetsById } from "../manifest"
 import { useContentRev, useDev, writeContent } from "../dev"
+import { adapterSetting, loadAdapterModule, resolveMode, type CommentsAdapter, type CommentsMode } from "./adapter"
+import { relocate, type AnchorEl, type ElementAnchor, type FracBox } from "./anchor"
+
+export { pathBetween, followPath } from "./anchor"
 
 /* ------------------------------------------------------------------ */
 /* Comments: conversation about a prototype — separate from annotations  */
-/* (authored documentation in the manifest). With the dev endpoint they   */
-/* live in stavy-content/comments.json (a file the team and agents can    */
-/* read, commit and review); without it they stay in the browser and are  */
-/* shared as a link payload or Markdown (Slack-friendly).                 */
+/* (authored documentation in the manifest). They can sit anywhere the  */
+/* viewer shows something: on an element in the player, on a board (an */
+/* item or a point), on the map, or on a passage of a doc. Where they   */
+/* live is an adapter (adapter.ts, docs/COMMENTS.md): a file through    */
+/* the dev endpoint, this browser, or a module the workspace provides.  */
 /* ------------------------------------------------------------------ */
 
 export interface CommentReply {
@@ -17,17 +22,29 @@ export interface CommentReply {
   createdAt: number
 }
 
-export interface Comment {
+/** The map (overview canvas) is addressed as a board with this id. */
+export const MAP_BOARD = "@map"
+
+export interface Comment extends ElementAnchor {
   id: string
-  page: string
-  dims: Record<string, string>
-  /** Semantic target the comment is anchored to (preferred: survives redesigns) */
-  target?: string
-  /** nth-child path from the anchor (target or page root) down to the exact element clicked */
-  path?: number[]
-  /** position in % of the resolved anchor element */
-  x: number
-  y: number
+  /* ---- player: an element of a page state (ElementAnchor fields) ---- */
+  page?: string
+  dims?: Record<string, string>
+  /* ---- board / map: an item, or a point on the board ---- */
+  board?: string
+  item?: string
+  /* ---- doc: a passage ---- */
+  doc?: string
+  heading?: string
+  quote?: string
+  /** Index of the block (paragraph, list item, heading…) clicked, when no text was selected */
+  block?: number
+  /**
+   * Position. Player: % of the anchored element. Board item: % of the item's
+   * box. Board point (no item): board coordinates in px.
+   */
+  x?: number
+  y?: number
   body: string
   author: string
   createdAt: number
@@ -35,12 +52,22 @@ export interface Comment {
   replies: CommentReply[]
 }
 
+export type Place = "page" | "board" | "map" | "doc"
+export function placeOf(c: Comment): Place {
+  if (c.doc != null) return "doc"
+  if (c.board != null) return c.board === MAP_BOARD ? "map" : "board"
+  return "page"
+}
+
+export type NewComment = Omit<Comment, "id" | "createdAt" | "resolved" | "replies" | "author" | "body"> & { body: string; author?: string }
+
 interface CommentsState {
   comments: Comment[]
   open: number
   author: string
+  mode: CommentsMode
   setAuthor: (a: string) => void
-  add: (c: Omit<Comment, "id" | "createdAt" | "resolved" | "replies">) => Comment
+  add: (c: NewComment) => Comment
   update: (id: string, patch: Partial<Comment>) => void
   remove: (id: string) => void
   reply: (id: string, body: string) => void
@@ -52,33 +79,62 @@ interface CommentsState {
 
 const Ctx = createContext<CommentsState | null>(null)
 const storageKey = () => `ps-comments:${manifest.product.name}`
+const seededKey = () => `ps-comments-seeded:${manifest.product.name}`
 const AUTHOR_KEY = "ps-author"
 /** Where the comments live when the viewer can write (relative to stavy-content/). */
 export const COMMENTS_FILE = "comments.json"
 
 export const uid = () => Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4)
 
-export function dimsEqual(a: Record<string, string>, b: Record<string, string>) {
-  const ka = Object.keys(a)
-  return ka.length === Object.keys(b).length && ka.every((k) => a[k] === b[k])
+export function dimsEqual(a: Record<string, string> | undefined, b: Record<string, string> | undefined) {
+  const A = a ?? {}
+  const B = b ?? {}
+  const ka = Object.keys(A)
+  return ka.length === Object.keys(B).length && ka.every((k) => A[k] === B[k])
 }
 
-function load(): Comment[] {
+function readLS<T>(key: string, fallback: T): T {
   try {
-    return JSON.parse(localStorage.getItem(storageKey()) ?? "[]")
+    return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback
   } catch {
-    return []
+    return fallback
   }
+}
+function writeLS(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* private mode / quota: nothing to keep */
+  }
+}
+const load = (): Comment[] => normalize(readLS<unknown[]>(storageKey(), []))
+
+/** Accept whatever shape a stored or shared comment comes in (older versions, the file, an adapter). */
+export function normalize(list: unknown[]): Comment[] {
+  return list
+    .filter((c): c is Record<string, any> => !!c && typeof c === "object")
+    .map((c) => {
+      const out = {
+        ...c,
+        createdAt: ms(c.createdAt),
+        resolved: !!c.resolved,
+        body: String(c.body ?? ""),
+        author: String(c.author ?? ""),
+        replies: (Array.isArray(c.replies) ? c.replies : []).map((r: any) => ({ ...r, createdAt: ms(r.createdAt) })),
+      } as Comment
+      if (placeOf(out) === "page") out.dims = c.dims ?? {}
+      return out
+    })
 }
 
 /* ---- the file: ISO timestamps so it reads (and diffs) like text ---- */
 const iso = (t: number) => new Date(t).toISOString()
 const ms = (t: unknown) => (typeof t === "number" ? t : Date.parse(String(t)) || Date.now())
 
-function toFile(list: Comment[]): string {
+export function toFile(list: Comment[]): string {
   return JSON.stringify(
     {
-      version: 1,
+      version: 2,
       comments: list.map((c) => ({ ...c, createdAt: iso(c.createdAt), replies: c.replies.map((r) => ({ ...r, createdAt: iso(r.createdAt) })) })),
     },
     null,
@@ -86,24 +142,35 @@ function toFile(list: Comment[]): string {
   )
 }
 
-function fromFile(text: string): Comment[] {
+export function fromFile(text: string): Comment[] {
   const raw = JSON.parse(text)
-  const list: any[] = Array.isArray(raw) ? raw : (raw.comments ?? [])
-  return list.map((c) => ({
-    ...c,
-    dims: c.dims ?? {},
-    createdAt: ms(c.createdAt),
-    resolved: !!c.resolved,
-    replies: (c.replies ?? []).map((r: any) => ({ ...r, createdAt: ms(r.createdAt) })),
-  }))
+  return normalize(Array.isArray(raw) ? raw : (raw.comments ?? []))
+}
+
+async function fetchFile(): Promise<string | null> {
+  try {
+    const r = await fetch(contentUrl(COMMENTS_FILE), { cache: "no-store" })
+    if (!r.ok) return null
+    const t = await r.text()
+    // A dev server answers a missing file with index.html: only JSON counts.
+    return /^\s*[{[]/.test(t) ? t : null
+  } catch {
+    return null
+  }
 }
 
 export function CommentsProvider({ children }: { children: ReactNode }) {
   const [comments, setCommentsRaw] = useState<Comment[]>(load)
-  const [author, setAuthorState] = useState(() => localStorage.getItem(AUTHOR_KEY) ?? "")
+  const [author, setAuthorState] = useState(() => {
+    try {
+      return localStorage.getItem(AUTHOR_KEY) ?? ""
+    } catch {
+      return ""
+    }
+  })
   const dev = useDev()
   const rev = useContentRev()
-  const writable = !!dev?.writable
+  const mode = resolveMode(adapterSetting(), !!dev?.writable)
 
   // File mode (the dev endpoint is there): comments.json is the source of
   // truth. `dirty` marks a local edit not yet written; a reload from the file
@@ -117,39 +184,53 @@ export function CommentsProvider({ children }: { children: ReactNode }) {
     setCommentsRaw(fn)
   }, [])
 
-  // Browser mode: localStorage, in sync across tabs.
+  /* ---- local: localStorage, in sync across tabs ---- */
   useEffect(() => {
-    if (writable) return
-    localStorage.setItem(storageKey(), JSON.stringify(comments))
-  }, [comments, writable])
+    if (mode !== "local") return
+    writeLS(storageKey(), comments)
+  }, [comments, mode])
   useEffect(() => {
-    if (writable) return
+    if (mode !== "local") return
     const onStorage = (e: StorageEvent) => {
       if (e.key === storageKey()) setCommentsRaw(load())
     }
     window.addEventListener("storage", onStorage)
     return () => window.removeEventListener("storage", onStorage)
-  }, [writable])
-
-  // File mode: load on start and whenever the content changes underneath us.
+  }, [mode])
+  // A published build may ship the team's comments.json: show those too (read
+  // once; each comment is taken in once, so deleting one here sticks).
   useEffect(() => {
-    if (!writable) {
+    if (mode !== "local") return
+    let cancelled = false
+    void fetchFile().then((text) => {
+      if (cancelled || !text) return
+      try {
+        const seen = new Set(readLS<string[]>(seededKey(), []))
+        const fresh = fromFile(text).filter((c) => !seen.has(c.id))
+        if (!fresh.length) return
+        writeLS(seededKey(), [...seen, ...fresh.map((c) => c.id)])
+        setCommentsRaw((prev) => {
+          const have = new Set(prev.map((c) => c.id))
+          return [...prev, ...fresh.filter((c) => !have.has(c.id))].sort((a, b) => a.createdAt - b.createdAt)
+        })
+      } catch {
+        /* not valid: nothing to show */
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [mode])
+
+  /* ---- file: load on start and whenever the content changes underneath us ---- */
+  useEffect(() => {
+    if (mode !== "file") {
       loaded.current = false
       return
     }
     let cancelled = false
     ;(async () => {
-      let text: string | null = null
-      try {
-        const r = await fetch(contentUrl(COMMENTS_FILE), { cache: "no-store" })
-        if (r.ok) {
-          const t = await r.text()
-          // A dev server answers a missing file with index.html: only JSON counts.
-          if (/^\s*[{[]/.test(t)) text = t
-        }
-      } catch {
-        /* treated as no file */
-      }
+      const text = await fetchFile()
       if (cancelled) return
       if (text === null) {
         // No file yet: anything collected in the browser so far moves into it.
@@ -173,11 +254,11 @@ export function CommentsProvider({ children }: { children: ReactNode }) {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [writable, rev])
+  }, [mode, rev])
 
   // File mode: save shortly after a local edit.
   useEffect(() => {
-    if (!writable || !loaded.current || !dirty.current) return
+    if (mode !== "file" || !loaded.current || !dirty.current) return
     const t = setTimeout(async () => {
       const text = toFile(comments)
       try {
@@ -190,24 +271,71 @@ export function CommentsProvider({ children }: { children: ReactNode }) {
       }
     }, 250)
     return () => clearTimeout(t)
-  }, [comments, writable, saveTick])
+  }, [comments, mode, saveTick])
 
-  const importMany = useCallback((list: Comment[]) => {
-    let added = 0
-    setComments((prev) => {
-      const byId = new Map(prev.map((c) => [c.id, c]))
-      for (const c of list) {
-        const existing = byId.get(c.id)
-        if (!existing) added++
-        // newest wins per comment; merge replies by id
-        const replies = [...(existing?.replies ?? [])]
-        for (const r of c.replies ?? []) if (!replies.some((x) => x.id === r.id)) replies.push(r)
-        byId.set(c.id, { ...(existing ?? c), ...c, replies: replies.sort((a, b) => a.createdAt - b.createdAt) })
-      }
-      return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
-    })
-    return added
-  }, [setComments])
+  /* ---- module: the workspace's own adapter ---- */
+  const adapter = useRef<CommentsAdapter | null>(null)
+  const refresh = useCallback(async () => {
+    const a = adapter.current
+    if (!a) return
+    try {
+      setCommentsRaw(normalize(await a.list()))
+    } catch (e) {
+      console.warn("stavy: comments adapter list() failed", e)
+    }
+  }, [])
+  useEffect(() => {
+    if (mode !== "module") return
+    const setting = adapterSetting()
+    if (!setting || typeof setting !== "object") return
+    let cancelled = false
+    loadAdapterModule(setting.module).then(
+      (a) => {
+        if (cancelled) return
+        adapter.current = a
+        void refresh()
+      },
+      (e) => console.warn("stavy: could not load the comments adapter", e)
+    )
+    const onFocus = () => void refresh()
+    window.addEventListener("focus", onFocus)
+    return () => {
+      cancelled = true
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [mode, refresh])
+  /** Hand a change to the adapter (module mode only); the screen has already changed. */
+  const send = useCallback(
+    (op: (a: CommentsAdapter) => Promise<void> | undefined) => {
+      if (mode !== "module" || !adapter.current) return
+      Promise.resolve(op(adapter.current)).catch((e) => console.warn("stavy: comments adapter write failed", e))
+    },
+    [mode]
+  )
+
+  const importMany = useCallback(
+    (list: Comment[]) => {
+      let added = 0
+      const changed: Comment[] = []
+      setComments((prev) => {
+        const byId = new Map(prev.map((c) => [c.id, c]))
+        for (const c of normalize(list)) {
+          const existing = byId.get(c.id)
+          if (!existing) added++
+          // newest wins per comment; merge replies by id
+          const replies = [...(existing?.replies ?? [])]
+          for (const r of c.replies ?? []) if (!replies.some((x) => x.id === r.id)) replies.push(r)
+          const next = { ...(existing ?? c), ...c, replies: replies.sort((a, b) => a.createdAt - b.createdAt) }
+          byId.set(c.id, next)
+          changed.push(next)
+        }
+        return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
+      })
+      send((a) => Promise.all(changed.map((c) => a.save(c))).then(() => undefined))
+      return added
+    },
+    [setComments, send]
+  )
 
   // Unpack a shared payload from the URL hash (#c=…), then drop the hash.
   useEffect(() => {
@@ -227,27 +355,46 @@ export function CommentsProvider({ children }: { children: ReactNode }) {
       comments,
       open: comments.filter((c) => !c.resolved).length,
       author,
+      mode,
       setAuthor: (a) => {
         setAuthorState(a)
-        localStorage.setItem(AUTHOR_KEY, a)
+        try {
+          localStorage.setItem(AUTHOR_KEY, a)
+        } catch {
+          /* not remembered */
+        }
       },
       add: (c) => {
-        const full: Comment = { ...c, id: uid(), createdAt: Date.now(), resolved: false, replies: [] }
+        const full: Comment = { ...c, author: c.author ?? author, id: uid(), createdAt: Date.now(), resolved: false, replies: [] }
         setComments((p) => [...p, full])
+        send((a) => a.save(full))
         return full
       },
-      update: (id, patch) => setComments((p) => p.map((c) => (c.id === id ? { ...c, ...patch } : c))),
-      remove: (id) => setComments((p) => p.filter((c) => c.id !== id)),
-      reply: (id, body) =>
-        setComments((p) =>
-          p.map((c) => (c.id === id ? { ...c, replies: [...c.replies, { id: uid(), author, body, createdAt: Date.now() }] } : c))
-        ),
+      update: (id, patch) => {
+        setComments((p) => p.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+        send((a) => a.update(id, patch))
+      },
+      remove: (id) => {
+        setComments((p) => p.filter((c) => c.id !== id))
+        send((a) => a.remove?.(id))
+      },
+      reply: (id, body) => {
+        const c = comments.find((x) => x.id === id)
+        if (!c) return
+        const replies = [...c.replies, { id: uid(), author, body, createdAt: Date.now() }]
+        setComments((p) => p.map((x) => (x.id === id ? { ...x, replies } : x)))
+        send((a) => a.update(id, { replies }))
+      },
       importMany,
-      clearAll: () => setComments(() => []),
-      countFor: (page, dims) => comments.filter((c) => !c.resolved && c.page === page && dimsEqual(c.dims, dims)).length,
-      forInstance: (page, dims) => comments.filter((c) => c.page === page && dimsEqual(c.dims, dims)),
+      clearAll: () => {
+        const ids = comments.map((c) => c.id)
+        setComments(() => [])
+        send((a) => (a.remove ? Promise.all(ids.map((i) => a.remove!(i))).then(() => undefined) : undefined))
+      },
+      countFor: (page, dims) => comments.filter((c) => !c.resolved && placeOf(c) === "page" && c.page === page && dimsEqual(c.dims, dims)).length,
+      forInstance: (page, dims) => comments.filter((c) => placeOf(c) === "page" && c.page === page && dimsEqual(c.dims, dims)),
     }),
-    [comments, author, importMany, setComments]
+    [comments, author, mode, importMany, setComments, send]
   )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -296,18 +443,47 @@ export async function shareUrl(list: Comment[]): Promise<string> {
   return `${window.location.origin}${canvasUrl({ comments: "1" })}#c=${await encodePayload(list)}`
 }
 
-/* ---------------- Markdown (Slack-friendly) ---------------- */
+/* ---------------- where a comment is, in words and as a link ---------------- */
+
+const boardTitle = (id: string) => contentIndex.boards?.find((b) => b.id === id)?.title ?? id
+const docTitle = (id: string) => contentIndex.docs?.find((d) => d.id === id)?.title ?? id
+const short = (s: string, n = 40) => (s.length > n ? s.slice(0, n - 1) + "…" : s)
 
 export function describeAnchor(c: Comment): string {
-  const page = getPage(c.page)
-  const dims = Object.entries(c.dims)
-    .map(([d, v]) => `${dimensionLabel(d)} ${valueLabel(d, v)}`)
-    .join(", ")
-  return `${page?.label ?? c.page}${dims ? ` (${dims})` : ""}${c.target ? ` @${c.target}` : ""}`
+  switch (placeOf(c)) {
+    case "doc":
+      return `Doc: ${docTitle(c.doc!)}${c.heading ? ` › ${c.heading}` : ""}${c.quote ? ` “${short(c.quote)}”` : ""}`
+    case "map":
+      return `Map${c.item ? ` @${c.item}` : ""}`
+    case "board":
+      return `Board: ${boardTitle(c.board!)}${c.item ? ` @${c.item}` : ""}`
+    default: {
+      const page = getPage(c.page ?? "")
+      const dims = Object.entries(c.dims ?? {})
+        .map(([d, v]) => `${dimensionLabel(d)} ${valueLabel(d, v)}`)
+        .join(", ")
+      const what = c.target ? ` @${c.target}` : c.snippet ? ` “${short(c.snippet, 30)}”` : ""
+      return `${page?.label ?? c.page}${dims ? ` (${dims})` : ""}${what}`
+    }
+  }
+}
+
+/** The viewer link that opens a comment in its place (search-only for in-app navigation). */
+export function commentHref(c: Comment, extra: Record<string, string> = {}): string {
+  switch (placeOf(c)) {
+    case "doc":
+      return canvasUrl({ doc: c.doc!, c: c.id, ...extra })
+    case "map":
+      return canvasUrl({ c: c.id, ...extra })
+    case "board":
+      return canvasUrl({ b: c.board!, c: c.id, ...extra })
+    default:
+      return pageUrl(c.page ?? "", c.dims, { c: c.id, ...extra })
+  }
 }
 
 export function commentUrl(c: Comment): string {
-  return window.location.origin + pageUrl(c.page, c.dims, { c: c.id })
+  return window.location.origin + commentHref(c)
 }
 
 export async function toMarkdown(list: Comment[]): Promise<string> {
@@ -340,36 +516,28 @@ export function timeAgo(t: number): string {
   return `${Math.round(h / 24)}d ago`
 }
 
-/* ---------------- anchoring helpers ---------------- */
-
-/** nth-child path from `from` down to `el` (empty when el === from). */
-export function pathBetween(from: Element, el: Element): number[] {
-  const path: number[] = []
-  let cur: Element | null = el
-  while (cur && cur !== from) {
-    const parent: Element | null = cur.parentElement
-    if (!parent) return []
-    path.unshift(Array.prototype.indexOf.call(parent.children, cur))
-    cur = parent
-  }
-  return cur === from ? path : []
+export function initials(name: string) {
+  const p = name.trim().split(/\s+/).filter(Boolean)
+  return (p.length >= 2 ? p[0][0] + p[p.length - 1][0] : (p[0] ?? "?").slice(0, 2)).toUpperCase()
 }
 
-/** Follow an nth-child path; null if the DOM changed underneath it. */
-export function followPath(from: Element, path: number[] | undefined): Element | null {
-  let cur: Element | null = from
-  for (const i of path ?? []) {
-    cur = cur?.children[i] ?? null
-    if (!cur) return null
-  }
-  return cur
+/* ---------------- anchoring in the prototype document ---------------- */
+
+/** Where a player comment is now: an element (and how it was found), or a stored box. */
+export function locateInDoc(c: Comment, doc: ParentNode, root: Element): { el: Element; via: string } | { box: FracBox; via: "box" } {
+  const found = relocate(c, {
+    root: root as unknown as AnchorEl,
+    targetOf: () => null,
+    targetsById: (id) => targetsById(doc, id) as unknown as AnchorEl[],
+  })
+  if (!found) return { el: root, via: "root" }
+  return "box" in found ? found : { el: found.el as unknown as Element, via: found.via }
 }
 
-/** Resolve a comment's anchor inside the prototype document: exact element via path → target → page root. */
+/** Resolve a comment's anchor to an element (the page root when only a box is left). */
 export function resolveAnchor(c: Comment, doc: ParentNode, root: Element): Element {
-  const target = c.target ? findTarget(doc, c.target) : null
-  const base = target ?? root
-  return followPath(base, c.path) ?? base
+  const r = locateInDoc(c, doc, root)
+  return "el" in r ? r.el : root
 }
 
 export function downloadText(filename: string, text: string, type = "text/plain") {
