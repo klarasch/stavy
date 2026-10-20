@@ -553,7 +553,14 @@ export function Inspector({
     }
     const onLeave = () => setHover(null)
     const onClick = (e: MouseEvent) => {
-      const p = pick(e)
+      if (e.target instanceof Element && e.target.closest("[data-ps-ui]")) return
+      // Exactly what the tag and outline show, when the click lands on it — a
+      // host that captures the pointer (canvas pan) may retarget the click
+      // event itself away from the card it happened over.
+      const h = hoverRef.current
+      const hr = h && h.el.isConnected ? hostRect(h.el, h.iframe) : null
+      const onHovered = !!hr && e.clientX >= hr.left && e.clientX <= hr.left + hr.width && e.clientY >= hr.top && e.clientY <= hr.top + hr.height
+      const p = onHovered ? h : pick(e)
       if (!p) return
       // Inspecting is reading: the click is the inspector's, never the app's.
       e.preventDefault()

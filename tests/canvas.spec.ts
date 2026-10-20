@@ -111,3 +111,41 @@ test("opening the player mid-gesture never leaves the glass solid", async ({ pag
   await page.waitForTimeout(250)
   await expect(page.locator("html.is-panning")).toHaveCount(0)
 })
+
+// Inspect on the canvas: the same panel, as an overlay on the window edge.
+// The canvas used to remount the inspector on every render (its content ref
+// callback flipped through null), so a pin never survived the click.
+test("inspect on the canvas pins a card's element in a panel docked to the window edge", async ({ page }) => {
+  await page.goto("/stavy/?i=1")
+  await page.locator('[data-toc="page:expenses"]').first().waitFor()
+  await page.getByText("Expenses list", { exact: true }).first().click()
+  const all = page.locator('[data-instance="expenses?role=employee&state=loaded"]')
+  await expect(all.first()).toBeAttached()
+  // The jump lands the Expenses section in view; take that section's card, not one elsewhere on the canvas.
+  const card = page.locator('[data-toc="page:expenses"] [data-instance="expenses?role=employee&state=loaded"]').first()
+  await expect(card).toBeVisible()
+  // The jump animates the viewport; measure once it has come to rest.
+  let last = -1
+  await expect.poll(async () => {
+    const y = (await card.boundingBox())!.y
+    const still = Math.abs(y - last) < 0.5
+    last = y
+    return still
+  }, { intervals: [150] }).toBe(true)
+  const box = (await card.boundingBox())!
+  const at = { x: box.x + box.width / 2, y: box.y + box.height / 3 }
+  await page.mouse.move(at.x, at.y)
+  await expect(card.locator("iframe")).toHaveCount(1)
+  await expect(page.locator(".ps-inspect-tag")).toBeVisible()
+  await page.mouse.move(at.x + 2, at.y)
+  await page.mouse.click(at.x + 2, at.y)
+  const panel = page.locator(".ps-inspect-panel")
+  await expect(panel).toHaveAttribute("data-placement", "overlay")
+  await expect(panel.locator(".ps-inspect-status")).toHaveText("pinned")
+  const p = (await panel.boundingBox())!
+  expect(Math.round(p.x + p.width)).toBe(page.viewportSize()!.width)
+  // Still pinned a moment later, and the click did not open the player.
+  await page.waitForTimeout(400)
+  await expect(panel.locator(".ps-inspect-status")).toHaveText("pinned")
+  await expect(page).not.toHaveURL(/[?&]p=/)
+})
