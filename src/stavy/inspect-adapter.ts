@@ -16,12 +16,14 @@
  */
 
 import { appBase, manifest } from "./manifest"
-import { compileInspectConfig, isConfigured, type InspectSettings } from "./inspect/config"
+import { compileInspectConfig, compilePanel, isConfigured, type InspectSettings, type PanelConfig } from "./inspect/config"
 import { cssVariablesDesignSystem, genericDesignSystem, utilityClassDesignSystem, type InspectConfig } from "./inspect/design-system"
-import { reactComponentStack } from "./inspect/react"
-import type { CompFrame, DesignSystemAdapter, InspectAdapter, InspectAdapterModule, Kit } from "./inspect/types"
+import { DEFAULT_INTERNALS, reactComponentStack } from "./inspect/react"
+import { INSPECT_API_VERSION, type CompFrame, type DesignSystemAdapter, type InspectAdapter, type InspectAdapterModule, type Kit, type PanelSectionRenderer } from "./inspect/types"
 
-export type { CompFrame, DesignSystemAdapter, FrameworkAdapter, InspectAdapter, InspectAdapterModule, Provenance, TypeMetrics } from "./inspect/types"
+export type { CompFrame, DesignSystemAdapter, FrameworkAdapter, InspectAdapter, InspectAdapterModule, Provenance, TypeMetrics, PanelSectionContext, PanelSectionRenderer, PanelSectionResult, PanelRow } from "./inspect/types"
+export { INSPECT_API_VERSION } from "./inspect/types"
+export { BUILTIN_SECTIONS, linksFor, kebab, compilePanel, type PanelConfig, type CopyFormat } from "./inspect/config"
 export { frameToJsx, componentName, reactComponentStack } from "./inspect/react"
 export { invalidateStyleCache, computedStyleOf, primaryFontFamily, resolveVarChain, matchedDeclarations, specificity } from "./inspect/cssom"
 export { compileInspectConfig } from "./inspect/config"
@@ -30,7 +32,7 @@ export { matchTypeScale, utilityClassDesignSystem, cssVariablesDesignSystem, gen
 /* ---------------- assembling the adapter ---------------- */
 
 let loadedModule: InspectAdapterModule | null = null
-let cached: { adapter: InspectAdapter; from: InspectSettings | undefined; withModule: InspectAdapterModule | null } | null = null
+let cached: { adapter: InspectAdapter; panel: PanelConfig; from: InspectSettings | undefined; withModule: InspectAdapterModule | null } | null = null
 
 function build(): InspectAdapter {
   const settings = manifest.viewer?.inspect
@@ -51,13 +53,26 @@ function build(): InspectAdapter {
   designSystems.push(genericDesignSystem(cfg))
 
   const framework = {
-    componentStack: (el: Element, stopAt: string) => reactComponentStack(el, stopAt, kitsFor(el.ownerDocument)),
+    componentStack: (el: Element, stopAt: string) => reactComponentStack(el, stopAt, kitsFor(el.ownerDocument), cfg.internals ?? DEFAULT_INTERNALS),
     ...loadedModule?.framework,
   }
   const adapter: InspectAdapter = { framework, designSystems }
-  cached = { adapter, from: settings, withModule: loadedModule }
+  cached = { adapter, panel: cfg.panel ?? compilePanel(undefined), from: settings, withModule: loadedModule }
   dsForDoc = new WeakMap()
   return adapter
+}
+
+/** `viewer.inspect.panel`, compiled: which sections, hidden props, links, copy buttons. */
+export function panelConfig(): PanelConfig {
+  build()
+  return cached!.panel
+}
+
+/** Panel sections the workspace's code adapter exports, by id (empty until the module has loaded). */
+export function moduleSections(): Record<string, PanelSectionRenderer> {
+  const p = loadedModule?.panel
+  if (!p || typeof p !== "object") return {}
+  return Object.fromEntries(Object.entries(p).filter(([, fn]) => typeof fn === "function"))
 }
 
 /** The assembled adapter for this workspace. */
@@ -134,6 +149,20 @@ async function importModule(url: string): Promise<Record<string, unknown>> {
 }
 
 /**
+ * A module written against another adapter interface may still half-work; say
+ * so once, loudly enough to be found, and carry on with what does load.
+ * A module without `apiVersion` predates it and is read as version 1.
+ */
+export function checkApiVersion(spec: string, declared: unknown): boolean {
+  if (declared === undefined || declared === INSPECT_API_VERSION) return true
+  console.warn(
+    `[stavy] viewer.inspect.module ${spec} declares apiVersion ${JSON.stringify(declared)}; this viewer implements apiVersion ${INSPECT_API_VERSION}. ` +
+      "It is loaded anyway. See docs/INSPECT-ADAPTERS.md, \"Testing your adapter on a new Stavy release\"."
+  )
+  return false
+}
+
+/**
  * Import the workspace's `viewer.inspect.module`, if it declared one, and merge
  * its partial adapter over the defaults. The viewer is a static bundle served
  * next to the prototype, so a runtime `import()` of a same-origin file is the
@@ -157,6 +186,8 @@ export function loadInspectModule(): Promise<boolean> {
         console.warn(`[stavy] viewer.inspect.module ${spec} has no default export shaped like an adapter, ignored`)
         return null
       }
+      // Either on the default export or as a named export next to it.
+      checkApiVersion(spec, partial.apiVersion ?? (mod as { apiVersion?: unknown }).apiVersion)
       return partial
     } catch (err) {
       console.warn(`[stavy] viewer.inspect.module ${spec} failed to load, using the built-in adapter —`, err)

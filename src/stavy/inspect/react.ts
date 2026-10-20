@@ -24,18 +24,36 @@ import type { CompFrame, FrameworkAdapter, Kit } from "./types"
 /**
  * Framework and router plumbing: never a component anyone would call theirs,
  * dropped from the stack outright in both development and production builds.
+ * The defaults for `viewer.inspect.internals.exclude`.
  */
-const HARD_EXCLUDE =
-  /^(Primitive|Slot|SlotClone|Presence|Portal|FocusScope|DismissableLayer|RovingFocus|Collection|Anonymous|Suspense|Fragment|Lazy|Memo|ForwardRef|Route|Routes|Router|BrowserRouter|Navigator|Location|Outlet|RenderedRoute|StrictMode|Styled|Insertion|Tooltip|Popper|Arrow|ErrorBoundary|Unstable|Focus|Scroll|Visually)\b/
+export const DEFAULT_EXCLUDE: string[] = [
+  "^(Primitive|Slot|SlotClone|Presence|Portal|FocusScope|DismissableLayer|RovingFocus|Collection|Anonymous|Suspense|Fragment|Lazy|Memo|ForwardRef|Route|Routes|Router|BrowserRouter|Navigator|Location|Outlet|RenderedRoute|StrictMode|Styled|Insertion|Tooltip|Popper|Arrow|ErrorBoundary|Unstable|Focus|Scroll|Visually)\\b",
+  "(Context|Provider|Consumer|Impl|Boundary)$",
+]
 
 /**
  * Headless primitives a component library wraps, which do have a real fiber
  * name of their own but no identity outside the library. Only consulted when
  * the workspace has declared kits: with no kit configured there is no such
  * thing as "the kit's internals", and an app's own `Button` must not collapse.
+ * The defaults for `viewer.inspect.internals.primitives`.
  */
-const KIT_PRIMITIVES =
-  /^(Button|Input|TextField|Menu|MenuItem|Listbox|Option|Select|Switch|Slider|Tabs|Tab|Badge|Popup|Modal|Backdrop|Snackbar|ClickAwayListener)$/
+export const DEFAULT_PRIMITIVES: string[] = [
+  "^(Button|Input|TextField|Menu|MenuItem|Listbox|Option|Select|Switch|Slider|Tabs|Tab|Badge|Popup|Modal|Backdrop|Snackbar|ClickAwayListener)$",
+]
+
+/** Compiled internals patterns, tested against a debundled component name. */
+export interface InternalsPatterns {
+  exclude: RegExp[]
+  primitives: RegExp[]
+}
+
+export const DEFAULT_INTERNALS: InternalsPatterns = {
+  exclude: DEFAULT_EXCLUDE.map((s) => new RegExp(s)),
+  primitives: DEFAULT_PRIMITIVES.map((s) => new RegExp(s)),
+}
+
+const anyMatch = (list: RegExp[], name: string) => list.some((re) => re.test(name))
 
 /** Drop a bundler's numeric collision suffix ("Button2") before matching a name against the lists above. */
 function debundled(name: string): string {
@@ -243,7 +261,7 @@ function owningKit(fiber: any, idx: KitIndex): string | null {
   return null
 }
 
-export function reactComponentStack(el: Element, stopAt: string, kits: Kit[] = []): CompFrame[] {
+export function reactComponentStack(el: Element, stopAt: string, kits: Kit[] = [], internals: InternalsPatterns = DEFAULT_INTERNALS): CompFrame[] {
   const idx = kitIndex(kits)
   const collected: Array<{ fiber: any; name: string; kit?: string }> = []
   let f = fiberOf(el)
@@ -254,7 +272,7 @@ export function reactComponentStack(el: Element, stopAt: string, kits: Kit[] = [
       if (id.name === stopAt) break
       const bare = debundled(id.name)
       const excluded =
-        HARD_EXCLUDE.test(bare) || /(Context|Provider|Consumer|Impl|Boundary)$/.test(bare) || id.name.startsWith("_") || id.name.includes("$")
+        anyMatch(internals.exclude, bare) || id.name.startsWith("_") || id.name.includes("$")
       if (!excluded && /^[A-Z]/.test(id.name) && collected[collected.length - 1]?.name !== id.name) {
         collected.push({ fiber: f, name: id.name, kit: id.kit })
       }
@@ -274,11 +292,11 @@ export function reactComponentStack(el: Element, stopAt: string, kits: Kit[] = [
       // A kit component rendered by the *same* kit is that kit's own business.
       // One rendered by a different kit is still something a person wrote.
       // A headless primitive has no identity outside whichever kit wraps it.
-      internal = c.kit ? owner === c.kit : KIT_PRIMITIVES.test(debundled(c.name)) && owner !== null
+      internal = c.kit ? owner === c.kit : anyMatch(internals.primitives, debundled(c.name)) && owner !== null
     } else {
       // Production build, no owner chain: only the primitives heuristic is left,
       // and a kit-named frame is assumed to be user-facing rather than guessed at.
-      internal = !c.kit && KIT_PRIMITIVES.test(debundled(c.name))
+      internal = !c.kit && anyMatch(internals.primitives, debundled(c.name))
     }
     return {
       name: c.name,
@@ -291,8 +309,8 @@ export function reactComponentStack(el: Element, stopAt: string, kits: Kit[] = [
 }
 
 /** The shipped framework adapter. `kitsFor` supplies the kits declared for the document being inspected. */
-export function reactFramework(kitsFor: (el: Element) => Kit[]): FrameworkAdapter {
-  return { componentStack: (el, stopAt) => reactComponentStack(el, stopAt, kitsFor(el)) }
+export function reactFramework(kitsFor: (el: Element) => Kit[], internals: InternalsPatterns = DEFAULT_INTERNALS): FrameworkAdapter {
+  return { componentStack: (el, stopAt) => reactComponentStack(el, stopAt, kitsFor(el), internals) }
 }
 
 /* ---------------- JSX serialization (what the author wrote, nested) ---------------- */
