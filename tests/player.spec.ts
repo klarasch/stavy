@@ -482,6 +482,10 @@ test.describe("inspector", () => {
   // the module are stubbed here, so the demo itself ships neither.
   test("a viewer.inspect.module is imported and merged over the built-in adapter", async ({ page }) => {
     const module = `export default {
+      apiVersion: 1,
+      panel: {
+        probe: (ctx) => ({ title: "Probe section", rows: [{ label: "component", value: ctx.component ? ctx.component.name : "none", copy: "x" }] }),
+      },
       designSystem: {
         detect: () => true,
         provenance: (el, prop) => ({ token: "--probe-token", chain: ["var(--probe-" + prop + ")"], raw: "probe", inheritedFrom: null }),
@@ -505,5 +509,8 @@ test.describe("inspector", () => {
     await expect(panel).toContainText("var(--probe-background-color)")
     // …while everything it did not override keeps working.
     await expect(panel.locator(".ps-crumb", { hasText: /^Button$/ })).toBeVisible()
+    // A module may add panel sections; unplaced, they come after the built-in ones.
+    await expect(panel.locator('[data-section="probe"]')).toContainText("Probe section")
+    await expect(panel.locator('[data-section="probe"]')).toContainText("Button")
   })
 })
