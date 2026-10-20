@@ -423,7 +423,7 @@
 .ps-classes span[data-kind="kit"] { color: var(--ps-focus); font-weight: 600; }
 .ps-props { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ps-props dt { color: var(--ps-muted); } .ps-props dd { margin: 0; overflow-wrap: anywhere; }
-.ps-copy { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ps-border); background: transparent; color: var(--ps-muted); font: inherit; font-size: 10.5px; cursor: pointer; }
+.ps-copy { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--ps-border); background: transparent; color: var(--ps-muted); font: inherit; font-size: 10.5px; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
 .ps-copy:hover { color: var(--ps-fg); background: var(--ps-hover); }
 /* The inspect panel: docked into its own space in the player (never over the
    frame), or on the window edge as an overlay on the canvas. */

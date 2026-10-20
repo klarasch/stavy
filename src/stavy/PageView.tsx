@@ -374,7 +374,7 @@ export function PageView() {
 
   return (
     <div className="h-screen relative">
-      <div ref={setViewportEl} className="ps-viewport h-full relative" data-bar={isBar ? barSide : undefined}>
+      <div ref={setViewportEl} className="ps-viewport h-full relative" data-bar={isBar && !hidden ? barSide : undefined}>
         <div className="ps-player" style={playerStyle} data-inspect-scaled={scaled ? "true" : undefined}>
           {/* No `src` prop: the effect above loads every requested state itself
               (loadFrame — a fresh document, so the app boots into exactly that
