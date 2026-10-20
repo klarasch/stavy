@@ -261,7 +261,7 @@ switchers, flows, inspect, back to canvas, hide UI.
 One rule: **written docs live next to what they describe, and the skill
 keeps them in step**, so they don't drift.
 
-- **Changelog** (`STAVY-CHANGELOG.md` in the prototype repo). After each
+- **Changelog** (`stavy-content/changelog.md`). After each
   scan that changed the map, the skill appends an entry: the *what* comes
   from scan's change report (new/changed/removed screens, states, flows,
   boards), the *why* from the conversation ("manager can now bulk-approve,

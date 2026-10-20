@@ -75,7 +75,14 @@ function validateContent(m, root, { err, warn, validateBoard }) {
     for (const id of onDisk) if (!seen.has(id)) warn(`${CONTENT_DIR}/boards/${id}.json is not listed in ${CONTENT_DIR}/index.json`)
     for (const [i, d] of (Array.isArray(index.docs) ? index.docs : []).entries()) {
       if (!d?.id) warn(`${rel(indexFile)} docs[${i}]: no id`)
-      else if (!existsSync(resolve(dir, "docs", `${d.id}.md`))) warn(`${rel(indexFile)}: doc "${d.id}" has no ${CONTENT_DIR}/docs/${d.id}.md`)
+      else {
+        const file = d.src ? resolve(dir, d.src) : resolve(dir, "docs", `${d.id}.md`)
+        if (!existsSync(file)) warn(`${rel(indexFile)}: doc "${d.id}" has no ${rel(file)}`)
+      }
+    }
+    for (const [i, l] of (Array.isArray(index.links) ? index.links : []).entries()) {
+      if (!l?.url || !/^(https?:\/\/|\/)/.test(l.url)) warn(`${rel(indexFile)} links[${i}]: expected a url (https://… or /path)`)
+      if (!l?.title) warn(`${rel(indexFile)} links[${i}]: no title`)
     }
   }
 
