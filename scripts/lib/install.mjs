@@ -121,6 +121,7 @@ export function copiedFiles() {
     "scripts/stavy/lib/patch.mjs": "scripts/lib/patch.mjs", // the dev plugin imports it
     "scripts/stavy/vite-plugin.mjs": "scripts/vite-plugin.mjs",
     "scripts/stavy/migrate.mjs": "scripts/migrate.mjs",
+    "scripts/stavy/publish.mjs": "scripts/publish.mjs",
     "scripts/stavy/gen-tests.mjs": "scripts/gen-tests.mjs",
     "scripts/stavy/stavy.schema.json": "spec/stavy.schema.json",
     "scripts/stavy/stavy-board.schema.json": "spec/stavy-board.schema.json",

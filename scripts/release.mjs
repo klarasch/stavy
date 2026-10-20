@@ -77,6 +77,7 @@ const files = [
   "scripts/lib/patch.mjs",
   "scripts/vite-plugin.mjs",
   "scripts/migrate.mjs",
+  "scripts/publish.mjs",
   "spec/stavy-board.schema.json",
   "spec/stavy.schema.json",
   "skill/SKILL.md",

@@ -273,6 +273,7 @@ const want = {
   "stavy:validate": "node scripts/stavy/validate.mjs public/stavy.json --coverage",
   "stavy:scan": `node scripts/stavy/scan.mjs public/stavy.json --url http://localhost:5173${basePath ? ` --app ${basePath}` : ""}`,
   "stavy:migrate": "node scripts/stavy/migrate.mjs public/stavy.json",
+  "stavy:publish": "node scripts/stavy/publish.mjs",
   "stavy:tests": "node scripts/stavy/gen-tests.mjs public/stavy.json --out tests/stavy",
   "stavy:update": `node ${initPath} .`,
 }
