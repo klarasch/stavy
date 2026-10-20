@@ -661,12 +661,16 @@ A conforming viewer SHOULD provide:
   utility class — and MUST read computed style and CSSOM through the frame's
   own window.
 - **Comments** (optional, viewer-level, never in the manifest): conversation
-  anchored to `page + dims + target + the exact element's child path`
-  (position in % of that element, so bubbles survive browser zoom and
-  reflow), visually distinct from annotations, threadable and resolvable. A
-  reference viewer SHOULD work without a server: local storage plus a
-  shareable payload (URL hash) and a Markdown export; richer backends are
-  adapters.
+  anywhere the viewer shows something, visually distinct from annotations,
+  threadable and resolvable. In the player a comment is anchored to `page +
+  dims` and the exact element: the nearest target id (and which occurrence),
+  the child path from it, a text snippet and the element's box as fractions
+  of the document, re-located in that order; position in % of the element.
+  On a board or the map: `board + item?` (position in % of the item) or a
+  board point. On a doc: `doc + heading? + quote`. A reference viewer SHOULD
+  work without a server: local storage plus a shareable payload (URL hash)
+  and a Markdown export; other backends plug in through
+  `viewer.comments.adapter` (docs/COMMENTS.md).
 - **Tooltips and shortcuts**: every mode toggle has a tooltip that names its
   key; a "?" sheet lists them. Single-letter keys are ignored while typing.
 - **Deep links**: every page × dimension assignment has a URL

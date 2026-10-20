@@ -256,6 +256,29 @@ export function findTarget(root: ParentNode | null | undefined, target: string):
   }
 }
 
+/** The nearest element (itself or an ancestor) carrying a target id, with that id. */
+export function targetElementOf(el: Element | null): { id: string; el: Element } | null {
+  const attrs = manifest.viewer?.targetAttrs?.length ? manifest.viewer.targetAttrs : DEFAULT_TARGET_ATTRS
+  for (let cur: Element | null = el; cur; cur = cur.parentElement)
+    for (const a of attrs) {
+      const v = cur.getAttribute(a)
+      if (v) return { id: v, el: cur }
+    }
+  return null
+}
+
+/** Every element carrying exactly this target id (an attribute value, never a selector), in document order. */
+export function targetsById(root: ParentNode | null | undefined, id: string): Element[] {
+  if (!root) return []
+  const attrs = manifest.viewer?.targetAttrs?.length ? manifest.viewer.targetAttrs : DEFAULT_TARGET_ATTRS
+  const v = id.replace(/["\\]/g, "\\$&")
+  try {
+    return [...root.querySelectorAll(attrs.map((a) => `[${a}="${v}"]`).join(", "))]
+  } catch {
+    return []
+  }
+}
+
 /** The target id an element (or its nearest ancestor) carries, if any. */
 export function targetIdOf(el: Element | null): string | null {
   const attrs = manifest.viewer?.targetAttrs?.length ? manifest.viewer.targetAttrs : DEFAULT_TARGET_ATTRS

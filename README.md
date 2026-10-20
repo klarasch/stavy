@@ -109,9 +109,11 @@ node stavy/scripts/init.mjs ../my-prototype-repo
   board: demonstrated vs. gaps; the validator cross-checks the PRD text.
 - **Generated, not written** — changelog between manifest versions, a
   handoff sheet per page, and Playwright specs from scenarios.
-- **Comments without a server** — leave comments on any page (anchored to
-  target ids), share them as a link or a Slack-ready Markdown digest, unpack
-  a colleague's link back in. Separate from annotations by design.
+- **Comments without a server** — leave comments on any element in the
+  player, any item on a board or the map, or any passage of a doc; one panel
+  lists them all. Share them as a link or a Slack-ready Markdown digest,
+  unpack a colleague's link back in, or plug in your own backend
+  ([`docs/COMMENTS.md`](docs/COMMENTS.md)). Separate from annotations by design.
 - **Manifest schema** — `spec/stavy.schema.json` gives editor autocompletion
   and is enforced by `npm run validate`.
 - **AI-native** — `stavy.json` doubles as machine-readable context: the

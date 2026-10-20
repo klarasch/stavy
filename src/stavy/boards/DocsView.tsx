@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
-import { FileText, Layers, Pencil, Plus } from "../icons"
+import { FileText, Layers, MessageCircle, MessageCirclePlus, Pencil, Plus } from "../icons"
 import { cn } from "../cn"
 import { manifest } from "../manifest"
 import { useDev, writeContent } from "../dev"
@@ -8,6 +8,9 @@ import { HelpButton, PsButton, PsDivider, ShortcutsSheet, ThemeToggle, cycleThem
 import { Markdown, useMarkdownSource } from "./MarkdownView"
 import { PageSwitcher } from "./PageSwitcher"
 import { createDoc, docHref, useContentIndex } from "./store"
+import { DocCommentLayer } from "../comments/DocCommentLayer"
+import { CommentsPanel } from "../comments/CommentsPanel"
+import { useComments } from "../comments/store"
 
 /**
  * Docs: the written half of a handover — specs, rules, decisions — as
@@ -19,15 +22,39 @@ import { createDoc, docHref, useContentIndex } from "./store"
 const docPath = (d: { src?: string } | undefined, id: string) => d?.src ?? `docs/${id}.md`
 
 export function DocsView() {
-  const [sp] = useSearchParams()
+  const [sp, setSp] = useSearchParams()
   const navigate = useNavigate()
   const index = useContentIndex()
   const dev = useDev()
   const { hidden, theme, setTheme } = useChrome()
-  useHotkeys({ t: () => setTheme(cycleTheme(theme)) })
+  const { comments } = useComments()
+  const [placing, setPlacing] = useState(false)
+  const [article, setArticle] = useState<HTMLElement | null>(null)
+  const commentsOpen = sp.get("comments") === "1"
+  const openCommentId = sp.get("c")
+  const setParam = useCallback(
+    (k: string, v: string | null) => {
+      const next = new URLSearchParams(sp)
+      if (v == null) next.delete(k)
+      else next.set(k, v)
+      setSp(next, { replace: true })
+    },
+    [sp, setSp]
+  )
+  const onOpenComment = useCallback((cid: string | null) => setParam("c", cid), [setParam])
+  useHotkeys({
+    t: () => setTheme(cycleTheme(theme)),
+    m: () => setPlacing((p) => !p),
+    Escape: () => {
+      if (placing) setPlacing(false)
+      else if (openCommentId) setParam("c", null)
+      else if (commentsOpen) setParam("comments", null)
+    },
+  })
   const docs = index.docs ?? []
   const id = sp.get("doc") || docs[0]?.id || ""
   const current = docs.find((d) => d.id === id)
+  const docComments = comments.filter((c) => c.doc === id && !c.resolved).length
   const { text, error } = useMarkdownSource(id ? docPath(current, id) : undefined)
   const [editing, setEditing] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -79,12 +106,28 @@ export function DocsView() {
                 <PsDivider />
               </>
             )}
+            <PsButton
+              icon
+              active={placing}
+              tip="Leave a comment: select text, or click a paragraph"
+              keys={["M"]}
+              tipBelow
+              onClick={() => setPlacing((p) => !p)}
+              style={placing ? { color: "var(--ps-comment)", background: "var(--ps-comment-soft)" } : undefined}
+            >
+              <MessageCirclePlus />
+            </PsButton>
+            <PsButton icon active={commentsOpen} tip="Comments" tipBelow onClick={() => setParam("comments", commentsOpen ? null : "1")} className="relative">
+              <MessageCircle />
+              {docComments > 0 && <span className="ps-ccount">{docComments}</span>}
+            </PsButton>
+            <PsDivider />
             <ThemeToggle tipBelow />
             <HelpButton tipBelow />
           </div>
         </div>
       )}
-      <ShortcutsSheet items={[["Theme", "T"], ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"]]} />
+      <ShortcutsSheet items={[["Leave a comment", "M"], ["Theme", "T"], ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"]]} />
 
       <div className="flex-1 min-h-0 flex gap-4 p-4">
         <nav className="ps-docs-nav ps-glass rounded-2xl p-1.5 shrink-0" aria-label="Docs">
@@ -124,12 +167,25 @@ export function DocsView() {
           ) : text == null ? (
             id ? <div className="ps-docs-page"><div className="ps-skeleton" style={{ height: 240 }} /></div> : null
           ) : (
-            <article className="ps-docs-page">
+            <article ref={setArticle} className={cn("ps-docs-page", placing && "ps-docs-placing")}>
               <Markdown md={text} className="ps-docs-md" embedWidth={560} />
             </article>
           )}
         </main>
       </div>
+      {id && editing == null && (
+        <DocCommentLayer docId={id} article={article} text={text} placing={placing} onPlaced={() => setPlacing(false)} openId={openCommentId} onOpenChange={onOpenComment} />
+      )}
+      {commentsOpen && !hidden && (
+        <CommentsPanel
+          here={{ label: current?.title ?? id, test: (c) => c.doc === id, open: (c) => setParam("c", c.id) }}
+          onClose={() => setParam("comments", null)}
+          onAdd={() => {
+            setParam("comments", null)
+            setPlacing(true)
+          }}
+        />
+      )}
     </div>
   )
 }

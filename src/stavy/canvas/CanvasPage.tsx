@@ -24,7 +24,8 @@ import { CoverageBoard } from "./CoverageBoard"
 import { PageSwitcher } from "../boards/PageSwitcher"
 import { Inspector, type FrameHit } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
-import { useComments } from "../comments/store"
+import { useComments, MAP_BOARD } from "../comments/store"
+import { SurfaceCommentLayer } from "../comments/SurfaceCommentLayer"
 import { useScan } from "../snapshots"
 import { EditableText } from "../EditableText"
 import { useManifestRev } from "../manifest"
@@ -527,6 +528,16 @@ export function CanvasPage() {
   const inspect = sp.get("i") === "1"
   const liveMode = sp.get("live") === "1"
   const commentsOpen = sp.get("comments") === "1"
+  // Comments on the map: a card (by its instance key) or a point.
+  const [placing, setPlacing] = useState(false)
+  const openCommentId = sp.get("c")
+  const setCommentParam = (cid: string | null) => {
+    const next = new URLSearchParams(sp)
+    if (cid) next.set("c", cid)
+    else next.delete("c")
+    setSp(next, { replace: true })
+  }
+  const instanceIdOf = useCallback((el: Element) => el.getAttribute("data-instance"), [])
   const [hold, setHold] = useState<HTMLIFrameElement | null>(null)
   const inspectCtx = useMemo<CanvasInspect>(() => ({ on: inspect, live: liveMode, hold }), [inspect, liveMode, hold])
 
@@ -567,6 +578,7 @@ export function CanvasPage() {
   }, [contentEl])
 
   useHotkeys({
+    m: () => setPlacing((p) => !p),
     n: () => setFlag("notes", !showNotes),
     w: () => setFlag("w", !wireframe),
     i: () => setFlag("i", !inspect),
@@ -579,7 +591,9 @@ export function CanvasPage() {
     "=": () => zoomBy(1.5),
     "-": () => zoomBy(1 / 1.5),
     Escape: () => {
-      if (inspect) setFlag("i", false)
+      if (placing) setPlacing(false)
+      else if (openCommentId) setCommentParam(null)
+      else if (inspect) setFlag("i", false)
       else if (commentsOpen) setFlag("comments", false)
       else setHidden(false)
     },
@@ -705,6 +719,19 @@ export function CanvasPage() {
           <Inspector host={contentEl.parentElement} hit={hit} onClose={() => setFlag("i", false)} onPinChange={setHold} />
         )}
       </PanZoom>
+      <SurfaceCommentLayer
+        surface={MAP_BOARD}
+        itemSelector="[data-instance]"
+        itemIdOf={instanceIdOf}
+        placing={placing}
+        onPlaced={() => setPlacing(false)}
+        openId={openCommentId}
+        onOpenChange={setCommentParam}
+        reveal={(x, y) => {
+          const k = Math.max(pz.current?.get().k ?? 0.5, 0.5)
+          pz.current?.set({ k, x: window.innerWidth / 2 - x * k, y: window.innerHeight / 2 - y * k }, true)
+        }}
+      />
 
       {!hidden && (
         <>
@@ -776,10 +803,20 @@ export function CanvasPage() {
             <ThemeToggle tipBelow />
             <HelpButton tipBelow />
           </div>
-          {commentsOpen && <CommentsPanel wireframe={wireframe} onClose={() => setFlag("comments", false)} />}
+          {commentsOpen && (
+            <CommentsPanel
+              wireframe={wireframe}
+              here={{ label: "the map", test: (c) => c.board === MAP_BOARD, open: (c) => setCommentParam(c.id) }}
+              onClose={() => setFlag("comments", false)}
+              onAdd={() => {
+                setFlag("comments", false)
+                setPlacing(true)
+              }}
+            />
+          )}
           <ShortcutsSheet
             items={[
-              ["Notes", "N"], ["Wireframe", "W"], ["Inspect", "I"], ["Live frames", "L"], ["Theme", "T"],
+              ["Notes", "N"], ["Leave a comment", "M"], ["Wireframe", "W"], ["Inspect", "I"], ["Live frames", "L"], ["Theme", "T"],
               ["Zoom in / out", "+ −"], ["100% / fit everything", "1 2"], ["Reset view", "0"], ["Fit an area", "double-click"],
               ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"],
             ]}

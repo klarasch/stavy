@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
-import { Check, RotateCcw, Trash2, X, CornerDownRight } from "../icons"
-import { PsButton } from "../chrome"
-import { targetIdOf } from "../manifest"
-import { elementAt, hostRect, onFrameChange } from "../frame"
-import { useComments, dimsEqual, timeAgo, pathBetween, resolveAnchor, type Comment } from "./store"
+import { ChevronDown, ChevronUp } from "../icons"
+import { targetElementOf, targetsById } from "../manifest"
+import { docFracBox, elementAt, hostRect, hostRectOfFrac, onFrameChange, type HostRect } from "../frame"
+import { describeElement, normText, type AnchorEl, type ElementAnchor } from "./anchor"
+import { useComments, dimsEqual, placeOf, locateInDoc, initials, type Comment } from "./store"
+import { Composer, Thread, clampCard } from "./Thread"
 
 interface Placed {
   c: Comment
@@ -12,17 +13,42 @@ interface Placed {
   top: number
 }
 
-function initials(name: string) {
-  const p = name.trim().split(/\s+/).filter(Boolean)
-  return (p.length >= 2 ? p[0][0] + p[p.length - 1][0] : (p[0] ?? "?").slice(0, 2)).toUpperCase()
+/** A short name for an element: its target id, else tag + words. */
+export function elementName(el: Element): string {
+  const t = targetElementOf(el)
+  const tag = el.tagName.toLowerCase()
+  const words = normText(el.textContent).slice(0, 24)
+  if (t?.el === el) return `@${t.id}`
+  return `<${tag}>${words ? ` “${words}${normText(el.textContent).length > 24 ? "…" : ""}”` : ""}`
+}
+
+/** Capture a comment anchor for an element in the frame document. */
+export function anchorFor(el: Element): ElementAnchor {
+  const doc = el.ownerDocument
+  return describeElement(el as unknown as AnchorEl, {
+    root: doc.body as unknown as AnchorEl,
+    targetOf: (e) => targetElementOf(e as unknown as Element) as unknown as { id: string; el: AnchorEl } | null,
+    targetsById: (id) => targetsById(doc, id) as unknown as AnchorEl[],
+    boxOf: (e) => docFracBox(e as unknown as Element),
+  })
+}
+
+/** The element and its ancestors up to (not including) the body: what "select parent" walks. */
+function chainOf(el: Element): Element[] {
+  const out: Element[] = []
+  for (let cur: Element | null = el; cur && cur !== cur.ownerDocument.body && cur !== cur.ownerDocument.documentElement; cur = cur.parentElement) out.push(cur)
+  return out.length ? out : [el]
 }
 
 /**
- * Comment bubbles over the player frame + the composer for placing new ones.
- * Anchors: a semantic target when the click lands inside one (robust to
- * redesigns), otherwise the page root; position is stored in % of the anchor.
- * Everything is measured inside the prototype's document and drawn in a fixed
- * host layer. While `placing`, a shield over the frame captures the click.
+ * Comment pins over the player frame + the composer for placing new ones.
+ *
+ * Placing hit-tests like the inspector (the deepest element under the
+ * pointer, outlined while hovering); the composer can widen the choice to a
+ * parent. The anchor stores the nearest target id, the child path from it, a
+ * text snippet and the element's box (anchor.ts), and is found again on every
+ * load, however the state was reached. Everything is measured inside the
+ * prototype's document and drawn in a fixed host layer.
  */
 export function CommentLayer({
   iframe,
@@ -45,69 +71,107 @@ export function CommentLayer({
 }) {
   const { comments, add, update, remove, reply, author, setAuthor } = useComments()
   const [placed, setPlaced] = useState<Placed[]>([])
-  const [draft, setDraft] = useState<{ target?: string; path: number[]; x: number; y: number; left: number; top: number } | null>(null)
-  const mine = comments.filter((c) => c.page === pageId && dimsEqual(c.dims, dims))
+  const [hover, setHover] = useState<{ rect: HostRect; name: string } | null>(null)
+  const [draft, setDraft] = useState<{ chain: Element[]; depth: number; cx: number; cy: number } | null>(null)
+  const dimsKey = JSON.stringify(dims)
+  const mine = useMemo(
+    () => comments.filter((c) => placeOf(c) === "page" && c.page === pageId && dimsEqual(c.dims, dims)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [comments, pageId, dimsKey]
+  )
   const root = doc?.body ?? null
 
   const measure = useCallback(() => {
-    if (!root || !iframe || !doc) return
+    if (!root || !iframe || !doc || !root.isConnected) return setPlaced([])
     const out: Placed[] = []
     for (const c of mine) {
-      const anchor = resolveAnchor(c, doc, root)
-      const r = hostRect(anchor, iframe)
-      out.push({ c, left: r.left + (r.width * c.x) / 100, top: r.top + (r.height * c.y) / 100 })
+      const at = locateInDoc(c, doc, root)
+      const r = "el" in at ? hostRect(at.el, iframe) : hostRectOfFrac(at.box, iframe)
+      if (!r) continue
+      out.push({ c, left: r.left + (r.width * (c.x ?? 0)) / 100, top: r.top + (r.height * (c.y ?? 0)) / 100 })
     }
     setPlaced(out)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [iframe, doc, root, comments, pageId, JSON.stringify(dims)])
+  }, [iframe, doc, root, mine])
 
   useEffect(() => {
     measure()
     if (!iframe) return
-    const timers = [200, 600, 1200].map((ms) => setTimeout(measure, ms))
+    const timers = [200, 600, 1200, 2500].map((ms) => setTimeout(measure, ms))
     const ro = new ResizeObserver(measure)
     if (root) ro.observe(root)
+    // A state that renders late (data, lazy panels) moves its content after load.
+    let raf: number | null = null
+    const mo = root
+      ? new MutationObserver(() => {
+          if (raf == null)
+            raf = requestAnimationFrame(() => {
+              raf = null
+              measure()
+            })
+        })
+      : null
+    if (root) mo!.observe(root, { childList: true, subtree: true })
     const off = onFrameChange(iframe, measure)
     return () => {
       timers.forEach(clearTimeout)
       ro.disconnect()
+      mo?.disconnect()
+      if (raf != null) cancelAnimationFrame(raf)
       off()
     }
   }, [measure, root, iframe])
 
-  // Placement: the shield captures the next click and resolves it to an element in the frame.
+  useEffect(() => {
+    if (!placing) setHover(null)
+  }, [placing])
+
+  const pick = (e: React.MouseEvent) => (iframe ? elementAt(iframe, e.clientX, e.clientY) : null)
+  const onHover = (e: React.MouseEvent) => {
+    const el = pick(e)
+    if (!el || !iframe || el === root || el === doc?.documentElement) return setHover(null)
+    setHover({ rect: hostRect(el, iframe), name: elementName(el) })
+  }
   const place = (e: React.MouseEvent) => {
-    if (!iframe || !root) return
-    const exact = elementAt(iframe, e.clientX, e.clientY)
-    if (!exact) return
-    const targetId = targetIdOf(exact)
-    const targetEl = targetId ? exact.closest(`[data-proto="${CSS.escape(targetId)}"], [data-testid="${CSS.escape(targetId)}"]`) : null
-    const base = targetEl ?? root
-    const r = hostRect(exact, iframe)
-    setDraft({
-      target: targetId ?? undefined,
-      path: pathBetween(base, exact),
-      x: ((e.clientX - r.left) / r.width) * 100,
-      y: ((e.clientY - r.top) / r.height) * 100,
-      left: e.clientX,
-      top: e.clientY,
-    })
+    const el = pick(e)
+    if (!el || !root) return
+    setDraft({ chain: chainOf(el), depth: 0, cx: e.clientX, cy: e.clientY })
+    setHover(null)
     onOpenChange(null)
   }
 
+  const chosen = draft ? draft.chain[draft.depth] : null
+  const chosenRect = chosen && iframe ? hostRect(chosen, iframe) : null
+  const post = (body: string) => {
+    if (!draft || !chosen || !iframe) return
+    const r = hostRect(chosen, iframe)
+    const pct = (v: number, size: number) => Math.round((size ? (v / size) * 100 : 50) * 100) / 100
+    const a = anchorFor(chosen)
+    add({ page: pageId, dims, ...a, x: pct(draft.cx - r.left, r.width), y: pct(draft.cy - r.top, r.height), body, author })
+    setDraft(null)
+    onPlaced()
+  }
+
   const open = placed.find((p) => p.c.id === openId) ?? null
-  const clampX = (x: number) => Math.min(x, window.innerWidth - 330)
 
   return (
     <>
-      {placing && !draft && <div className="ps-shield" data-mode="comment" data-ps-ui onClick={place} />}
+      {placing && !draft && <div className="ps-shield" data-mode="comment" data-ps-ui onClick={place} onMouseMove={onHover} onMouseLeave={() => setHover(null)} />}
       {createPortal(
         <div className="ps-fixed-layer" data-ps-ui>
+          {(hover || chosenRect) && (
+            <div
+              className="ps-ctarget"
+              style={{ left: (chosenRect ?? hover!.rect).left, top: (chosenRect ?? hover!.rect).top, width: (chosenRect ?? hover!.rect).width, height: (chosenRect ?? hover!.rect).height }}
+            >
+              {!chosenRect && hover && <span className="ps-ctarget-tag ps-mono">{hover.name}</span>}
+            </div>
+          )}
           {placed.map((p) => (
             <button
               key={p.c.id}
               className="ps-cbubble absolute -translate-x-1/2 -translate-y-full"
               data-resolved={p.c.resolved ? "true" : undefined}
+              data-comment-id={p.c.id}
               style={{ left: p.left, top: p.top }}
               title={`${p.c.author || "anonymous"}: ${p.c.body.slice(0, 80)}`}
               onClick={(e) => {
@@ -123,9 +187,9 @@ export function CommentLayer({
           {open && (
             <Thread
               c={open.c}
-              left={clampX(open.left)}
-              top={open.top + 8}
+              {...clampCard(open.left, open.top + 8)}
               author={author}
+              where={open.c.target ? `@${open.c.target}` : undefined}
               onClose={() => onOpenChange(null)}
               onResolve={() => update(open.c.id, { resolved: !open.c.resolved })}
               onDelete={() => {
@@ -137,220 +201,50 @@ export function CommentLayer({
             />
           )}
 
-          {draft && (
+          {draft && chosen && (
             <Composer
-              left={clampX(draft.left)}
-              top={draft.top + 8}
+              {...clampCard(draft.cx, draft.cy + 8)}
               author={author}
-              target={draft.target}
-              pageId={pageId}
               onAuthor={setAuthor}
+              annotation={(() => {
+                const t = targetElementOf(chosen)
+                return t && t.el === chosen ? { pageId, target: t.id } : undefined
+              })()}
+              anchor={
+                <>
+                  <span className="ps-chip ps-chip-sm ps-mono truncate max-w-[200px]" data-ps-anchor title="What this comment is attached to">
+                    {elementName(chosen)}
+                  </span>
+                  <button
+                    type="button"
+                    className="ps-btn h-6 px-1.5 text-[11px]"
+                    title="Attach to the enclosing element"
+                    disabled={draft.depth >= draft.chain.length - 1}
+                    onClick={() => setDraft({ ...draft, depth: draft.depth + 1 })}
+                  >
+                    <ChevronUp className="size-3" /> Parent
+                  </button>
+                  <button
+                    type="button"
+                    className="ps-btn h-6 px-1.5 text-[11px]"
+                    title="Back to the inner element"
+                    disabled={draft.depth === 0}
+                    onClick={() => setDraft({ ...draft, depth: draft.depth - 1 })}
+                  >
+                    <ChevronDown className="size-3" /> Child
+                  </button>
+                </>
+              }
               onCancel={() => {
                 setDraft(null)
                 onPlaced()
               }}
-              onPost={(body) => {
-                add({ page: pageId, dims, target: draft.target, path: draft.path, x: draft.x, y: draft.y, body, author })
-                setDraft(null)
-                onPlaced()
-              }}
+              onPost={post}
             />
           )}
         </div>,
         document.body
       )}
     </>
-  )
-}
-
-function AuthorField({ author, onAuthor }: { author: string; onAuthor: (a: string) => void }) {
-  // Asked once, remembered in the browser. The name counts as soon as it is
-  // typed (so ⌘↩ straight after it works), the field goes away on blur.
-  const [typing, setTyping] = useState(false)
-  if (author && !typing) return null
-  return (
-    <input
-      className="ps-cinput mb-1.5"
-      placeholder="Your name"
-      autoFocus
-      defaultValue={author}
-      data-ps-author
-      onChange={(e) => {
-        setTyping(true)
-        onAuthor(e.target.value.trim())
-      }}
-      onBlur={() => setTyping(false)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur()
-      }}
-    />
-  )
-}
-
-const canWriteAnnotations = import.meta.env.DEV
-
-async function saveAnnotation(pageId: string, target: string, title: string, note: string) {
-  const res = await fetch("/__stavy/annotation", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ page: pageId, target, title, note }),
-  })
-  if (!res.ok) throw new Error(await res.text())
-}
-
-function Composer({
-  left, top, author, target, pageId, onAuthor, onCancel, onPost,
-}: {
-  left: number
-  top: number
-  author: string
-  target?: string
-  pageId: string
-  onAuthor: (a: string) => void
-  onCancel: () => void
-  onPost: (body: string) => void
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null)
-  const [asAnnotation, setAsAnnotation] = useState(false)
-  const [title, setTitle] = useState("")
-  const [err, setErr] = useState<string | null>(null)
-  useEffect(() => {
-    if (author) ref.current?.focus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  const annotate = canWriteAnnotations && !!target
-  const post = async () => {
-    const v = ref.current?.value.trim()
-    if (!v) return
-    if (asAnnotation && target) {
-      try {
-        await saveAnnotation(pageId, target, title.trim() || v.split(/[.!?\n]/)[0].slice(0, 60), v)
-        onCancel()
-      } catch (e) {
-        setErr(String(e))
-      }
-      return
-    }
-    onPost(v)
-  }
-  return (
-    <div className="ps ps-glass-strong ps-ccomposer absolute w-80 rounded-2xl p-3" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-center gap-2 mb-2">
-        <span className="ps-cbubble" style={{ position: "static", transform: "none", ...(asAnnotation ? { background: "var(--ps-pin)", color: "var(--ps-pin-fg)" } : {}) }}>
-          {asAnnotation ? "!" : initials(author || "?")}
-        </span>
-        <span className="text-[12px] font-semibold">{asAnnotation ? "New design annotation" : "New comment"}</span>
-        {target && <span className="ps-chip ps-chip-sm ps-mono">@{target}</span>}
-        <button className="ml-auto" style={{ color: "var(--ps-faint)" }} onClick={onCancel} title="Cancel (Esc)">
-          <X className="size-4" />
-        </button>
-      </div>
-      {annotate && (
-        <label className="flex items-center gap-2 mb-2 text-[11.5px] cursor-pointer select-none" style={{ color: "var(--ps-muted)" }}>
-          <input type="checkbox" checked={asAnnotation} onChange={(e) => setAsAnnotation(e.target.checked)} />
-          Save as a design annotation (writes to stavy.json)
-        </label>
-      )}
-      {asAnnotation ? (
-        <input className="ps-cinput mb-1.5" placeholder="Title (e.g. Primary CTA)" value={title} onChange={(e) => setTitle(e.target.value)} />
-      ) : (
-        <AuthorField author={author} onAuthor={onAuthor} />
-      )}
-      <textarea
-        ref={ref}
-        className="ps-cinput"
-        rows={3}
-        placeholder={asAnnotation ? "What this part is and what it does" : "What should change, and why?"}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onCancel()
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void post()
-        }}
-      />
-      {err && <div className="text-[11px] mt-1" style={{ color: "var(--ps-pin)" }}>{err}</div>}
-      <div className="flex items-center justify-between mt-2">
-        <span className="text-[10.5px]" style={{ color: "var(--ps-faint)" }}>⌘↩ to {asAnnotation ? "save" : "post"}</span>
-        <div className="flex gap-1">
-          <PsButton onClick={onCancel}>Cancel</PsButton>
-          <PsButton primary onClick={() => void post()}>
-            {asAnnotation ? "Save annotation" : "Post"}
-          </PsButton>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Thread({
-  c, left, top, author, onClose, onResolve, onDelete, onReply, onAuthor,
-}: {
-  c: Comment
-  left: number
-  top: number
-  author: string
-  onClose: () => void
-  onResolve: () => void
-  onDelete: () => void
-  onReply: (body: string) => void
-  onAuthor: (a: string) => void
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null)
-  return (
-    <div className="ps ps-glass-strong ps-cthread absolute w-80 rounded-2xl p-3" style={{ left, top }} onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-center gap-2 mb-2">
-        <span className="ps-cbubble" style={{ position: "static", transform: "none" }} data-resolved={c.resolved ? "true" : undefined}>
-          {initials(c.author || "?")}
-        </span>
-        <div className="leading-tight">
-          <div className="text-[12px] font-semibold">{c.author || "anonymous"}</div>
-          <div className="text-[10.5px]" style={{ color: "var(--ps-faint)" }}>
-            {timeAgo(c.createdAt)}
-            {c.target && <span className="ps-mono"> · @{c.target}</span>}
-          </div>
-        </div>
-        <button className="ml-auto" style={{ color: "var(--ps-faint)" }} onClick={onClose} title="Close">
-          <X className="size-4" />
-        </button>
-      </div>
-      <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap">{c.body}</p>
-      {c.replies.length > 0 && (
-        <div className="mt-2 flex flex-col gap-1.5" style={{ borderLeft: "2px solid var(--ps-border)", paddingLeft: 10 }}>
-          {c.replies.map((r) => (
-            <div key={r.id} className="text-[12px]">
-              <span className="font-semibold">{r.author || "anonymous"}</span>{" "}
-              <span style={{ color: "var(--ps-faint)" }}>{timeAgo(r.createdAt)}</span>
-              <div className="whitespace-pre-wrap">{r.body}</div>
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="mt-2.5">
-        <AuthorField author={author} onAuthor={onAuthor} />
-        <div className="flex items-start gap-1.5">
-          <CornerDownRight className="size-3.5 mt-2 shrink-0" style={{ color: "var(--ps-faint)" }} />
-          <textarea
-            ref={ref}
-            className="ps-cinput"
-            rows={1}
-            placeholder="Reply…"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                const v = (e.target as HTMLTextAreaElement).value.trim()
-                if (v) {
-                  onReply(v)
-                  ;(e.target as HTMLTextAreaElement).value = ""
-                }
-              }
-            }}
-          />
-        </div>
-      </div>
-      <div className="flex items-center gap-1 mt-2.5">
-        <PsButton onClick={onResolve}>{c.resolved ? <><RotateCcw /> Reopen</> : <><Check /> Resolve</>}</PsButton>
-        <PsButton className="ml-auto" onClick={onDelete} title="Delete">
-          <Trash2 />
-        </PsButton>
-      </div>
-    </div>
   )
 }

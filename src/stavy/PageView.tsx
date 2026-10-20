@@ -35,7 +35,7 @@ import { PsButton, PsDivider, PsSelect, Chip, ThemeToggle, MockNotice, HelpButto
 import type { ToolbarAnchor } from "./types"
 import { CommentLayer } from "./comments/CommentLayer"
 import { CommentsPanel } from "./comments/CommentsPanel"
-import { useComments } from "./comments/store"
+import { useComments, placeOf, dimsEqual as commentDimsEqual } from "./comments/store"
 import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt, loadFrame, settleFrame } from "./frame"
 
 /** Docked, full-width bottom bar unless the manifest sets `viewer.toolbar`. */
@@ -523,7 +523,10 @@ export function PageView() {
         </div>
       )}
       {drag && <DockTargetGhost anchor={drag.target} />}
-      {commentsOpen && !hidden && <CommentsPanel wireframe={wireOn} onClose={() => setParam("comments", null)} onAdd={() => { setParam("comments", null); setPlacing(true) }} />}
+      {commentsOpen && !hidden && <CommentsPanel
+          wireframe={wireOn}
+          here={{ label: page.label, test: (c) => placeOf(c) === "page" && c.page === page.id && commentDimsEqual(c.dims, dims), open: (c) => setParam("c", c.id) }}
+          onClose={() => setParam("comments", null)} onAdd={() => { setParam("comments", null); setPlacing(true) }} />}
       <ShortcutsSheet
         items={[
           ["Annotations: hidden → on hover → all", "N"], ["Inspect", "I"], ["Wireframe", "W"], ["Leave a comment", "M"], ["Dimensions panel", "D"], ["Back to canvas", "C"],

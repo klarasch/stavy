@@ -174,9 +174,12 @@ Comments are separate from annotations: annotations are authored
 documentation in the manifest; comments are conversation. The viewer stores
 comments **in the browser** (local-first), so a static host needs nothing:
 
-1. In the player press **M** (or the speech-bubble button) and click where
-   the comment belongs — on the element itself, so it anchors to the target
-   id and survives redesigns. Name once; reply, resolve.
+1. Press **M** (or the speech-bubble button) and click where the comment
+   belongs: an element in the player (it anchors to that exact element —
+   the nearest target id, the path to it and its text), an item or a point
+   on a board or the map, or a paragraph of a doc (or select text in a doc
+   and press **Comment**). Name once; reply, resolve. See
+   [`COMMENTS.md`](COMMENTS.md) for anchors and storage adapters.
 2. **Comments → Copy link.** The link carries every comment as a compressed
    payload in the URL hash — paste it in Slack. **Copy as Markdown** produces
    a digest with a deep link per comment (page, dims, target).
