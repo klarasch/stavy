@@ -1,4 +1,26 @@
 {
+  "links": [
+    {
+      "title": "PRD-118: Expense approvals",
+      "url": "https://example.com/docs/PRD-118",
+      "kind": "prd"
+    },
+    {
+      "title": "Orbit designs",
+      "url": "https://www.figma.com/file/orbit-demo",
+      "kind": "figma"
+    },
+    {
+      "title": "Tickets: approvals epic",
+      "url": "https://example.com/issues/ORBIT-118",
+      "kind": "ticket"
+    },
+    {
+      "title": "Source",
+      "url": "https://github.com/klarasch/stavy",
+      "kind": "repo"
+    }
+  ],
   "boards": [
     {
       "id": "approval-story",
@@ -15,6 +37,18 @@
     {
       "id": "approval-rules",
       "title": "Approval rules"
+    },
+    {
+      "id": "changelog",
+      "title": "Changelog",
+      "description": "What changed on the map, newest first.",
+      "src": "changelog.md"
+    },
+    {
+      "id": "decisions",
+      "title": "Decisions",
+      "description": "Design decisions: what, why, what else was considered.",
+      "src": "decisions.md"
     }
   ]
 }

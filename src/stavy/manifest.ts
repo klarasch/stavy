@@ -195,9 +195,9 @@ export function frameOf(page: PageDef): { width: number; height: number } {
 /* URLs                                                                */
 /* ------------------------------------------------------------------ */
 
-/** URL of the canvas (the viewer home), optionally carrying mode flags (e.g. `w=1`). */
+/** URL of the map (the generated canvas), optionally carrying mode flags (e.g. `w=1`). */
 export function canvasUrl(extra?: Record<string, string>): string {
-  const qs = extra ? new URLSearchParams(extra).toString() : ""
+  const qs = new URLSearchParams({ view: "map", ...(extra ?? {}) }).toString()
   return `${viewerHref}${qs ? `?${qs}` : ""}`
 }
 

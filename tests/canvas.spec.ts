@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test"
 // card opens the player at that instance.
 
 test("canvas lists every page area and opens the player from a card", async ({ page }) => {
-  await page.goto("/stavy/")
+  await page.goto("/stavy/?view=map")
   await expect(page.locator("[data-canvas-root]")).toBeVisible()
   await expect(page.locator('[data-toc="page:expenses"]')).toHaveCount(1)
   await page.locator(".ps-toc-item", { hasText: "Expenses list" }).click()
@@ -20,7 +20,7 @@ test("canvas lists every page area and opens the player from a card", async ({ p
 // so a real click on a card never reached InstanceCard's onClick. Capture
 // must be deferred until a drag is confirmed (PanZoom.tsx onPointerMove).
 test("a real click on a card opens the player (pointer capture must not steal it)", async ({ page }) => {
-  await page.goto("/stavy/")
+  await page.goto("/stavy/?view=map")
   await expect(page.locator("[data-canvas-root]")).toBeVisible()
   await page.locator(".ps-toc-item", { hasText: "Expenses list" }).click()
   // The TOC jump pans/zooms to fit the area over a .4s transition; wait it
@@ -82,7 +82,7 @@ test("an anchored board renders inside its page area, with its callouts", async 
 })
 
 test("the contents list a figure under its page, not under Boards", async ({ page }) => {
-  await page.goto("/stavy/")
+  await page.goto("/stavy/?view=map")
   const item = page.locator(".ps-toc-item", { hasText: "Status filter menu" })
   await expect(item).toHaveClass(/ps-toc-sub/)
   await item.click()
@@ -101,7 +101,7 @@ test("?map=0 leaves the map out of the canvas and the contents list", async ({ p
 // cleared and the class left behind, so the player rendered with no blur at
 // all until the next canvas gesture.
 test("opening the player mid-gesture never leaves the glass solid", async ({ page }) => {
-  await page.goto("/stavy/")
+  await page.goto("/stavy/?view=map")
   await expect(page.locator("[data-canvas-root]")).toBeVisible()
   await page.mouse.move(640, 400)
   await page.mouse.wheel(0, 120)

@@ -5,10 +5,14 @@ import { PageView } from "./PageView"
 import { ChromeProvider, EyeToggle } from "./chrome"
 import { CommentsProvider } from "./comments/store"
 import { useManifestSync } from "./dev"
+import { contentIndex } from "./manifest"
+
+const hasContent = () => Object.keys(contentIndex).length > 0
 
 // Boards and docs are their own chunks (with the Markdown renderer): the map and the player never pay for them.
 const BoardView = lazy(() => import("./boards/BoardView").then((m) => ({ default: m.BoardView })))
 const DocsView = lazy(() => import("./boards/DocsView").then((m) => ({ default: m.DocsView })))
+const HomePage = lazy(() => import("./home/HomePage").then((m) => ({ default: m.HomePage })))
 const Blank = () => <div className="h-screen" style={{ background: "var(--ps-canvas-bg)" }} />
 
 /**
@@ -31,6 +35,13 @@ function Root() {
     return (
       <Suspense fallback={<Blank />}>
         <DocsView />
+      </Suspense>
+    )
+  // Home is the entry when the workspace has authored content and nothing asks for the map.
+  if (sp.get("view") === "home" || (sp.get("view") !== "map" && !sp.size && hasContent()))
+    return (
+      <Suspense fallback={<Blank />}>
+        <HomePage />
       </Suspense>
     )
   return <CanvasPage />

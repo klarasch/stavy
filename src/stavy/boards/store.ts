@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from "react"
 import { contentIndex, loadContentIndex } from "../manifest"
 import { deleteContent, useContentRev, writeContent } from "../dev"
 import { refreshSnapshotIndex, useSnapshotRev } from "../snapshots"
-import type { BoardFile, ContentIndex } from "../types"
+import type { BoardFile, ContentIndex, ContentLink } from "../types"
 
 /**
  * Shared state for authored content (stavy-content/): the index of boards
@@ -49,7 +49,8 @@ export function useSnapshotsRev(): number {
 }
 
 /* ------------------------------------------------------------------ */
-/* Routing: ?b=<board> · ?doc=<id> · neither = the map                  */
+/* Routing: ?b=<board> · ?doc=<id> · ?view=map · neither = Home        */
+/* (the map, when there is no stavy-content/index.json)                */
 /* ------------------------------------------------------------------ */
 
 const VIEW_KEY = "ps-views"
@@ -76,7 +77,8 @@ const withView = (page: string, extra: Record<string, string>) => {
 // Search-only links: navigate() resolves them against the current path, so the
 // viewer stays wherever it is served (no basename doubling; deep links reload).
 const qs = (p: Record<string, string>) => `?${new URLSearchParams(p).toString()}`
-export const mapHref = () => qs(withView("map", {}))
+export const mapHref = () => qs(withView("map", { view: "map" }))
+export const homeHref = () => qs({ view: "home" })
 export const boardHref = (id: string) => qs(withView(`b:${id}`, { b: id }))
 export const docHref = (id?: string) => qs({ doc: id ?? "" })
 
@@ -101,6 +103,14 @@ async function writeIndex(next: ContentIndex) {
   await writeContent("index.json", next)
   index = next
   emit()
+}
+
+export async function saveLinks(links: ContentLink[]) {
+  const cur = await loadContentIndex()
+  const next: ContentIndex = { ...cur }
+  if (links.length) next.links = links
+  else delete next.links
+  await writeIndex(next)
 }
 
 export async function createBoard(title: string): Promise<string> {

@@ -337,7 +337,17 @@ export interface Manifest {
 /** stavy-content/index.json: which boards and docs exist, in order. */
 export interface ContentIndex {
   boards?: Array<{ id: string; title: string; description?: string }>
-  docs?: Array<{ id: string; title: string }>
+  /** `src`: a Markdown file path inside stavy-content when it is not docs/<id>.md (changelog.md, decisions.md) */
+  docs?: Array<{ id: string; title: string; description?: string; src?: string }>
+  /** Where the work lives elsewhere: PRDs, tickets, Figma, the repo. Shown on Home. */
+  links?: ContentLink[]
+}
+
+export interface ContentLink {
+  title: string
+  url: string
+  /** Free text; "prd" | "ticket" | "figma" | "repo" | "doc" pick an icon */
+  kind?: string
 }
 
 /** An action the scan (and the player) performs before showing a board screen item. */
