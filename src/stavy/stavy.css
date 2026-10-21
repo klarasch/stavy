@@ -727,7 +727,6 @@
 .ps-section-body { position: absolute; }
 /* in edit mode the title is a drag handle like the rest of the frame;  */
 .ps-section.is-editable .ps-section-pill { pointer-events: none; }
-.ps-section.is-editable 
 /* arrows between items */
 .ps-board-arrows { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .ps-board-arrow { fill: none; stroke: var(--ps-muted); stroke-width: 1.5; }
@@ -890,3 +889,6 @@ textarea.ps-inline-input { resize: none; width: 100%; font: inherit; }
 [data-instance] .ps-status-control:has(.ps-status-none) { opacity: 0; transition: opacity 120ms; }
 [data-instance]:hover .ps-status-control:has(.ps-status-none),
 [data-instance] .ps-status-control:has(.ps-status-none):focus-within { opacity: 1; }
+
+/* The map's own layer (stavy-content/map.json): free items over the areas, at the canvas origin. */
+.ps-board-root.ps-map-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 2; overflow: visible; }

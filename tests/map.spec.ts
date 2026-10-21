@@ -94,3 +94,13 @@ test("with the dev endpoint, a card without a snapshot can be captured and all s
   await expect.poll(() => posted.length).toBe(2)
   expect(posted[1]).toEqual({ all: true })
 })
+
+test("board and map arrows are drawn, not clipped by their 1px svg", async ({ page }) => {
+  await page.goto("/stavy/?b=approval-story")
+  const svg = page.locator(".ps-board-arrows").first()
+  await expect(svg).toBeAttached()
+  expect(await svg.evaluate((el) => getComputedStyle(el).overflow)).toBe("visible")
+  const path = page.locator("path.ps-board-arrow").first()
+  const box = await path.boundingBox()
+  expect((box?.width ?? 0) + (box?.height ?? 0)).toBeGreaterThan(10)
+})

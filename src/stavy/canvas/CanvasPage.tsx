@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   ArrowRight, ChevronRight, RotateCcw, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play, Waypoints,
+  Pencil, Undo2, Redo2,
 } from "../icons"
 import { cn } from "../cn"
 import {
@@ -30,9 +31,12 @@ import { useScan } from "../snapshots"
 import { EditableText } from "../EditableText"
 import { StatusControl } from "../status"
 import { useDev, patchManifest } from "../dev"
+import { useBoardEditor } from "../boards/editor"
+import { AddPalette } from "../boards/Palette"
+import { mapSpace, useMapAreas } from "./mapLayer"
 import { useManifestRev } from "../manifest"
 import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "../chrome"
-import type { BoardDef, PageDef, Scenario } from "../types"
+import type { BoardDef, BoardFile, PageDef, Scenario } from "../types"
 
 const INITIAL: Transform = { x: 300, y: 110, k: 0.55 }
 
@@ -492,8 +496,10 @@ function ScenarioLane({ sc, wdims, linkExtra }: { sc: Scenario; wdims: Record<st
 
 /* ------------------------------------------------------------------ */
 
+const MAP_LAYER_EMPTY: BoardFile = { title: "Map", items: [] }
+
 export function CanvasPage() {
-  useManifestRev() // re-render when a title or note was edited
+  const manifestRev = useManifestRev() // re-render when a title or note was edited
   const [sp, setSp] = useSearchParams()
   const { hidden } = useChrome()
   const [t, setT] = useState<Transform>(() => parseView(sp.get("v")) ?? INITIAL)
@@ -522,6 +528,9 @@ export function CanvasPage() {
   )
 
   const { theme, setTheme, setHidden } = useChrome()
+  const dev = useDev()
+  const writable = !!dev?.writable
+  const editMode = writable && sp.get("e") === "1"
   const { open: openComments } = useComments()
   const scanAll = useScan("all")
   const wKey = workspaceKey(sp)
@@ -567,6 +576,11 @@ export function CanvasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [t])
 
+  // The map's own layer: notes and other free items, anchored to areas.
+  const areas = useMapAreas(contentEl, pz, `${manifestRev}|${wKey}|${showMap}`)
+  const space = useMemo(() => mapSpace(areas), [areas])
+  const layer = useBoardEditor({ file: "map.json", editMode, wireframe, pz, contentElRef, space, extraBoxes: areas, fallback: MAP_LAYER_EMPTY })
+
   const fmtZoom = (k: number) => (k >= 1 ? `${k.toFixed(1)}×` : `${Math.round(k * 100)}%`)
   const zoomBy = (f: number) => pz.current?.zoomBy(f, true)
   const getScale = useCallback(() => pz.current?.get().k ?? initialT.current.k, [])
@@ -591,6 +605,7 @@ export function CanvasPage() {
     i: () => setFlag("i", !inspect),
     l: () => setFlag("live", !liveMode),
     t: () => setTheme(cycleTheme(theme)),
+    e: () => writable && setFlag("e", !editMode),
     "0": () => pz.current?.set(INITIAL, true),
     "1": () => pz.current?.zoomBy(1 / (pz.current.get().k || 1), true),
     "2": () => pz.current?.fitAll(true),
@@ -602,6 +617,8 @@ export function CanvasPage() {
       else if (openCommentId) setCommentParam(null)
       else if (inspect) setFlag("i", false)
       else if (commentsOpen) setFlag("comments", false)
+      else if (layer.editing) layer.setEditing(null)
+      else if (layer.selection.size) layer.setSelection(new Set())
       else setHidden(false)
     },
   })
@@ -649,7 +666,7 @@ export function CanvasPage() {
   return (
     <CanvasViewportContext.Provider value={canvasViewport}>
     <CanvasInspectContext.Provider value={inspectCtx}>
-    <div className="h-screen relative overflow-hidden">
+    <div className="h-screen relative overflow-hidden" {...layer.background}>
       <PanZoom ref={pz} initial={initialT.current} onCommit={setT} onLive={onLive} contentRef={(el) => { contentElRef.current = el; if (el && el !== contentEl) setContentEl(el) }}>
         <div
           data-canvas-root
@@ -719,6 +736,9 @@ export function CanvasPage() {
           )}
 
         </div>
+        <div className={cn("ps ps-board-root ps-map-layer", editMode && "is-editing", wireframe && "proto-wireframe")} data-map-layer>
+          {layer.layer}
+        </div>
         {contentEl && showNotes && manifest.notes && manifest.notes.length > 0 && (
           <CanvasNotes notes={manifest.notes} root={contentEl} getScale={getScale} />
         )}
@@ -726,6 +746,7 @@ export function CanvasPage() {
           <Inspector host={contentEl.parentElement} hit={hit} onClose={() => setFlag("i", false)} onPinChange={setHold} />
         )}
       </PanZoom>
+      {layer.marqueeEl}
       <SurfaceCommentLayer
         surface={MAP_BOARD}
         itemSelector="[data-instance]"
@@ -771,7 +792,29 @@ export function CanvasPage() {
           <MockNotice className="absolute top-[58px] left-6 z-20" />
           <CanvasToc className="absolute top-[84px] left-4 z-20" onJump={jumpTo} wdims={wdims} showMap={showMap} />
 
-          <div className="ps ps-glass absolute top-4 right-4 z-20 rounded-2xl px-1.5 py-1 flex items-center gap-0.5">
+          <div className="ps ps-glass absolute top-4 right-4 z-20 rounded-2xl px-1.5 py-1 flex items-center gap-0.5" data-ps-ui>
+            {writable && (
+              <>
+                <PsButton active={editMode} tip="Add and arrange notes, text and images on the map" keys={["E"]} tipBelow onClick={() => setFlag("e", !editMode)}>
+                  <Pencil /> Edit
+                </PsButton>
+                {editMode && (
+                  <>
+                    <AddPalette onAdd={layer.addItem} />
+                    <PsButton icon tip="Undo" keys={["⌘", "Z"]} tipBelow disabled={!layer.canUndo} onClick={layer.doUndo}>
+                      <Undo2 />
+                    </PsButton>
+                    <PsButton icon tip="Redo" keys={["⇧", "⌘", "Z"]} tipBelow disabled={!layer.canRedo} onClick={layer.doRedo}>
+                      <Redo2 />
+                    </PsButton>
+                    <span className={cn("ps-save", layer.saveState === "error" && "is-error")} aria-live="polite">
+                      {layer.saveState === "saving" ? "Saving…" : layer.saveState === "error" ? "Not saved" : layer.saveState === "saved" ? "Saved" : ""}
+                    </span>
+                  </>
+                )}
+                <PsDivider />
+              </>
+            )}
             <PsButton active={showNotes} tip="Annotation pins and pointing notes" keys={["N"]} tipBelow onClick={() => setFlag("notes", !showNotes)}>
               <StickyNote /> Notes
             </PsButton>
@@ -823,6 +866,7 @@ export function CanvasPage() {
           )}
           <ShortcutsSheet
             items={[
+              ...(writable ? ([["Edit the map's notes", "E"]] as Array<[string, string]>) : []),
               ["Notes", "N"], ["Leave a comment", "M"], ["Wireframe", "W"], ["Inspect", "I"], ["Live frames", "L"], ["Theme", "T"],
               ["Zoom in / out", "+ −"], ["100% / fit everything", "1 2"], ["Reset view", "0"], ["Fit an area", "double-click"],
               ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"],

@@ -432,6 +432,8 @@ export type BoardAction =
   | { wait: number }
 
 interface ItemBase {
+  /** Map layer only (stavy-content/map.json): the area this item sits on ("page:dashboard"); x/y are relative to it. */
+  anchor?: string
   /** Unique within the board; arrows and edits refer to it. */
   id: string
   /** Position and size in board pixels. Omit x/y and the board places the item automatically. */

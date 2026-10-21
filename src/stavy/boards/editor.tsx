@@ -66,7 +66,9 @@ const IDENTITY: BoardSpace = { toView: (i) => i, fromView: (i) => i }
 
 async function loadContentJson(file: string, fallback?: BoardFile): Promise<BoardFile> {
   const r = await fetch(contentUrl(file), { cache: "no-store" })
-  if (r.status === 404 && fallback) return fallback
+  // A missing file can come back as the app's own index.html (SPA fallback), not a 404.
+  const missing = r.status === 404 || (r.ok && !(r.headers.get("content-type") ?? "").includes("json"))
+  if (missing && fallback) return fallback
   if (!r.ok) throw new Error(`${file} → ${r.status}`)
   return (await r.json()) as BoardFile
 }

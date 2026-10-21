@@ -20,6 +20,15 @@ export function loadBoards(root) {
       problems.push(`${CONTENT_DIR}/boards/${name}: not valid JSON (${String(e.message ?? e).split("\n")[0]})`)
     }
   }
+  // The map's own layer: free items among the screens (anchored to areas).
+  const map = join(root, CONTENT_DIR, "map.json")
+  if (existsSync(map)) {
+    try {
+      boards.push({ id: "map", file: "../map.json", map: true, board: JSON.parse(readFileSync(map, "utf8")) })
+    } catch (e) {
+      problems.push(`${CONTENT_DIR}/map.json: not valid JSON (${String(e.message ?? e).split("\n")[0]})`)
+    }
+  }
   return { boards, problems }
 }
 

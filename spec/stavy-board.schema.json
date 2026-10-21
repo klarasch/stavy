@@ -74,7 +74,8 @@
         "w": { "type": "number" },
         "h": { "type": "number" },
         "title": { "type": "string" },
-        "note": { "type": "string" }
+        "note": { "type": "string" },
+        "anchor": { "type": "string", "description": "Map layer only (stavy-content/map.json): the map area this item sits on, e.g. \"page:dashboard\"; x/y are relative to its top-left." }
       },
       "allOf": [
         {

@@ -46,6 +46,7 @@ stavy-content/
   changelog.md                 what changed on the map, newest first (listed in Docs, shown on Home)
   decisions.md                 the decision log (listed in Docs, shown on Home)
   boards/<id>.json             free-form boards (you compose, humans refine)
+  map.json                     notes and arrows placed on the map itself, each anchored to a screen's area
   docs/<id>.md                 Markdown handover docs (the source for spec text)
   assets/                      images and SVGs you or people add
   comments.json                comments left in the viewer
@@ -145,6 +146,25 @@ How to compose:
   or delete notes with an `author` other than you.
 - After adding screen items with `crop`/`do`/`viewport`, capture them:
   `stavy:scan` (incremental) picks them up.
+
+## Notes on the map
+
+The map lays itself out from `stavy.json`; `stavy-content/map.json` adds free
+items on top (a board file: notes, Markdown, images, arrows). Each top-level
+item names the area it belongs to, and `x`/`y` are relative to that area's
+top-left, so it moves with its screen when the map changes:
+
+```json
+{ "title": "Map", "items": [
+  { "id": "empty-q", "type": "note", "text": "Does the empty state ship in v1?", "anchor": "page:dashboard" },
+  { "id": "to-dash", "type": "arrow", "from": "empty-q", "to": "page:dashboard", "style": "dashed" }
+] }
+```
+
+`anchor` is `page:<screen id>`, `area:map`, `area:boards` or `area:scenarios`.
+Without `x`/`y` the item sits beside its area. An arrow may end at an area.
+Use it for questions and caveats that belong to a screen; anything longer
+goes on a board.
 
 ## Reference (field names)
 

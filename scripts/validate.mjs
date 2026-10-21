@@ -59,7 +59,7 @@ function validateContent(m, root, { err, warn, validateBoard }) {
   }
   const { boards, problems } = loadBoards(root)
   for (const p of problems) err(p)
-  const onDisk = new Set(boards.map((b) => b.id))
+  const onDisk = new Set(boards.filter((b) => !b.map).map((b) => b.id))
   if (index) {
     const seen = new Set()
     for (const [i, b] of (Array.isArray(index.boards) ? index.boards : []).entries()) {
@@ -86,13 +86,17 @@ function validateContent(m, root, { err, warn, validateBoard }) {
     }
   }
 
-  for (const { id: boardId, board } of boards) {
-    const w = `board "${boardId}"`
+  for (const { id: boardId, board, map } of boards) {
+    const w = map ? `${CONTENT_DIR}/map.json` : `board "${boardId}"`
     if (!board || typeof board !== "object" || !Array.isArray(board.items)) {
       warn(`${w}: expected { title, items: [...] }`)
       continue
     }
     if (validateBoard && !validateBoard(board)) for (const e of validateBoard.errors ?? []) if (e.keyword !== "if") warn(`${w}: schema ${e.instancePath || "/"}: ${e.message}`)
+    const isMapArea = (a) => typeof a === "string" && (/^area:(map|boards|scenarios)$/.test(a) || (a.startsWith("page:") && pageIndex.has(a.slice(5))))
+    if (map)
+      for (const it of board.items)
+        if (it?.anchor && !isMapArea(it.anchor)) warn(`${w} item "${it.id ?? "?"}": anchor "${it.anchor}" is not a map area (page:<screen id>, area:map, area:boards, area:scenarios)`)
     const all = [...walkItems(board.items)]
     const ids = new Set(all.map((it) => it.id).filter(Boolean))
     const seen = new Set()
@@ -127,7 +131,8 @@ function validateContent(m, root, { err, warn, validateBoard }) {
       } else if (it.type === "flow") {
         if (!flows.has(it.flow)) warn(`${iw}: unknown flow "${it.flow}"`)
       } else if (it.type === "arrow") {
-        for (const end of ["from", "to"]) if (!ids.has(it[end])) warn(`${iw}: ${end} "${it[end]}" is not an item on this board`)
+        // On the map an arrow may also end at a screen's area ("page:dashboard").
+        for (const end of ["from", "to"]) if (!ids.has(it[end]) && !(map && isMapArea(it[end]))) warn(`${iw}: ${end} "${it[end]}" is not an item on this ${map ? "map" : "board"}`)
       } else if (it.type === "markdown" && it.src) {
         const file = it.src.split("#")[0]
         if (!isUrl(file) && !existsSync(resolve(dir, file)) && !existsSync(resolve(dir, "docs", file.endsWith(".md") ? file : `${file}.md`))) warn(`${iw}: markdown src "${it.src}" not found in ${CONTENT_DIR}/`)
