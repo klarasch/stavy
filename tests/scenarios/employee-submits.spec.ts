@@ -35,11 +35,15 @@ test.describe("Employee submits an expense", () => {
     const target = page.locator("[data-proto=\"SubmitButton\"], [data-testid=\"SubmitButton\"]").first()
     await expect(target, "Summary of everything entered; submitting advances the lifecycle to Submitted.").toBeVisible()
     await target.click()
+    // "Submitting": lives in component state; the app moves on by itself
+    await expect(page.locator("[data-proto=\"SubmittingIndicator\"], [data-testid=\"SubmittingIndicator\"]").first()).toBeVisible()
     // fidelity: interactive — next state: "Confirmation"
     await expect(page).toHaveURL(new RegExp("/submit\\/?(?:\\?(?=(?:(?:[^#]*&)?step=done(?:&|#|$)))[^#]*)(?:#.*)?$"))
   })
 
-  test("5. Confirmation", async ({ page }) => {
+  // 5. Submitting: reached by the click in step 4, checked there
+
+  test("6. Confirmation", async ({ page }) => {
     await page.goto("/submit?step=done")
     const target = page.locator("[data-proto=\"ViewExpensesButton\"], [data-testid=\"ViewExpensesButton\"]").first()
     await expect(target, "The expense now exists. Jump to the list to see it.").toBeVisible()
@@ -48,7 +52,7 @@ test.describe("Employee submits an expense", () => {
     await expect(page).toHaveURL(new RegExp("/expenses\\/?(?:\\?(?=(?:(?:[^#]*&)?role=employee(?:&|#|$))|(?![^#]*(?:^|&)role=))(?=(?:(?:[^#]*&)?state=loaded(?:&|#|$))|(?![^#]*(?:^|&)state=))[^#]*)?(?:#.*)?$"))
   })
 
-  test("6. It shows up as Submitted", async ({ page }) => {
+  test("7. It shows up as Submitted", async ({ page }) => {
     await page.goto("/expenses?role=employee&state=loaded")
     const target = page.locator("[data-proto=\"ExpenseRow:exp-2101\"], [data-testid=\"ExpenseRow:exp-2101\"]").first()
     await expect(target, "The freshly submitted expense appears at the top of the employee's list.").toBeVisible()
@@ -57,7 +61,7 @@ test.describe("Employee submits an expense", () => {
     await expect.soft(page).toHaveURL(new RegExp("/expenses/exp-2101\\/?(?:\\?(?=(?:(?:[^#]*&)?role=employee(?:&|#|$))|(?![^#]*(?:^|&)role=))(?=(?:(?:[^#]*&)?lifecycle=submitted(?:&|#|$))|(?![^#]*(?:^|&)lifecycle=))(?=(?:(?:[^#]*&)?locale=en-US(?:&|#|$))|(?![^#]*(?:^|&)locale=))(?=(?:(?:[^#]*&)?overlay=none(?:&|#|$))|(?![^#]*(?:^|&)overlay=))[^#]*)?(?:#.*)?$"))
   })
 
-  test("7. Open the expense you filed", async ({ page }) => {
+  test("8. Open the expense you filed", async ({ page }) => {
     await page.goto("/expenses/exp-2101?role=employee&lifecycle=submitted&locale=en-US&overlay=none")
     const target = page.locator("[data-proto=\"LifecycleTimeline\"], [data-testid=\"LifecycleTimeline\"]").first()
     await expect(target, "Where the flow actually ends: the record exists, waiting on M. Novak. Everything the employee can still do lives here.").toBeVisible()

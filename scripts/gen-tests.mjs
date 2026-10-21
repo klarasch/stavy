@@ -66,8 +66,18 @@ for (const sc of m.scenarios) {
   sc.steps.forEach((st, i) => {
     const p = page.get(st.page)
     if (!p) return
+    // A `via: "click"` step has no URL of its own (a menu, a spinner): it is
+    // checked inside the test of the step whose click leads to it.
+    if (st.via === "click" && i > 0) {
+      L.push(`  // ${i + 1}. ${esc(st.title)}: reached by the click in step ${i}, checked there`, "")
+      return
+    }
     const dims = resolveDims(p, st.dims)
-    const next = sc.steps[i + 1]
+    // Follow the click-only steps after this one; `next` is the first step with a URL.
+    let j = i + 1
+    const between = []
+    while (sc.steps[j]?.via === "click") between.push(sc.steps[j++])
+    const next = sc.steps[j]
     const nextPage = next && page.get(next.page)
     const fidelity = p.fidelity ?? "static"
     L.push(`  test("${i + 1}. ${esc(st.title)}", async ({ page }) => {`)
@@ -82,6 +92,12 @@ for (const sc of m.scenarios) {
         // assertions, so a target that isn't wired yet is a finding, not a red build.
         const ex = fidelity === "interactive" ? "expect" : "expect.soft"
         L.push(`    await target.click()`)
+        for (const b of between) {
+          if (!b.target) continue
+          L.push(`    // "${esc(b.title)}": lives in component state${b.hold ? "; the app moves on by itself" : ""}`)
+          L.push(`    await ${ex}(page.locator(${JSON.stringify(selectorFor(b.target))}).first()).toBeVisible()`)
+          if (!b.hold) L.push(`    await page.locator(${JSON.stringify(selectorFor(b.target))}).first().click()`)
+        }
         L.push(`    // fidelity: ${fidelity} — next state: "${esc(next.title)}"`)
         void samePage
         L.push(`    await ${ex}(page).toHaveURL(new RegExp(${JSON.stringify(stateRegex(nextPage.id, nd))}))`)

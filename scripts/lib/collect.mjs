@@ -68,7 +68,10 @@ export function collectStates(manifest, boards = [], opts = {}) {
   for (const sc of m.scenarios)
     for (const st of sc.steps ?? []) {
       const p = pageIndex.get(st.page)
-      if (p) want(p, st.dims, `scenario ${sc.id}`, { required: [st.target], strict: [st.target] })
+      // A `via: "click"` step's target only exists after the previous click (a
+      // menu, a spinner): it can't be on the state's own page, so don't ask for it.
+      const t = st.via === "click" ? undefined : st.target
+      if (p) want(p, st.dims, `scenario ${sc.id}`, { required: [t], strict: [t] })
     }
   for (const n of m.notes ?? []) {
     const p = pageIndex.get(n.page)
