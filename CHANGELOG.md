@@ -38,6 +38,9 @@ Fixes from the first 0.3 adoption.
   what each needs. It also documents `via`, `hold`, every `do` action and the
   `index.json` entry shape. `docs/STAVY-SPEC.md` and the adoption guide are
   up to date with 0.3.
+- The skill tells agents about your local layer: say "from now on, …" and the
+  convention goes into `.stavy/SKILL.local.md` (how boards and docs look) or
+  `.stavy/RULES.local.md` (repo and deploy rules), composed in on update.
 - Repeated scan flags: the last one wins (`npm run stavy:scan -- --url …`).
 
 **What to do**

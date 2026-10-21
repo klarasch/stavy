@@ -54,7 +54,13 @@ description: Operate the Acme prototype workspace — register pages, write scen
 - Pages are grouped by product area: billing, admin, onboarding.
 - Every scenario starts from the dashboard.
 - Our components come from the Acme kit; never restyle one inline.
+- Every board leads with a markdown block linking the PRD and the ticket.
+- Notes: yellow for open questions only; decisions go in decisions.md.
 ```
+
+After editing either file, run `npm run stavy:update` to compose them into
+the installed skill and `STAVY.md`. Agents know about this layer: tell yours
+"from now on, …" and it records the convention here.
 
 `init` composes the shipped skill from this file and Stavy's own `skill/SKILL.md`:
 
@@ -70,6 +76,12 @@ Without this file you get Stavy's skill as it ships.
 
 Plain Markdown, appended to `STAVY.md` under "Local rules (this repo)".
 Stavy's rules still apply; yours add to them.
+
+```markdown
+- Snapshots are never committed here. The deploy repo builds with
+  `npm run stavy:publish -- --skip-build --from-cache` and commits them there.
+- Every scene pins "now" to 2026-01-15 09:00.
+```
 
 ### The viewer
 

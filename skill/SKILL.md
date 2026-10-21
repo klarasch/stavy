@@ -226,3 +226,22 @@ How much real behaviour a prototype should have is the team's call (see
 is a same-origin module for what data can't say. Both belong to the team and
 live in the repo's local layer. Recipe and checklist:
 `docs/INSPECT-ADAPTERS.md`.
+
+## The team's own conventions
+
+This skill is generic, and the team's habits belong in their repo, not in it.
+When the person states a lasting convention ("our boards always lead with the
+PRD link", "screenshots go only to the deploy repo"), record it, and tell
+them where you put it:
+
+- How you work in Stavy (board layout and style, naming, which states every
+  screen gets, how docs are shaped): `.stavy/SKILL.local.md`, a bullet in its
+  body. Those bullets land at the top of this skill under "This workspace",
+  and they win when they disagree with it.
+- Rules for the app and the repo (what may be committed where, build and
+  deploy steps, scene conventions): `.stavy/RULES.local.md`, appended to
+  `STAVY.md`.
+
+Then run `npm run stavy:update` to rebuild the installed skill and `STAVY.md`
+from them. Never edit the installed skill or `STAVY.md` themselves: the next
+update replaces them.
