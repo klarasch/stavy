@@ -5,7 +5,7 @@ prints the sections between the release a repo last took and the one it is
 taking, so write each entry for that reader: what they get, and what, if
 anything, they have to do.
 
-## 0.4.0 — unreleased
+## 0.4.0 — 2026-10-21 (alpha)
 
 **What you get**
 
