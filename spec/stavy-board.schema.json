@@ -24,14 +24,15 @@
   "$defs": {
     "action": {
       "type": "object",
-      "description": "An action performed before capturing: click, hover, focus, press, type + into, wait.",
+      "description": "An action performed before capturing: click, hover, focus, press, type + into, wait, hold. `hold: true` before a click keeps a short-lived state (a spinner, a toast) on screen for the capture.",
       "anyOf": [
         { "required": ["click"] },
         { "required": ["hover"] },
         { "required": ["focus"] },
         { "required": ["press"] },
         { "required": ["type", "into"] },
-        { "required": ["wait"] }
+        { "required": ["wait"] },
+        { "required": ["hold"] }
       ],
       "properties": {
         "click": { "type": "string" },
@@ -40,7 +41,8 @@
         "press": { "type": "string" },
         "type": { "type": "string" },
         "into": { "type": "string" },
-        "wait": { "type": "number", "minimum": 0 }
+        "wait": { "type": "number", "minimum": 0 },
+        "hold": { "type": "boolean", "description": "true: from here on the app's timers wait (a spinner stays, a toast doesn't time out); false: let them run." }
       }
     },
     "fraction": { "type": "number", "minimum": 0, "maximum": 1 },

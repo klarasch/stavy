@@ -4,7 +4,7 @@
 // items, recursively through sections). A board item with `crop` / `do` /
 // `viewport` wants a *variant* capture, keyed by variantKey.
 import { existsSync, readdirSync, readFileSync } from "node:fs"
-import { join } from "node:path"
+import { join, resolve } from "node:path"
 import { CONTENT_DIR, STATE_DIM, normalizeManifest, resolveDims, variantKey, variantStem } from "./model.mjs"
 
 /** Read every board file next to the manifest. Unparsable files become `problems`, never exceptions. */
@@ -117,4 +117,16 @@ export function collectStates(manifest, boards = [], opts = {}) {
     }
   }
   return { states, warnings }
+}
+
+/**
+ * Where snapshots live when no --out/--snapshots is given: `.stavy/snapshots`
+ * once it exists (the default since 0.3.1: outside public/, so a build never
+ * copies the cache into dist/), else next to the manifest as before.
+ * @param {string} root folder holding stavy.json
+ */
+export function defaultSnapshotsDir(root, cwd = process.cwd()) {
+  const modern = resolve(cwd, ".stavy/snapshots")
+  if (existsSync(modern)) return modern
+  return resolve(root, root === cwd ? "public/snapshots" : "snapshots")
 }

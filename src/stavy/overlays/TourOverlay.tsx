@@ -6,6 +6,7 @@ import { findTarget, getPage, pageUrl, resolveDims, matchAppUrl, dimsEqual } fro
 import { PsButton, Chip, useHotkeys } from "../chrome"
 import { StavyLayer } from "../toplayer"
 import { frameDoc, frameHref, hostRect, onFrameChange, type HostRect } from "../frame"
+import { gateFrame, holdFrame } from "../hold"
 import type { Scenario, ScenarioStep } from "../types"
 
 function sameRect(a: HostRect, b: HostRect) {
@@ -98,14 +99,32 @@ export function TourOverlay({
   const [rect, setRect] = useState<HostRect | null>(null)
   const [missing, setMissing] = useState(false)
   const isLast = stepIdx === scenario.steps.length - 1
+  /** The target was on screen and then went away by itself (a spinner finished, a toast timed out). */
+  const [passed, setPassed] = useState(false)
+
+  // Holding: a `hold` step keeps the app where it is (timers wait) until Next.
+  // `holdNext` covers the moment between the click that starts a transient
+  // state and the tour arriving on its step — a short spinner would be gone by then.
+  const holdNext = useRef(false)
+  useEffect(() => {
+    holdNext.current = false
+  }, [stepIdx])
+  useEffect(() => {
+    if (!iframe) return
+    gateFrame(iframe)
+    holdFrame(iframe, !!step?.hold || holdNext.current)
+  }, [iframe, doc, step])
+  useEffect(() => () => holdFrame(iframe, false), [iframe])
 
   useEffect(() => {
     setRect(null)
     setMissing(false)
+    setPassed(false)
     if (!step?.target || !iframe) return
 
     let disposed = false
     let scrolled = false
+    let seen = false
     let followUntil = 0
     let observedDoc: Document | null = null
     let mo: MutationObserver | null = null
@@ -147,9 +166,17 @@ export function TourOverlay({
       const el = findTarget(d, step.target!)
       if (!el) {
         setRect(null)
+        if (seen && !step.hold) {
+          // Gone by itself: the card says so instead of pointing at nothing.
+          setPassed(true)
+          console.info(`[stavy] tour "${scenario.id}" step ${stepIdx + 1}: target "${step.target}" went away while the step was showing; add "hold": true to keep this state on screen until Next.`)
+          return
+        }
         armMissTimer()
         return
       }
+      seen = true
+      setPassed(false)
       clearMissTimer()
       setMissing(false)
       if (!scrolled) {
@@ -221,6 +248,16 @@ export function TourOverlay({
       return
     }
     const next = scenario.steps[stepIdx + 1]
+    if (next.hold) {
+      holdNext.current = true
+      holdFrame(iframe, true)
+    }
+    waitForNext(next)
+  }
+
+  /** Move on once the app shows `next`; navigate there if it doesn't within ADVANCE_WAIT_MS. */
+  const waitForNext = (next: ScenarioStep) => {
+    if (!iframe) return
     const started = Date.now()
     pendingRef.current = setInterval(() => {
       if (stepSatisfied(iframe, next)) {
@@ -263,6 +300,20 @@ export function TourOverlay({
   /** Next / →: do what a reviewer would do — click the target — or just move on when there is nothing to click. */
   const advance = () => {
     if (pendingRef.current != null) return
+    // A held step: Next lets the app finish what it was doing, then follows it.
+    if (step?.hold && iframe) {
+      holdFrame(iframe, false)
+      const next = scenario.steps[stepIdx + 1]
+      if (isLast) {
+        if (onExitInPlace) onExitInPlace()
+        else navigate(exitUrl)
+      } else if (next.hold) {
+        holdNext.current = true
+        holdFrame(iframe, true)
+        waitForNext(next)
+      } else waitForNext(next)
+      return
+    }
     const d = iframe && frameDoc(iframe)
     const el = step?.target && d ? findTarget(d, step.target) : null
     if (el && isClickable(el)) {
@@ -302,7 +353,7 @@ export function TourOverlay({
       top: fitsBelow ? below : Math.max(MARGIN, rect.top - GAP - cardH),
       left: Math.max(MARGIN, Math.min(rect.left, window.innerWidth - CARD_W - MARGIN)),
     }
-  } else if (!step.target || missing) {
+  } else if (!step.target || missing || passed) {
     // No target, or none to be found: the step is a plain centred card.
     cardStyle = { top: "50%", left: "50%", transform: "translate(-50%, -50%)" }
   } else {
@@ -339,6 +390,11 @@ export function TourOverlay({
           {step.note && (
             <p className="text-[12.5px] leading-relaxed mb-3" style={{ color: "var(--ps-muted)" }}>
               {step.note}
+            </p>
+          )}
+          {passed && (
+            <p className="text-[11px] mb-3" style={{ color: "var(--ps-faint)" }}>
+              This was a passing moment; the app has moved on.
             </p>
           )}
           {step.target && missing && debugOn() && (

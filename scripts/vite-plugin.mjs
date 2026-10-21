@@ -25,6 +25,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, writeFile
 import { dirname, extname, join, relative, resolve, sep } from "node:path"
 import { execFile, spawn } from "node:child_process"
 import { applyPatch } from "./lib/patch.mjs"
+import { FRAME_HOOK } from "./lib/gate.mjs"
 
 const MAX_BODY = 15 * 1024 * 1024
 const TYPES = {
@@ -116,6 +117,13 @@ export default function stavy(opts = {}) {
   return {
     name: "stavy",
     apply: "serve",
+    // A one-line hook at the top of the app's <head>: inside a Stavy frame it
+    // lets the viewer hold a tour step's spinner or toast from the first timer
+    // (see lib/gate.mjs). Outside a frame it does nothing.
+    transformIndexHtml: {
+      order: "pre",
+      handler: () => [{ tag: "script", children: FRAME_HOOK.replace(/^<script>|<\/script>$/g, ""), injectTo: "head-prepend" }],
+    },
     configureServer(server) {
       for (const dir of [contentDir, snapshotsDir, dirname(manifestPath)]) {
         try {
@@ -158,6 +166,16 @@ export default function stavy(opts = {}) {
               return res.end(readFileSync(index))
             }
           }
+          // Snapshots kept outside public/ (the default, .stavy/snapshots) are served from here.
+          if (!snapshotsServedByPublic) {
+            const si = path.indexOf("/snapshots/")
+            const file = si !== -1 ? join(snapshotsDir, decodeURIComponent(path.slice(si + "/snapshots/".length))) : null
+            if (file && file.startsWith(snapshotsDir + sep) && existsSync(file) && statSync(file).isFile()) {
+              res.setHeader("content-type", TYPES[extname(file)] ?? "application/octet-stream")
+              res.setHeader("cache-control", "no-store")
+              return createReadStream(file).pipe(res)
+            }
+          }
           if (!servedByPublic) {
             if (path.endsWith("/stavy.json") && existsSync(manifestPath)) {
               res.setHeader("content-type", "application/json")
@@ -165,10 +183,8 @@ export default function stavy(opts = {}) {
               return res.end(readFileSync(manifestPath))
             }
             const ci = path.indexOf("/stavy-content/")
-            const si = snapshotsServedByPublic ? -1 : path.indexOf("/snapshots/")
-            const file =
-              ci !== -1 ? contentPath(path.slice(ci + "/stavy-content/".length)) : si !== -1 ? join(snapshotsDir, decodeURIComponent(path.slice(si + "/snapshots/".length))) : null
-            if (file && file.startsWith(ci !== -1 ? contentDir : snapshotsDir) && existsSync(file) && statSync(file).isFile()) {
+            const file = ci !== -1 ? contentPath(path.slice(ci + "/stavy-content/".length)) : null
+            if (file && file.startsWith(contentDir) && existsSync(file) && statSync(file).isFile()) {
               res.setHeader("content-type", TYPES[extname(file)] ?? "application/octet-stream")
               res.setHeader("cache-control", "no-store")
               return createReadStream(file).pipe(res)

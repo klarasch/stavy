@@ -1,4 +1,5 @@
-import { ArrowLeft, ArrowRight, CloudUpload, PartyPopper } from "lucide-react"
+import { useState } from "react"
+import { ArrowLeft, ArrowRight, CloudUpload, Loader2, PartyPopper } from "lucide-react"
 import { Button } from "@/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/ui/card"
 import { Input } from "@/ui/input"
@@ -15,6 +16,15 @@ export function FormFlowTemplate({ dims, nav }: PageProps) {
   const step = dims.step ?? "details"
   const t = makeT(dims.locale)
   const go = (s: string) => nav("submit-expense", { step: s })
+  // Submitting takes a moment (fake latency): the tour holds this step on screen.
+  const [submitting, setSubmitting] = useState(false)
+  const submit = () => {
+    setSubmitting(true)
+    setTimeout(() => {
+      setSubmitting(false)
+      go("done")
+    }, 1200)
+  }
   const categories = ["travel", "meals", "lodging", "software", "events", "supplies"] as const
 
   return (
@@ -129,9 +139,15 @@ export function FormFlowTemplate({ dims, nav }: PageProps) {
                 <Button variant="ghost" onClick={() => go("receipt")}>
                   <ArrowLeft /> {t("flow.back")}
                 </Button>
-                <Button onClick={() => go("done")} {...proto("SubmitButton", { component: "Button", advancesTo: "done", sideEffect: "lifecycle → submitted" })}>
-                  {t("flow.submit")}
-                </Button>
+                {submitting ? (
+                  <Button disabled {...proto("SubmittingIndicator", { component: "Button" })}>
+                    <Loader2 className="animate-spin" /> {t("flow.submitting")}
+                  </Button>
+                ) : (
+                  <Button onClick={submit} {...proto("SubmitButton", { component: "Button", advancesTo: "done", sideEffect: "lifecycle → submitted" })}>
+                    {t("flow.submit")}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

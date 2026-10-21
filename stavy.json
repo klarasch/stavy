@@ -796,6 +796,17 @@
         {
           "page": "submit-expense",
           "dims": {
+            "step": "review"
+          },
+          "via": "click",
+          "hold": true,
+          "target": "SubmittingIndicator",
+          "title": "Submitting",
+          "note": "A short wait while the expense is saved. The tour holds it here; Next lets it finish."
+        },
+        {
+          "page": "submit-expense",
+          "dims": {
             "step": "done"
           },
           "target": "ViewExpensesButton",

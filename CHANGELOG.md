@@ -5,6 +5,54 @@ prints the sections between the release a repo last took and the one it is
 taking, so write each entry for that reader: what they get, and what, if
 anything, they have to do.
 
+## 0.3.1 — 2026-10-21 (alpha)
+
+Fixes from the first 0.3 adoption.
+
+**What you get**
+
+- **Tour steps can hold a passing moment.** A step with `"hold": true` keeps
+  its spinner, "running" row or toast on screen until Next: the app's timers
+  (50 ms or longer) wait while the step shows, and Next lets the app finish
+  and follows it. A step whose target goes away by itself now says so instead
+  of pointing at nothing. Board captures take `{ "hold": true }` in `do` too,
+  so a short-lived state can be captured.
+- **Faster state switching.** A state counted as loaded only once nothing on
+  the page changed for 150 ms, so a ticking clock or relative timestamp made
+  every switch wait the full 2.5 s. Now only elements being added or removed
+  count, and an element that keeps changing is ignored. With `?debug=1` the
+  console says where each load spent its time.
+- **Snapshots live in `.stavy/snapshots`** for new installs, outside
+  `public/`, so a build never copies them into `dist/`. The dev plugin serves
+  them from there. A plain build's viewer then shows cards without pictures;
+  to deploy with them, run `npm run stavy:publish` (captures fresh), or
+  `npm run stavy:publish -- --skip-build --from-cache` after your build
+  (copies your local cache in, no browser needed).
+- The starter `stavy.json` uses named `states`, and the workspace is named
+  after the feature it covers, not the repo: `init --name "Event search"`,
+  else "Untitled feature". `stavy:validate` warns while the name is the repo's
+  or the placeholder.
+- `init` warns when your Vite `base` is computed and it can't add `--app` for
+  you, and repoints `stavy:update` when you run it from a different folder.
+- The skill now starts from who reads the work (the PM and the engineers) and
+  what each needs. It also documents `via`, `hold`, every `do` action and the
+  `index.json` entry shape. `docs/STAVY-SPEC.md` and the adoption guide are
+  up to date with 0.3.
+- Repeated scan flags: the last one wins (`npm run stavy:scan -- --url …`).
+
+**What to do**
+
+1. `npm run stavy:update`.
+2. To get held tour steps on states loaded fresh, keep the dev plugin in
+   `vite.config`; it adds a one-line hook to the app's `<head>` in dev only.
+3. If `init` warned that snapshots are in `public/snapshots`: set
+   `snapshots: ".stavy/snapshots"` in the plugin, add `--out .stavy/snapshots`
+   to `stavy:scan`, then `rm -rf public/snapshots && npm run stavy:scan`.
+4. If Home shows your repo's name, set `product.name` in `stavy.json` to the
+   feature this workspace covers.
+5. Optional: in scene mode, pin "now" to a fixed time so rescans of an
+   unchanged state don't change pixels (`STAVY.md` rule 5).
+
 ## 0.3.0 — 2026-10-20 (alpha)
 
 An alpha of the lean core: authored boards and docs, editing on the dev

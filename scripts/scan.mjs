@@ -33,12 +33,13 @@ import { resolve, dirname } from "node:path"
 import { chromium } from "playwright"
 import { isOutsideViewport } from "./lib/viewport.mjs"
 import { instanceKey, normalizeManifest, resolveDims, stateHref, variantStem } from "./lib/model.mjs"
-import { collectStates, loadBoards } from "./lib/collect.mjs"
+import { collectStates, loadBoards, defaultSnapshotsDir } from "./lib/collect.mjs"
+import { installGate } from "./lib/gate.mjs"
 
 const argv = process.argv.slice(2)
 const VALUE_OPTS = new Set(["--url", "--app", "--out", "--only", "--width", "--height", "--dpr", "--keys", "--workers"])
 const opt = (name, def) => {
-  const i = argv.indexOf(name)
+  const i = argv.lastIndexOf(name) // the last one wins, so `npm run stavy:scan -- --url …` overrides the script
   return i >= 0 ? argv[i + 1] : def
 }
 const positional = argv.filter((a, i) => !a.startsWith("--") && !VALUE_OPTS.has(argv[i - 1]))
@@ -47,7 +48,7 @@ const root = dirname(manifestPath)
 const m = normalizeManifest(JSON.parse(readFileSync(manifestPath, "utf8")))
 const url = opt("--url", "http://localhost:5173").replace(/\/$/, "")
 const appBase = (opt("--app", m.viewer?.app && !/^https?:/.test(m.viewer.app) ? m.viewer.app : "") ?? "").replace(/\/+$/, "")
-const out = resolve(opt("--out", root === process.cwd() ? "public/snapshots" : resolve(root, "snapshots")))
+const out = resolve(opt("--out", defaultSnapshotsDir(root)))
 const only = opt("--only", null)
 const all = argv.includes("--all")
 const strict = argv.includes("--strict")
@@ -205,6 +206,13 @@ async function perform(page, actions) {
       else if ("press" in a) await page.keyboard.press(a.press)
       else if ("type" in a) await (await locate(page, a.into)).fill(String(a.type), { timeout: 5000 })
       else if ("wait" in a) await page.waitForTimeout(Math.min(Number(a.wait) || 0, 10_000))
+      else if ("hold" in a) {
+        // Hold the app where the next action leaves it: its timers wait, so a
+        // spinner or a toast is still there when the capture is taken.
+        await page.evaluate(installGate)
+        await page.evaluate((on) => (on ? window.__stavyGate.close() : window.__stavyGate.open()), !!a.hold)
+        continue
+      }
       else continue
       if (!("wait" in a)) await settle(page, 100, 1500)
     } catch (e) {

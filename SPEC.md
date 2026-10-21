@@ -1,8 +1,8 @@
-# Stavy — an open standard for AI-assisted prototyping (v0.2, draft)
+# Stavy — an open standard for AI-assisted prototyping (v0.3, alpha)
 
 Stavy is a viewer of existing things, not a way to build them. It reads a
-manifest describing a prototype workspace — pages, dimensions, scenarios,
-notes — and overlays a canvas, a player, and dev-mode inspection *on top of*
+manifest describing a prototype workspace — screens and their named
+states, flows, notes — plus authored boards and docs, and overlays a canvas, a player, and dev-mode inspection *on top of*
 the prototype, at the prototype's own URLs. It never renders the prototype
 itself and never imports its code.
 
@@ -31,7 +31,7 @@ One JSON document, served by the prototype at `/stavy.json` (or wherever
 
 ```jsonc
 {
-  "version": "0.2",
+  "version": "0.3",
   "product":    { "name": "...", "description": "..." },
   "viewer":     { "toolbar": "bottom", "app": "/", "targetAttrs": ["data-proto", "data-testid"] },
   "strings":    "/strings.json",
@@ -46,7 +46,19 @@ One JSON document, served by the prototype at `/stavy.json` (or wherever
 }
 ```
 
-### 1.1 Dimensions
+Boards and docs that people author live next to the manifest, in
+`stavy-content/` (§1.7a). In v0.3 the recommended core is small: `product`,
+`viewer`, and `pages[]` with named `states` (§1.3a), plus `scenarios[]` as
+flows. Everything else here is optional. In the text below, "scenario" and
+"flow" mean the same thing: the `scenarios[]` key is the flow's home, and the
+viewer calls it a flow.
+
+### 1.1 Dimensions (optional)
+
+Dimensions are still supported, but they are the secondary shape in v0.3:
+use them for a genuine axis (role, locale, release phase) that a reviewer
+compares across. For "which moment of this screen", prefer named states
+(§1.3a).
 
 A **dimension** is a named axis along which a page varies. The standard does
 not hardcode any particular axes — data states, user roles, lifecycle stages,
@@ -132,6 +144,7 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
   "id": "expense-detail",
   "label": "Expense detail",
   "url": "/expenses/exp-2101?role={role}&lifecycle={lifecycle}",
+  "status": "review",                   // optional handover chip: draft | review | ready are styled
   "group": "Approvals",                 // optional section on the canvas
   "template": "detail-page",
   "fidelity": "interactive",
@@ -150,9 +163,14 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
 ```
 
 - **`url` is THE binding contract** (§2.1): where the prototype renders this
-  page, as a path template with `{dim}` placeholders. Every dimension this
-  page declares must appear as a placeholder somewhere in `url` — that is the
-  whole contract, and it's checked by `npm run validate`.
+  page, as a path, or a path template with `{dim}` placeholders. Every
+  dimension this page declares must appear as a placeholder somewhere in
+  `url` — that is the whole contract, and it's checked by `npm run
+  stavy:validate`. A page that uses named states (§1.3a) declares no
+  dimensions and needs no placeholders.
+- `status` (optional, free text) is a handover chip: `draft`, `review` and
+  `ready` are styled, anything else shows as written. `tags` (optional
+  `string[]`) are free labels.
 - `kind` (optional: `page` | `component`). A **component** is a bespoke
   organism — a panel, widget, or composite the product builds from the design
   system's atoms (not the atoms themselves; those belong in the DS's own
@@ -170,7 +188,7 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
   much behaviour the page carries. See the skill's "fidelity ladder" — the
   default is `static`, and the canvas surfaces the rung so scope creep is
   visible.
-- The full variant space is `dimensions` (the cartesian product, addressable
+- With dimensions, the full variant space is `dimensions` (the cartesian product, addressable
   at runtime by editing the URL). `instances` is the *curated subset* shown
   on the canvas — coverage made visible without combinatorial explosion.
 - **`dimensions` and `instances` are both optional.** A page with no
@@ -183,6 +201,37 @@ A **page** is one screen (or organism, see §2.4) of the prototype:
   validator MUST NOT warn about either.
 - `defaults` fill in unspecified dimensions everywhere (instances, scenario
   steps, deep links).
+
+### 1.3a Named states (recommended)
+
+A **state** is a URL with a name. A page lists the moments worth looking at:
+
+```jsonc
+{ "id": "contacts", "label": "Contacts", "url": "/contacts",
+  "states": [
+    { "id": "loaded", "url": "/contacts" },
+    { "id": "empty", "url": "/contacts?scene=contacts-empty", "note": "First run: import or add" },
+    { "id": "bulk-conflict", "url": "/contacts?scene=bulk-conflict", "label": "Bulk edit: conflicts" }
+  ],
+  "layout": "row" }                     // "row" (default) | "matrix"
+```
+
+- A state has an `id` and usually its own `url`. It may also carry `label`,
+  `note`, `tags`, and `hidden` (registered, linkable and scannable, but not
+  shown on the map by default). A state can instead give `dims` (values for
+  the page's dimensions) when the page also declares them; `url` wins over
+  `dims`.
+- **One `scene` param is the recommended shape.** When the app needs a bundle
+  of seeds, flags and open panels to land on a moment, give it one named
+  scene (`?scene=bulk-conflict`) instead of an axis per seed. The state's URL
+  is then the only thing the app has to read (§2.1).
+- The map shows a page's states as a row. `layout: "matrix"` opts a page into
+  a grid over its two most-varying dimensions. No placeholder cells are drawn
+  for combinations nobody registered.
+- Scenario steps, board items and doc embeds point at a state by id
+  (`{ "page": "contacts", "state": "empty" }`), so a state is defined once.
+- Register states that someone will look at. A page with one state is
+  normal, and so is a page with no `states` at all (one card at its `url`).
 
 There is no `module` field, and no per-page render hook. The viewer never
 imports or mounts the page — it navigates a frame to `url` (§2.1, §2.3).
@@ -202,10 +251,12 @@ click?".
   "steps": [
     {
       "page": "expense-detail",
-      "dims": { "role": "manager", "lifecycle": "submitted" },
+      "state": "submitted",          // a named state of the page (§1.3a); or "dims": { ... }
       "target": "ApproveButton",     // target to highlight; omit = observe step
       "title": "Approve it",
-      "note": "Why this step matters / what to look at"
+      "note": "Why this step matters / what to look at",
+      "via": "url",                  // "url" (default) | "click"
+      "hold": false                  // true: keep a transient step on screen until Next
     }
   ]
 }
@@ -216,6 +267,22 @@ realises — PRD sections, tickets, acceptance criteria. This is what makes the
 manifest a checkable contract between PM, design, and engineering: every
 requirement should be reachable through at least one scenario; every scenario
 should cite what it's for.
+
+**How a step is reached (`via`).** `"url"` (the default): the player loads the
+step's registered state fresh, unless the app is already there, so every step
+should be its own state URL. `"click"`: the step exists only in component
+state (a menu the previous click opened) and has no URL; the tour waits for
+its `target` to appear after the click instead of loading a URL. Use it
+rarely.
+
+**Holding a transient step (`hold`).** Some steps are only on screen for a
+moment: a spinner, a toast, a running row. With `"hold": true` the viewer keeps
+such a step on screen until the user presses Next. It does this by holding
+the app's timers (anything scheduled at 50 ms or longer), and Next releases
+them so the app carries on. A `target` is optional; without one the step just
+shows the state. The dev plugin (§3b) injects a one-line hook into the app's
+`<head>` so that a freshly loaded state can be held from its first timer.
+Outside a Stavy frame the hook does nothing.
 
 Steps are declarative enough for a viewer to render them as (a) a guided tour
 overlay with highlights inside the player's frame, (b) a flow lane on the
@@ -266,9 +333,10 @@ cross-check a requirements document's text (`validate --refs`). Requirements
 are typically generated from the PRD by the agent; PMs review the board
 rather than editing the manifest.
 
-### 1.7 Boards (supporting material — outside the contract)
+### 1.7 Manifest boards (supporting material — outside the contract)
 
-Information architecture, flow/state diagrams, moodboard images, principles:
+Authored boards live in `stavy-content/` (§1.7a). The optional `boards[]` key
+in the manifest is the older, simpler kind described here. Information architecture, flow/state diagrams, moodboard images, principles:
 things a team wants *next to* the prototype without them being part of what
 must be covered. A viewer renders boards without interpreting them:
 
@@ -311,6 +379,61 @@ prototype at a real URL (§2.1, and "Dialogs and overlays as a param" in the
 skill), not in a PNG. Figures are supporting material: they are never
 scanned, never covered, never linked to.
 
+### 1.7a Boards and docs in `stavy-content/`
+
+Boards (free-form canvases) and docs (Markdown) are authored files, not
+manifest entries. They sit next to the manifest, in `public/stavy-content/`:
+
+```
+stavy-content/
+  index.json          which boards and docs exist, in order; `links` (PRD, tickets, Figma, repo) for Home
+  changelog.md        what changed on the map, newest first
+  decisions.md        the decision log
+  boards/<id>.json    one board per file
+  docs/<id>.md        Markdown docs
+  assets/             images and SVGs
+  comments.json       comments left in the viewer (dev server)
+```
+
+A board answers one question for one audience. Its file is
+`{ "title", "description"?, "status"?, "items": [...] }`. Every item has an
+`id` and a `type`, and may have `x`/`y`/`w`/`h`, `title` and `note`. Items
+without `x`/`y` are laid out in order, so a board can be written without
+coordinates. The types are:
+
+| type | fields |
+|---|---|
+| `screen` | `screen` (page id), `state` or `dims`, `crop`?, `do`?, `viewport`? |
+| `states` | `screen`, `states`? (ids), `layout`? (`row` or `grid`), `columns`?, `crop`? |
+| `flow` | `flow` (a scenario id), `perRow`?, `collapsed`? |
+| `markdown` | `md` (inline) or `src` (`docs/x.md`, or `docs/x.md#heading-slug`) |
+| `note` | `text`, `color`?, `author`? |
+| `section` | `title`, `items`, `layout`? (`row`, `column` or `grid`), `columns`? |
+| `image` | `src`, `alt`?, `callouts`? |
+| `mermaid` | `code` |
+| `arrow` | `from`, `to`, `label`?, `style`? |
+
+- `crop` captures one element of a state (a bare target id or a selector).
+- `viewport` captures the state at another size, for responsive versions.
+- **`do`** is a list of actions performed before the capture, so an open menu,
+  a hover or a filled form can be a card. The actions are `click`, `hover`,
+  `focus`, `press`, `type` (with `into`), `wait` and `hold`. `click`, `hover`,
+  `focus` and `into` take a target id or selector; `press` takes a key;
+  `wait` takes milliseconds. `{ "hold": true }` placed before a click keeps a
+  short-lived result on screen for the capture, by holding the app's timers
+  as in §1.4; `{ "hold": false }` lets them run again.
+- A `markdown` item with `src` embeds a section of a doc, so the text has one
+  source. Heading slugs are lowercase with punctuation dropped and spaces as
+  `-`.
+
+A doc is plain Markdown. `![caption](stavy:page/state)` embeds a state's
+snapshot as a card, and `[text](stavy:page/state)` links to the player at
+that state. The board schema is `spec/stavy-board.schema.json`;
+`npm run stavy:validate` checks boards and docs against it and against the
+manifest's ids. Boards and docs are meant to be composed by the agent through
+the skill and refined by people in the viewer, which edits them in place on
+the dev server (§3b).
+
 ### 1.7b Copy catalog (optional)
 
 ```jsonc
@@ -352,9 +475,9 @@ absent: `1920 × 1080` at `dpr: 1`. `pages[].frame` (§1.3) still overrides this
 per page — the usual reason is a `kind: "component"` page rendered by its own
 harness route, smaller than a full screen. `dpr` (optional, default 1) is the
 device scale factor the scan captures at; it does not change `width`/`height`,
-only the pixel density of the resulting PNG. Changing `viewport` without
-re-running `npm run scan` leaves the canvas showing the old capture scaled to
-fit — `npm run validate` warns when a snapshot's captured size no longer
+only the pixel density of the resulting image. Changing `viewport` without
+re-running `npm run stavy:scan` leaves the canvas showing the old capture scaled to
+fit — `npm run stavy:validate` warns when a snapshot's captured size no longer
 matches the page's current viewport (§3b).
 
 **`viewer.inspect` — describing the design system to the inspector.** The
@@ -412,7 +535,7 @@ handoff docs and for telling a colleague "look at just this part":
 }
 ```
 
-There is no build-time slicing tool in v0.2 — the viewer is a static overlay,
+There is no build-time slicing tool — the viewer is a static overlay,
 not a bundler plugin, and it has nothing to exclude from a build. A
 `prototypes[]` entry is a labeled subset a validator can check for dangling
 ids and a viewer or handoff sheet can filter by; it does not affect what
@@ -433,9 +556,10 @@ Every page's `url` is a path template with `{dim}` placeholders:
 "/expenses/exp-2101?role={role}&lifecycle={lifecycle}"
 ```
 
-Every dimension the page declares in `dimensions` must appear as a
+A state's `url` (§1.3a) is used as written. For a page with dimensions,
+every dimension it declares in `dimensions` must appear as a
 `{placeholder}` somewhere in `url` — in the path or the query string, your
-choice. `npm run validate` checks this both ways: every placeholder must be a
+choice. `npm run stavy:validate` checks this both ways: every placeholder must be a
 declared dimension, and every declared dimension must appear as a
 placeholder. The prototype reads the values however it likes — search
 params, path segments, both — and renders that state. Stavy dictates nothing
@@ -481,7 +605,7 @@ the usage site, never a restructuring of the component.
 Target existence and location are checked dynamically, not by reading source:
 `scripts/scan.mjs` visits every state that references a target in a real
 browser and asserts it's there (§3b). There is no textual/grep-based target
-resolution in v0.2 — the scan is the check.
+resolution — the scan is the check.
 
 ### 2.3 Same-origin & the frame
 
@@ -491,8 +615,14 @@ The viewer is a static page served *next to* the prototype, same origin:
 https://host/            → the prototype
 https://host/stavy/      → the viewer
 https://host/stavy.json  → the manifest
-https://host/snapshots/  → PNGs + index.json, written by scripts/scan.mjs
+https://host/snapshots/  → WebP + index.json, written by scripts/scan.mjs
 ```
+
+The scan writes snapshots to `.stavy/snapshots` by default, outside `public/`.
+They are a gitignored cache, not source. In dev the plugin (§3b) serves them
+at `/snapshots/`; a published build (`stavy:publish`, §3b) carries its own
+copy there. Keeping them out of `public/` means a normal `vite build` never
+copies them into `dist/`, which matters most for repos that commit `dist/`.
 
 The prototype renders inside a same-origin `<iframe>` that the viewer never
 imports — `src/stavy/frame.ts` is the entire surface this requires: reading
@@ -698,7 +828,7 @@ A conforming viewer SHOULD provide:
 
 A workspace SHOULD ship:
 
-- **`scan`** (`scripts/scan.mjs`, `npm run scan`) — the contract check and
+- **`scan`** (`scripts/scan.mjs`, `npm run stavy:scan`) — the contract check and
   the snapshots, one Playwright pass against a running dev/preview server.
   Visits every state that matters (pinned instances ∪ scenario step states ∪
   note anchors), asserts every referenced target exists at that state, scrolls
@@ -707,11 +837,16 @@ A workspace SHOULD ship:
   thumbnail), measures each found target's box as a fraction of the frame,
   and screenshots the state at the page viewport (`viewer.viewport`, §1.8; a
   page's own `frame` wins; `--width`/`--height`/`--dpr` override the manifest).
-  Writes `public/snapshots/index.json` (instanceKey → `{ file, width, height,
-  dpr, targets, missing, scrolled }`) and one PNG per state. Exits 1 when a
-  target is missing or a state fails to load — that is the contract breaking,
-  made visible in CI.
-- **`validate`** (`scripts/validate.mjs`, `npm run validate`) — static
+  Writes `<out>/index.json` (instanceKey → `{ file, width, height,
+  dpr, targets, missing, scrolled }`) and one WebP per state, where `<out>` is
+  `.stavy/snapshots` by default. The scan is **incremental**: it captures only
+  new or missing states unless told otherwise. `--keys a,b` captures exactly
+  those (a page id, or `page/state` with its crops), and `--all` re-captures
+  everything. Board items with `crop`, `do` or `viewport` are captured too.
+  Exits 1 when a state fails to load — that is the contract breaking, made
+  visible in CI. A missing target is reported by name and listed by validate;
+  it does not stop the capture.
+- **`validate`** (`scripts/validate.mjs`, `npm run stavy:validate`) — static
   checks only, never reads the prototype's source: manifest shape against
   `spec/stavy.schema.json`, cross-references (templates, scenario pages,
   requirement refs, note targets), the URL contract (§2.1, every declared
@@ -722,23 +857,43 @@ A workspace SHOULD ship:
   still shows the old capture scaled to fit. Also prints a coverage summary
   (`--coverage`) and can cross-check scenario refs against a requirements
   document's text (`--refs <doc>`).
-- Three more generators follow from the manifest alone: a **changelog**
+- **The dev plugin** (`scripts/stavy/vite-plugin.mjs`) — a Vite plugin that
+  applies to the dev server only and has no effect on `vite build`:
+  `stavy({ root: "public", snapshots: ".stavy/snapshots" })`. It serves
+  `stavy-content/` for editing (boards, docs, notes, comments, screen and
+  state titles on the map, links on Home are written back to files in the
+  repo), serves the snapshots folder at `/snapshots/`, runs the scan on demand
+  from the viewer (a card's refresh button), and injects the one-line `<head>`
+  hook that lets a freshly loaded state be held from its first timer (§1.4).
+  Without it the viewer is read-only; the viewer and scan work either way.
+- **`publish`** (`scripts/publish.mjs`, `npm run stavy:publish`) — a static
+  build that carries its own snapshots. Snapshots are not in git, so a
+  deployable build has to make them: it builds the app, serves the build on a
+  local port, captures every state against it, and writes the snapshots into
+  the build output. The result is plain static files (the prototype, the
+  viewer, `stavy.json`, `stavy-content/`, `snapshots/`) for any static host.
+  The published viewer is read-only; reviewers' comments stay in their browser
+  and travel as a link or a Markdown file the designer imports (docs/COMMENTS.md).
+- **`migrate`** (`scripts/migrate.mjs`, `npm run stavy:migrate`) — optional.
+  Turns a 0.2 workspace's boards and notes into a board file in
+  `stavy-content/`.
+- More generators follow from the manifest alone: a **changelog**
   between two manifest versions (`changelog.mjs`), **handoff sheets** per
   page (`handoff.mjs`), and **acceptance-test skeletons** from scenarios
-  (`gen-tests.mjs` → Playwright, each step opening the page's real `url` and
+  (`gen-tests.mjs`, `npm run stavy:tests` → Playwright, each step opening the page's real `url` and
   asserting the target).
 
 ## 4. Conformance levels
 
 - **Level 0 — manifest + urls + snapshots.** The workspace has an accurate
-  `stavy.json` with a `url` for every page, and `npm run scan` runs clean
+  `stavy.json` with a `url` for every page, and `npm run stavy:scan` runs clean
   enough to produce snapshots (targets may still be missing — that's Level
   1). Even without a viewer running, this is useful: machine-readable context
-  for AI agents, and a coverage map from the PNGs alone.
+  for AI agents, and a coverage map from the snapshots alone.
 - **Level 1 — url state for every declared dimension, targets, scan green.**
   Every page's `url` reaches every dimension it declares (§2.1); every
-  referenced target exists and is found by the scan; `npm run scan` and
-  `npm run validate` both exit 0. The canvas, player, tours, and inspector
+  referenced target exists and is found by the scan; `npm run stavy:scan` and
+  `npm run stavy:validate` both exit 0. The canvas, player, tours, and inspector
   all work.
 - **Level 2 — organisms via harness routes or stories.** Bespoke components
   are registered with `kind: "component"` and reviewable on their own,
@@ -817,3 +972,23 @@ never changed:
 - **Figures** (§1.7): `boards[].page` anchors a board inside a page's area,
   and an image board may carry its own numbered `callouts` — the way a design
   file pastes a menu crop next to the screen it opens from.
+
+## Changes in v0.3 (alpha)
+
+v0.3 narrows the core to what a team uses to explain an app: screens, their
+named states, flows, and authored boards and docs.
+
+- **Named states** (§1.3a): `pages[].states`, one `?scene=` param as the
+  recommended shape, `layout: "matrix"` only on request. Dimensions and
+  instances remain supported but secondary (§1.1, §1.3).
+- **Boards and docs** in `stavy-content/` (§1.7a): free-form boards with
+  screens, crops, `do` captures, flows, Markdown, notes, sections, images,
+  Mermaid and arrows; Markdown docs with `stavy:` embeds; a changelog and a
+  decision log.
+- **Flow steps** gain `state`, `via` and `hold` (§1.4).
+- **Dev plugin, editing and on-demand scans** (§3b).
+- **Snapshots are a gitignored cache** in `.stavy/snapshots`, WebP, incremental,
+  outside `public/` (§2.3, §3b). `stavy:publish` makes a static build with
+  its own snapshots.
+- Commands are named `stavy:validate`, `stavy:scan`, `stavy:migrate`,
+  `stavy:publish`, `stavy:tests` and `stavy:update`.

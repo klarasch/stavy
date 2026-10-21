@@ -149,6 +149,12 @@ export interface ScenarioStep {
    * and its target appearing after that click is enough.
    */
   via?: "url" | "click"
+  /**
+   * Keep this step on screen until Next: the app's timers wait while it shows
+   * (a spinner, a "running" row, a toast that would time out). Next lets the
+   * app carry on and the tour follows it to the next step.
+   */
+  hold?: boolean
   /** Dimension overrides for this step (defaults fill the rest) */
   dims?: Record<string, string>
   /** Target to highlight; omit for an "observe" step */
@@ -407,6 +413,8 @@ export type BoardAction =
   | { hover: string }
   | { focus: string }
   | { press: string }
+  /** true: from here on the app's timers wait, so a spinner or toast stays for the capture; false: let them run. */
+  | { hold: boolean }
   | { type: string; into: string }
   | { wait: number }
 

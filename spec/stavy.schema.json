@@ -589,6 +589,14 @@
                 "state": {
                   "$ref": "#/$defs/valueId",
                   "description": "Named state of the page (pages with `states`)"
+                },
+                "via": {
+                  "enum": ["url", "click"],
+                  "description": "How the tour reaches this step. Default \"url\": the registered state is loaded fresh unless the app already got there. \"click\": the step lives in component state (a menu the previous click opened) and its target appearing is enough."
+                },
+                "hold": {
+                  "type": "boolean",
+                  "description": "Keep this step on screen until Next: the app's timers wait while it shows (a spinner, a running row, a toast). Next lets the app carry on."
                 }
               }
             }

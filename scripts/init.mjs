@@ -7,6 +7,8 @@
 //   node /path/to/stavy/scripts/init.mjs ../my-prototype-repo [options]
 //
 //   --dir <name>   viewer folder under public/ (default: stavy, or what the lock says)
+//   --name <text>  what this workspace covers: the product area or feature ("Event search"),
+//                  not the repo. Only used for a new stavy.json.
 //   --rebuild      rebuild the viewer even if dist-viewer/ matches this commit
 //   --dry-run      report what would change, write nothing
 //   --check        only report owned files the repo has edited (exit 1 if any);
@@ -52,7 +54,7 @@ const opt = (name) => {
   return i >= 0 ? argv[i + 1] : undefined
 }
 const flag = (name) => argv.includes(name)
-const known = new Set(["--dir", "--rebuild", "--dry-run", "--check", "--force", "--allow-dirty"])
+const known = new Set(["--dir", "--name", "--rebuild", "--dry-run", "--check", "--force", "--allow-dirty"])
 for (const a of argv) {
   if (a.startsWith("--") && !known.has(a)) {
     console.error(`init: unknown option ${a}`)
@@ -62,7 +64,7 @@ for (const a of argv) {
 const check = flag("--check")
 const dryRun = flag("--dry-run") || check
 const force = flag("--force")
-const positional = argv.filter((a, i) => !a.startsWith("--") && argv[i - 1] !== "--dir")
+const positional = argv.filter((a, i) => !a.startsWith("--") && argv[i - 1] !== "--dir" && argv[i - 1] !== "--name")
 const target = resolve(positional[0] ?? ".")
 const say = (s = "") => console.log(s)
 const die = (s) => {
@@ -219,12 +221,14 @@ if (p.local.skill || p.local.rules) {
 // ---- the repo's own files: created once, never updated ---------------------
 const created = []
 const manifestPath = join(target, "public/stavy.json")
+const UNNAMED = "Untitled feature"
 if (!existsSync(manifestPath)) {
-  const pkg = JSON.parse(readFileSync(join(target, "package.json"), "utf8"))
   const starter = {
     $schema: "../scripts/stavy/stavy.schema.json",
     version: "0.3",
-    product: { name: pkg.name ?? "Prototype", description: "" },
+    // Named after the feature this workspace covers, never the repo: one
+    // prototype repo often holds several features, each with its own Home.
+    product: { name: opt("--name") ?? UNNAMED, description: "" },
     viewer: { targetAttrs: ["data-testid", "data-proto"] },
     dimensions: [],
     pages: [
@@ -232,9 +236,7 @@ if (!existsSync(manifestPath)) {
         id: "home",
         label: "Home",
         description: "Replace me: the first screen of the prototype, at the URL it already has.",
-        url: "/",
-        fidelity: "navigable",
-        instances: [{ dims: {} }],
+        states: [{ id: "default", label: "Default", url: "/" }],
       },
     ],
     scenarios: [],
@@ -264,14 +266,18 @@ const detectBasePath = (dir) => {
     const text = readFileSync(p, "utf8")
     const m = text.match(/\bbase\s*:\s*["'](\/[^"']*)["']/) ?? text.match(/\bbasePath\s*:\s*["'](\/[^"']*)["']/)
     if (m?.[1] && m[1] !== "/") return { base: m[1], file: f }
+    // A base computed in code (env var, a helper) can't be read here: say so
+    // rather than silently scanning the wrong URL.
+    if (/\bbase(Path)?\s*:/.test(text)) return { base: null, file: f }
   }
   return null
 }
 const detectedBase = detectBasePath(target)
 const basePath = detectedBase?.base
+const SNAPSHOTS = ".stavy/snapshots" // a cache outside public/, so a build never copies it into dist/
 const want = {
   "stavy:validate": "node scripts/stavy/validate.mjs public/stavy.json --coverage",
-  "stavy:scan": `node scripts/stavy/scan.mjs public/stavy.json --url http://localhost:5173${basePath ? ` --app ${basePath}` : ""}`,
+  "stavy:scan": `node scripts/stavy/scan.mjs public/stavy.json --url http://localhost:5173${basePath ? ` --app ${basePath}` : ""} --out ${SNAPSHOTS}`,
   "stavy:migrate": "node scripts/stavy/migrate.mjs public/stavy.json",
   "stavy:publish": "node scripts/stavy/publish.mjs",
   "stavy:tests": "node scripts/stavy/gen-tests.mjs public/stavy.json --out tests/stavy",
@@ -279,11 +285,20 @@ const want = {
 }
 const added = Object.keys(want).filter((k) => !pkg.scripts[k])
 for (const k of added) pkg.scripts[k] = want[k]
-if (added.length) {
+// stavy:update follows the release you ran: an older one pointing at another
+// folder (say ../stavy-0.3.0) would keep updating from that stale copy.
+const updateRe = /^node (\S+\/scripts\/init\.mjs) \.$/
+const oldUpdate = pkg.scripts["stavy:update"]?.match(updateRe)?.[1]
+const repointed = !added.includes("stavy:update") && oldUpdate && oldUpdate !== initPath
+if (repointed) pkg.scripts["stavy:update"] = want["stavy:update"]
+if (added.length || repointed) {
   if (!dryRun) writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n")
-  created.push(`package.json scripts: ${added.join(", ")}`)
+  if (added.length) created.push(`package.json scripts: ${added.join(", ")}`)
+  if (repointed) created.push(`stavy:update now runs ${initPath} (was ${oldUpdate})`)
   if (added.includes("stavy:scan") && basePath) created.push(`stavy:scan: detected base path ${basePath} in ${detectedBase.file} and added --app ${basePath}`)
 }
+if (detectedBase && !detectedBase.base)
+  say(`\n! ${detectedBase.file} sets a base path Stavy can't read (it's computed). If the app isn't served at /, add --app <base> to the stavy:scan script, e.g. --app /my-prototype.`)
 // Authored content lives next to the manifest: scaffolded once, never overwritten.
 const contentDir = join(dirname(manifestPath), "stavy-content")
 const contentRel = relative(target, contentDir).split("\\").join("/")
@@ -304,7 +319,7 @@ for (const [file, text] of scaffold) {
 if (scaffolded.length) created.push(`${contentRel}/ (${scaffolded.filter((f) => !f.endsWith(".gitkeep")).map((f) => f.split("/").pop()).join(", ") || "folders"}, boards/, docs/)`)
 
 // Snapshots are a cache the dev viewer and `scan` regenerate: keep them out of git.
-const snapshotsRel2 = "public/snapshots" // where scan writes when the manifest is public/stavy.json
+const snapshotsRel2 = SNAPSHOTS
 const ignoreFile = join(target, ".gitignore")
 const ignoreText = existsSync(ignoreFile) ? readFileSync(ignoreFile, "utf8") : ""
 const isIgnored = () => {
@@ -320,6 +335,12 @@ if (!isIgnored()) {
   if (!dryRun) writeFileSync(ignoreFile, `${ignoreText}${ignoreText && !ignoreText.endsWith("\n") ? "\n" : ""}\n# Stavy snapshot cache (regenerated by the dev viewer / scripts/stavy/scan.mjs)\n${snapshotsRel2}/\n`)
   created.push(`.gitignore: ${snapshotsRel2}/`)
 }
+
+if (existsSync(join(target, "public/snapshots")))
+  say(`\n! Snapshots are in public/snapshots, so a build copies them into dist/. Move the cache out of public/:
+    vite.config:   stavy({ root: "public", snapshots: "${SNAPSHOTS}" })
+    package.json:  add --out ${SNAPSHOTS} to stavy:scan
+    then:          rm -rf public/snapshots && npm run stavy:scan`)
 
 if (created.length) {
   say(`\n${dryRun ? "Would create" : "Created"} (yours from now on — updates never touch these):`)
@@ -352,7 +373,7 @@ if (!dryRun && !wired) {
   say(`
 Dev plugin (optional, dev only — no effect on \`vite build\`): in ${viteConfig ?? "vite.config.ts"}
   import stavy from "./scripts/stavy/vite-plugin.mjs"
-  plugins: [..., stavy({ root: "public", snapshots: "public/snapshots" })]
+  plugins: [..., stavy({ root: "public", snapshots: ".stavy/snapshots" })]
 It serves stavy-content/ for editing and re-captures snapshots on demand.`)
 }
 
@@ -368,7 +389,9 @@ Done (Stavy ${short}). Nothing under src/ was touched. Next:
      these ajv versions install cleanly on locked-down registries — a newer ajv pulls in fast-uri)
   2. Add the dev plugin to vite.config (above) so the viewer can save boards, notes and comments.
   3. Run your dev server and open /${dir}/index.html next to the app.
-  4. Register screens in public/stavy.json: one entry per screen, its states as named URLs
+  4. Name the workspace: product.name in public/stavy.json is the product area or feature it covers
+     ("Event search"), not the repo. Home and every page header show it.${opt("--name") ? ` (Set to "${opt("--name")}".)` : ""}
+     Register screens in public/stavy.json: one entry per screen, its states as named URLs
      ("states": [{ "id": "empty", "url": "/contacts?scene=empty" }]). Dimensions are optional.
   5. npm run stavy:scan     → captures new or missing states only (a cache; never committed). Set its --url
      to your dev server's port in package.json if it isn't 5173.

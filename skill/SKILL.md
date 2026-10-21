@@ -12,6 +12,31 @@ that map true and tell the story around it; humans refine it in the viewer.
 Read `STAVY.md` (the rules) before changing app code. `SPEC.md`, if present,
 wins over this file.
 
+## Who reads it: start from the problem
+
+The designer already knows the prototype. Stavy is for the **PM** and the
+**engineers** who will build it. Before you compose anything, find out (from
+the conversation, the PRD, or by asking) what problem the feature solves and
+what each reader has to take away. Then pick the parts of Stavy that answer
+that, and skip the rest.
+
+| Reader | Needs to know | Where it goes |
+| --- | --- | --- |
+| PM | Is this what we agreed? Which problem each flow solves, what is decided, what is still open, what is out of scope | flows with `refs`, a lead `markdown` on each board, `decisions.md`, Home `links` (PRD, tickets) |
+| Engineers | What to build: every state they must handle (empty, error, loading, no permission), the rules between states, edge cases and limits, copy, which components | docs per feature with embedded states, `states` with notes, crops of components, the inspector |
+| Both | What is ready to build and what changed since | `status: ready` on screens and boards, `changelog.md` |
+
+- One board per problem or question, titled in the reader's words ("How a
+  failed import recovers"), not one board per screen.
+- A flow ends at the outcome the user sees, so the PM can check it against
+  the problem.
+- Write the state names and notes engineers will use in tickets.
+- When you're unsure who a board is for, ask.
+- **Name the workspace after the feature.** `product.name` (and `description`)
+  in `stavy.json` is the product area or feature this workspace covers
+  ("Event search"), never the repo name: Home and every header show it. Set
+  it when you first touch a new workspace; ask if it isn't clear.
+
 ## The workspace
 
 ```
@@ -119,18 +144,26 @@ How to compose:
 ## Reference (field names)
 
 - Flows live under `scenarios` in stavy.json; a board's `flow` item takes the scenario `id`.
-- Flow steps: `page`, `state` (or `dims`), `title`, `note`?, `target`?, `via`?. The player always loads a step's
+- Flow steps: `page`, `state` (or `dims`), `title`, `note`?, `target`?, `via`?, `hold`?. The player always loads a step's
   registered state fresh, so every step should be its own state URL. Only for a step that exists purely in
   component state (a menu the previous click opened, no URL) add `"via": "click"`: the tour then waits for its
   target after the click instead of loading a URL.
+- **Transient steps:** a spinner, a "running" row, a toast that times out. Give the step `"hold": true` (usually
+  with `"via": "click"`): the app's timers wait while the step shows, and Next lets the app finish and moves on.
+  Without it the app moves on by itself and the step points at nothing.
 - Board file: `{ "title", "description"?, "status"?, "items": [...] }`. Every item has `id`, `type`, optional `x`/`y`/`w`/`h`, `title`, `note`.
   - `screen`: `screen` (page id), `state` or `dims`, `crop`?, `do`?, `viewport`?
+  - `do` actions, in order: `{ "click": t }`, `{ "hover": t }`, `{ "focus": t }`, `{ "press": "Shift+F10" }` (a key
+    on whatever has focus), `{ "type": "text", "into": t }`, `{ "wait": ms }`, `{ "hold": true }` (before a click: keep
+    the spinner or toast it starts, for the capture). `t` is a target id, a CSS selector, or visible text.
   - `states`: `screen`, `states`? (ids), `layout`? (`row`|`grid`), `columns`?, `crop`?
   - `flow`: `flow` (scenario id), `perRow`?, `collapsed`?
   - `markdown`: `md` (inline) or `src` (`docs/x.md`, or `docs/x.md#heading-slug`)
   - `note`: `text`, `color`?, `author`?
   - `section`: `title`, `items`, `layout`? (`row`|`column`|`grid`), `columns`?
   - `image`: `src`, `alt`?, `callouts`?  ·  `mermaid`: `code`  ·  `arrow`: `from`, `to`, `label`?, `style`?
+- `index.json`: `{ "boards": [{ "id", "title" }], "docs": [{ "id", "title" }], "links": [...] }`. Entries are objects,
+  not bare ids. Keep each `title` the same as the board file's `title` (Home shows the file's).
 - Heading slugs: lowercase, punctuation dropped, spaces → `-` ("Error states" → `error-states`).
 - Doc embeds: `![caption](stavy:page/state)` renders a snapshot card; `[text](stavy:page/state)` links to the player.
 - Scan keys: `--keys contacts` (a screen), `--keys contacts/empty` (a state, with its crops), comma separated.

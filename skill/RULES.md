@@ -22,7 +22,11 @@ registers, or register a new one.
    and behave identically with the entire `stavy/` folder deleted.
 5. **Fixtures are deterministic.** Fixed clock, seeded ids, no live network
    calls in states the manifest registers — the scan screenshots and checks
-   these states, and nondeterminism makes both flaky.
+   these states, and nondeterminism makes both flaky. If data is anchored to
+   "now", pin "now" whenever a `scene` param is present (e.g. 2026-01-15
+   09:00), so a rescan of an unchanged state gives the same pixels.
+   Fake latency with `setTimeout` (≥50 ms): a tour step or capture with
+   `hold` can then keep a spinner or toast on screen.
 6. **Organisms render through a harness route or an existing story, never by
    stripping a page down to one component.** A harness route is a new,
    additive route that renders the organism with the app's real providers and

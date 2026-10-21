@@ -151,10 +151,16 @@ export function PageView() {
       // other width the live layout differs and the swap would visibly jump.
       const cover = page && entry && !entry.missing?.length && Math.abs(entry.width - w) <= 4 ? snapshotUrl(page, dims) : null
       setVeil({ src: cover })
+      const t0 = performance.now()
       const onLoad = () => {
         frame.removeEventListener("load", onLoad)
+        const t1 = performance.now()
         void settleFrame(frame).then(() => {
-          if (loadSeq.current === seq) setVeil(null)
+          if (loadSeq.current !== seq) return
+          setVeil(null)
+          // `?debug=1`: where a slow state switch spends its time.
+          if (new URLSearchParams(window.location.search).get("debug") === "1")
+            console.info(`[stavy] ${href}: shown after ${Math.round(performance.now() - t0)} ms (app load ${Math.round(t1 - t0)} ms, settle ${Math.round(performance.now() - t1)} ms)`)
         })
       }
       frame.addEventListener("load", onLoad)

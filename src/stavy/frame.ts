@@ -96,6 +96,8 @@ export function loadFrame(iframe: HTMLIFrameElement, src: string): void {
   iframe.src = src
 }
 
+/** A node that changed this many times while settling is a ticker, not loading. */
+const TICKER_HITS = 4
 const FREEZE_ID = "stavy-freeze-motion"
 const FREEZE_CSS = "*,*::before,*::after{animation-duration:0s!important;animation-delay:0s!important;transition-duration:0s!important;transition-delay:0s!important;scroll-behavior:auto!important}"
 
@@ -103,7 +105,13 @@ const FREEZE_CSS = "*,*::before,*::after{animation-duration:0s!important;animati
  * Show a freshly loaded state as its final frame: entrance animations and
  * transitions are skipped while it settles, then motion is restored so the
  * reviewer's own interactions animate normally. Resolves once the document is
- * quiet (fonts loaded, no DOM mutations for `quiet` ms) or after `max` ms.
+ * quiet (fonts loaded, no elements added or removed for `quiet` ms) or after
+ * `max` ms.
+ *
+ * Only structure counts. Text and attribute changes (a clock, a relative
+ * timestamp, a progress value) never settle, and waiting for them made every
+ * state switch hit `max`. A node whose children keep changing (a ticker that
+ * re-renders its element) is ignored after TICKER_HITS changes.
  */
 export async function settleFrame(iframe: HTMLIFrameElement, { quiet = 150, max = 2500 } = {}): Promise<void> {
   const d = frameDoc(iframe)
@@ -133,8 +141,21 @@ export async function settleFrame(iframe: HTMLIFrameElement, { quiet = 150, max 
       clearTimeout(t)
       t = setTimeout(finish, quiet)
     }
-    const mo = new MutationObserver(arm)
-    mo.observe(d.documentElement, { childList: true, subtree: true, attributes: true, characterData: true })
+    const hits = new Map<Node, number>()
+    const tickers: Node[] = []
+    const structural = (r: MutationRecord) => {
+      const isEl = (n: Node) => n.nodeType === 1
+      if (![...r.addedNodes].some(isEl) && ![...r.removedNodes].some(isEl)) return false
+      if (tickers.some((t) => t === r.target || t.contains(r.target))) return false
+      const n = (hits.get(r.target) ?? 0) + 1
+      hits.set(r.target, n)
+      if (n >= TICKER_HITS) tickers.push(r.target)
+      return true
+    }
+    const mo = new MutationObserver((records) => {
+      if (records.some(structural)) arm()
+    })
+    mo.observe(d.documentElement, { childList: true, subtree: true })
     const cap = setTimeout(finish, Math.max(0, max - (Date.now() - started)))
     arm()
   })

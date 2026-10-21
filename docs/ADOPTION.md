@@ -2,8 +2,8 @@
 
 Stavy is an overlay. It is served *next to* your prototype, loads your
 prototype's own URLs, and never imports it. Adoption therefore touches nothing
-under `src/`: a static folder in `public/`, a JSON file, two scripts, and one
-rules file for the agents working in the repo. Steps marked **(skill)** are
+under `src/`: a static folder in `public/`, a JSON file, a few scripts, and
+one rules file for the agents working in the repo. Steps marked **(skill)** are
 what Claude does for you when the `stavy` skill is installed.
 
 Same origin is the one requirement: the viewer must be served from the same
@@ -13,9 +13,9 @@ work regardless.
 
 ---
 
-## A. An afternoon: from nothing to a canvas of what you already have
+## A. An afternoon: from nothing to a map of what you already have
 
-Download a release next to the prototype repo and run its init. A release has
+Download the release next to the prototype repo and run its init. A release has
 the viewer prebuilt and no npm dependencies, so this works behind a
 locked-down registry:
 
@@ -32,50 +32,84 @@ builds the viewer itself.) Init copies:
 |---|---|
 | `public/stavy/` | the viewer, a static page (+ `VERSION`) |
 | `public/stavy.json` | a starter manifest (only if absent) |
-| `scripts/stavy/{validate,scan,gen-tests}.mjs`, `lib/`, `stavy.schema.json` | the checks |
+| `public/stavy-content/` | boards, docs, changelog and decisions, scaffolded once |
+| `scripts/stavy/` | `validate`, `scan`, `migrate`, `publish`, `gen-tests`, the dev plugin (`vite-plugin.mjs`), `lib/`, the schemas |
 | `.claude/skills/stavy/SKILL.md` | the agent skill |
-| `STAVY.md` | the rules for agents in this repo — add `@STAVY.md` to your CLAUDE.md |
+| `STAVY.md` | the rules for agents in this repo; add `@STAVY.md` to your CLAUDE.md |
 | `docs/STAVY-SPEC.md`, `docs/STAVY-UPDATING.md` | the spec, and how updates work |
-| `.stavy/lock.json` | which of these Stavy owns, with hashes — commit it |
+| `.stavy/lock.json` | which of these Stavy owns, with hashes; commit it |
 
-and adds `stavy:validate`, `stavy:scan`, `stavy:tests`, `stavy:update` to
-`package.json` when absent — `stavy:scan` picks up a Vite `base` or Next
-`basePath` from your config file at install time and bakes it in as `--app`
-(best-effort; see the base-path note below if it isn't detected). Everything except `public/stavy.json` and
+It adds `.stavy/snapshots/` to `.gitignore`, and adds `stavy:validate`,
+`stavy:scan`, `stavy:migrate`, `stavy:publish`, `stavy:tests` and
+`stavy:update` to `package.json` when absent. `stavy:scan` picks up a Vite
+`base` or Next `basePath` from your config file at install time and bakes it
+in as `--app` (best-effort; see the base-path note below if it isn't
+detected). Everything except `public/stavy.json`, `public/stavy-content/` and
 `package.json` is Stavy's and replaced by updates; your own additions go in
-the local layer (`.stavy/SKILL.local.md`, `.stavy/RULES.local.md` —
+the local layer (`.stavy/SKILL.local.md`, `.stavy/RULES.local.md`;
 [`UPDATING.md`](UPDATING.md) §2). Then, in order:
 
-1. **Level 0 — register what exists.** `npm run dev`, open
-   `http://localhost:5173/stavy/index.html`. In `public/stavy.json`, add one
-   `pages[]` entry per screen you want on the canvas, with the URL it already
-   has (`"url": "/settings"`), no dimensions yet, one pinned instance
-   (`"instances": [{ "dims": {} }]`). **(skill)** Claude lists the routes and
-   writes the entries.
-2. **Scan.** `npm i -D playwright ajv@8.12.0 ajv-formats@2.1.1 && npx playwright install chromium`,
-   then `npm run stavy:scan` against the running dev server. Every registered
-   state gets a snapshot; the canvas now shows your real screens. Nothing in
-   the app changed. (Those exact ajv versions matter on a locked-down
-   registry — see "Locked-down registries" below.)
-3. **Level 1 — one flow, addressable.** Pick the flow you want to walk
-   through. For each screen in it, decide which axes matter (a role, a data
-   state, a step, an open dialog) and make them reachable by URL — see §B. Add
-   them as `dimensions[]`, declare them on the page, put every declared
-   dimension in the page's `url` as `{dim}`, pin the instances you want to
-   see. Add stable ids to the elements the flow clicks (`data-testid` at the
-   usage site — or whatever attribute your kit already stamps; name it in
-   `viewer.targetAttrs`). Write the `scenarios[]` entry.
-4. **Scan again, validate.** `npm run stavy:scan` asserts every scenario
-   target exists in the rendered state and fails otherwise. `npm run
-   stavy:validate` checks the manifest and the URL contract statically and
-   reports the last scan's misses.
-5. Open the canvas: the flow is a lane of real snapshots; click a step to open
-   the player at that state; press **Play** to walk the tour with the
-   spotlight; press **I** to inspect. Show that.
+1. **Add the dev plugin.** In `vite.config.ts`:
+   ```ts
+   import stavy from "./scripts/stavy/vite-plugin.mjs"
 
-Level 2 — organisms — comes when you want a component's own state matrix on
-the canvas: add a harness route (§B, "Organisms"), register it as a page with
-`"kind": "component"` and a `frame`.
+   export default defineConfig({
+     plugins: [/* your plugins */, stavy({ root: "public", snapshots: ".stavy/snapshots" })],
+   })
+   ```
+   It applies to `vite dev` only; `vite build` is unchanged. It lets the viewer
+   save boards, notes and comments to files in your repo, serves the snapshots
+   cache, and re-captures states on demand. Without it the viewer is read-only.
+2. **Register what exists.** `npm run dev`, open
+   `http://localhost:5173/stavy/index.html`. In `public/stavy.json`, add one
+   `pages[]` entry per screen you want on the map, with the URL it already
+   has (`"url": "/settings"`) and its states by name (see §B):
+   ```jsonc
+   { "id": "settings", "label": "Settings", "url": "/settings",
+     "states": [
+       { "id": "default", "url": "/settings" },
+       { "id": "unsaved", "url": "/settings?scene=unsaved-changes" }
+     ] }
+   ```
+   A screen with one state is normal, and a screen with no `states` is one
+   card at its `url`. **(skill)** Claude lists the routes and writes the entries.
+3. **Scan.** `npm i -D playwright ajv@8.12.0 ajv-formats@2.1.1 && npx playwright install chromium`,
+   then `npm run stavy:scan` against the running dev server (set its `--url`
+   in `package.json` if your port isn't 5173). Every registered state gets a
+   snapshot; the map now shows your real screens. Nothing in the app changed.
+   (Those exact ajv versions matter on a locked-down registry; see "Locked-down
+   registries" below.) The scan is incremental: later runs capture only new or
+   missing states. `-- --keys settings/unsaved` captures exactly one, and
+   `-- --all` re-captures everything before a review.
+4. **Make the states you care about URL-reachable.** For each moment that
+   isn't reachable yet (an empty list, an error, a dialog), give the app one
+   named scene and read it from a `?scene=` param. See §B. Add the state to
+   the page. Add stable ids to the elements a flow clicks (`data-testid` at the
+   usage site, or whatever attribute your kit already stamps; name it in
+   `viewer.targetAttrs`).
+5. **Validate.** `npm run stavy:validate` checks the manifest, boards and
+   references statically, and reports the last scan's misses. Warnings are
+   prompts. Only a state that won't load, or unparsable JSON, is an error.
+6. **Write a flow, compose boards and docs.** A flow is a `scenarios[]` entry
+   whose steps point at states (`{ "page": "settings", "state": "unsaved",
+   "title": … }`). Boards and docs live in `public/stavy-content/`. **(skill)**
+   Ask Claude to compose them: "a board on how import fails and recovers", "a
+   handover doc for the settings screen". It picks screens, crops, flows and
+   Markdown for the question, writes `stavy-content/boards/<id>.json` and
+   `docs/<id>.md`, registers them in `index.json`, and captures what the board
+   needs. In the viewer you move, resize and annotate what it made, and the dev
+   plugin saves your edits back to the files.
+7. **Review and publish.** The map and boards are the review surface: click a
+   state to open the player, press **Play** to walk a flow, press **I** to
+   inspect, press **M** to comment. When it's time to share, `npm run
+   stavy:publish` (§C) makes a static build that carries its own snapshots.
+
+If you have 0.2 boards and notes, `npm run stavy:migrate` turns them into a
+board file in `stavy-content/`.
+
+Level 2, organisms, comes when you want a component on its own: add a
+harness route (§B, "Organisms"), register it as a page with `"kind":
+"component"` and a `frame`.
 
 **Dev server or deploy under a base path.** If your prototype's dev server or
 deploy uses a Vite `base` other than `/` (a GitHub Pages project site is
@@ -101,28 +135,39 @@ The whole contract is: the prototype renders a state when opened at a URL.
 How it reads that URL is its business. The cheap patterns, in order of
 preference:
 
-- **A read at the data layer.** One hook or function that merges search
-  params over defaults (`role`, `state`, …) and hands the result to the
-  fixture selection. Orbit's `src/demo/app/dims.ts` is 60 lines and the only
-  place that knows the param names. Nothing in a page component changes.
-- **Dataset as a dimension.** For data-heavy prototypes don't flag UI states,
-  select a *dataset*: `?dataset=manager-empty` picks a named, deterministic
-  fixture set and the app's real logic computes the rest. Register `dataset`
-  as a dimension. This keeps real behaviour and still makes every state a link.
-- **Path segments.** `"url": "/expenses/{expense}?role={role}"` — a record id
-  is a dimension too; the viewer fills path and query placeholders alike and
-  recognises the state when the app navigates there on its own.
-- **Dialogs and overlays.** An `overlay=confirm-delete` param that opens the
-  dialog on mount. The state gets a snapshot, a tour can point at the confirm
+- **One named scene.** A state is a URL with a name. When a moment needs a
+  bundle of seeds, flags and open panels, give the app one `?scene=` param
+  that selects a named, deterministic setup (`?scene=bulk-conflict`) and let
+  the app's real logic compute the rest. Register each scene as a named
+  state on the page. This keeps real behaviour and makes every state a link.
+- **A read at the data layer.** One hook or function that reads the `scene`
+  param (and any other param you keep), merges it over defaults and hands the
+  result to the fixture selection. It is usually a few dozen lines and the
+  only place that knows the param names. Nothing in a page component changes.
+- **Dimensions, when an axis is genuine.** A role or locale that a reviewer
+  compares side by side can still be a dimension (`"url":
+  "/expenses?role={role}"`, SPEC §1.1). Use them sparingly. Don't add states
+  to fill a grid.
+- **Path segments.** A record id can sit in the path of a state's url
+  (`"url": "/expenses/exp-2101?scene=submitted"`). The viewer recognises the
+  state when the app navigates there on its own.
+- **Dialogs and overlays.** A scene that opens the dialog on mount
+  (`?scene=confirm-delete`). The state gets a snapshot, a tour can point at the confirm
   button, and the modal stays inside its own document — containment is the
   frame's job now, not yours.
 - **Workspace axes** (release phase, locale, tenant): one param the app reads
-  once, declared `"scope": "workspace"` so the viewer carries it across every
-  navigation (SPEC §1.1).
+  once, declared as a dimension with `"scope": "workspace"` so the viewer
+  carries it across every navigation (SPEC §1.1).
+- **Menus and hovers.** An open menu, a hover or a focus ring doesn't need a
+  URL: a board item can capture it with `do: [{ "click": "FilterButton" }]`
+  (the actions are click, hover, focus, press, type + into, wait, hold). A
+  flow step that exists only in component state uses `"via": "click"`. A
+  spinner or toast that vanishes on its own can stay on screen with `"hold":
+  true` on the step or the action.
 
 When a state is *not* reachable by URL — it lives three clicks deep in local
-state — register the gap (leave the cell unpinned, note it in the page
-description) rather than restructuring the page. That is the rule agents in
+state — leave it out and note the gap in the page description, or reach it
+with a `do` action on a board, rather than restructuring the page. That is the rule agents in
 the repo follow (`STAVY.md`).
 
 **Organisms.** Add one route that mounts the organism alone with the app's
@@ -141,30 +186,35 @@ text.
 
 ---
 
-## B2. Keep the manifest true: scan in CI
+## B2. Keep the manifest true: scan and validate
 
-`scan` is the drift hook. It visits every state the manifest cares about —
-pinned instances, scenario steps, note anchors — asserts the referenced
-targets exist, measures them, and writes the snapshots. Run it against a
-preview of the built app in CI and the contract cannot silently rot: a renamed
-button or a state that stopped rendering fails the build with the exact
-state and selector in the log. The reference repo's
-`.github/workflows/pages.yml` is the template: build → preview → scan →
-validate → build again with the snapshots → deploy.
+`scan` is the drift hook. It visits every state the manifest, flows and
+boards care about, asserts the referenced targets exist, measures them, and
+writes the snapshots. A state that stopped rendering fails with the exact
+state in the log, and a renamed button is reported as a missing target by name.
+`stavy:validate` lists the last scan's misses.
 
-Snapshots are generated artifacts. Commit them if reviewers should see the
-canvas on a static host without CI; otherwise ignore `public/snapshots/` and
-let CI produce them.
+Snapshots are a **gitignored cache**. They default to `.stavy/snapshots`,
+outside `public/`, so `vite build` never copies them into `dist/`. That makes
+the default safe for repos that commit `dist/` (a GitHub Pages project served
+from the repo, say): a normal build can't pull in hundreds of images by
+accident. The dev plugin serves the cache at `/snapshots/` and re-captures on
+demand; people can press refresh on a card. If you committed
+`public/snapshots` under 0.2, run `git rm -r --cached public/snapshots`, delete
+the folder, and let the scan rebuild the cache in its new place.
+
+When you want snapshots on a static host, don't commit them. Use
+`npm run stavy:publish` (§C), which captures them into the build output.
 
 **Snapshot resolution.** `scan` captures every `kind: "page"` state at
 `1920 × 1080` by default; set `"viewer": { "viewport": { "width": …, "height":
 …, "dpr": … } }` in the manifest to change it (`--width`/`--height`/`--dpr`
 override it per invocation; a page's own `frame` always wins, e.g. a
 `kind: "component"` harness route). `dpr` trades bytes for sharpness: `1` is
-fine at arm's length on the canvas, `2` gives crisp thumbnails when a reviewer
-zooms in on a retina display but roughly quadruples every PNG's size — worth
+fine at arm's length on the map, `2` gives crisp thumbnails when a reviewer
+zooms in on a retina display but roughly quadruples every image's size — worth
 it for a small workspace, not for hundreds of states. Changed the knob without
-rescanning? `npm run validate` warns which snapshots are now stale.
+rescanning? `npm run stavy:validate` warns which snapshots are now stale.
 
 ---
 
@@ -197,26 +247,27 @@ instead of searching the repo.
 
 ## B4. What PMs, engineers, designers get without touching JSON
 
-- **PMs**: the *Requirement coverage* board on the canvas (requirements →
-  scenarios → states, gaps in amber; click a scenario to play it). Their input
-  is the PRD: the skill extracts `requirements[]` from its headings and
-  proposes scenarios for gaps. Stable section handles (`§3`, ticket ids) are
-  enough; Markdown exports from Confluence/Notion work.
+- **PMs**: Home (links to the PRD and tickets, the changelog, the decision
+  log), boards that answer one question each, and comments on anything. Their
+  input is the PRD or a conversation; the skill turns it into flows and boards.
+  If the manifest lists `requirements[]`, the coverage board shows which
+  flows cover them.
 - **Engineers / QA**: the scan log (which state, which selector), `npm run
   stavy:tests` (Playwright specs from scenarios, against the app's own URLs),
   the inspector (component + props, classes, tokens, the state's URL, a
-  source link in dev), `npm run handoff` and `npm run changelog` in the
-  reference repo.
-- **Designers**: the canvas link; the player with **N** for annotations,
-  **W** for wireframe, **⌘\** to hide the chrome for a clean demo; comments;
-  in dev, *Save as a design annotation* writes straight into the manifest.
+  source link in dev), and the docs: Markdown handover pages with states
+  embedded, readable on a git host too.
+- **Designers**: the published link or the dev server; the player with **N**
+  for annotations, **W** for wireframe, **⌘\** to hide the chrome for a clean
+  demo; comments; in dev, moving and resizing board items, editing text and
+  titles, all saved to files in the repo.
 
 ---
 
 ## B5. Maintenance: the viewer is a folder in `public/`
 
-- **Upgrade:** pull the reference repo, then `npm run stavy:update` (the same
-  `init.mjs`). It shows the Stavy log since your last update, replaces the
+- **Upgrade:** unpack the new release into `../stavy`, then `npm run
+  stavy:update` (the same `init.mjs`). It shows the Stavy log since your last update, replaces the
   files Stavy owns, prunes the ones it no longer ships, and **skips any owned
   file you edited** — naming it and exiting 1. `.stavy/lock.json` records the
   commit and hashes. Full model, the local layer, and the flags in
@@ -249,26 +300,44 @@ Newer `ajv` releases pull in `fast-uri`, which some artifactories block by
 policy, and the install fails or falls back to a stale cached version. If
 `validate` runs without ajv installed it now prints `SCHEMA NOT CHECKED —
 install ajv@8.12.0 ajv-formats@2.1.1 …` as the first line and counts it as a
-warning; pass `--require-schema` (wired into `npm run check`) to make CI fail
+warning; pass `--require-schema` to `stavy:validate` in CI to make it fail
 instead of warn when the schema can't be checked.
 
 ---
 
-## C. CI/CD
+## C. Publishing and CI
 
-Minimum: `node scripts/stavy/validate.mjs public/stavy.json --require-schema`
-on every PR — `--require-schema` fails the build instead of silently skipping
-the schema check when ajv isn't installed. Full: the scan. In the reference
-repo's Pages workflow the sequence is
+**Publish.** `npm run stavy:publish` builds the app, serves the build locally,
+captures every state against it, and writes the snapshots into the build
+output. The result is plain static files (the prototype, the viewer,
+`stavy.json`, `stavy-content/`, `snapshots/`) that any static host serves. It
+takes `--build "<cmd>"`, `--dist <dir>`, `--base <path>` (as in your build's
+base), `--port`, and `--skip-build`; other flags go to the scan.
+
+A plain `npm run build` carries no snapshots: its viewer shows cards without
+pictures (the player still opens the real app). If your pipeline builds and
+commits `dist/` itself, add one step after the build:
+`npm run stavy:publish -- --skip-build --from-cache` copies your local cache
+(`.stavy/snapshots`) into `dist/snapshots` without a browser. The pictures are
+as fresh as your last scan. The published
+viewer is read-only: editing needs the dev server, and reviewers' comments stay
+in their browser and travel as a link or a Markdown file you import (see B3).
+The viewer opens at `<site>/stavy/` (or `/stavy/index.html` on hosts without
+directory indexes) and finds the manifest and snapshots one level up. No
+rewrite rules: the viewer routes by query string only.
+
+**CI.** Minimum: `node scripts/stavy/validate.mjs public/stavy.json
+--require-schema` on every PR. `--require-schema` fails the build instead of
+silently skipping the schema check when ajv isn't installed. To keep the
+contract from rotting, also run the scan against a preview of the built app:
 
 ```bash
 npx vite build
-npx vite preview --port 4173 &            # wait for it
-node scripts/scan.mjs --url http://localhost:4173 --app /stavy   # --app = the deploy's base path
-npm run check                              # validate + coverage + PRD refs + scan misses
-npx vite build                             # picks up public/snapshots
+npx vite preview --port 4173 &                      # wait for it
+npm run stavy:scan -- --url http://localhost:4173   # --app is already baked in from your base path
+npm run stavy:validate -- --require-schema          # also reports the scan's misses
 ```
 
-Deploy `dist/`. The viewer opens at `<site>/stavy/` (or `/stavy/index.html`
-on hosts without directory indexes) and finds the manifest and snapshots one
-level up. No rewrite rules: the viewer routes by query string only.
+Then deploy with `stavy:publish`, which does the capture itself. Snapshots stay
+out of git and out of a plain `vite build`, so a repo that commits `dist/`
+can keep doing so without carrying them.

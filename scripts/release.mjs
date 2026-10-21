@@ -75,6 +75,7 @@ const files = [
   "scripts/lib/model.d.mts",
   "scripts/lib/collect.mjs",
   "scripts/lib/patch.mjs",
+  "scripts/lib/gate.mjs",
   "scripts/vite-plugin.mjs",
   "scripts/migrate.mjs",
   "scripts/publish.mjs",

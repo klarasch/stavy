@@ -18,7 +18,7 @@ import { readFileSync, existsSync, statSync } from "node:fs"
 import { resolve, dirname, relative } from "node:path"
 import { pathToFileURL } from "node:url"
 import { CONTENT_DIR, STATE_DIM, instanceKey, normalizeManifest, resolveDims } from "./lib/model.mjs"
-import { loadBoards, walkItems } from "./lib/collect.mjs"
+import { loadBoards, walkItems, defaultSnapshotsDir } from "./lib/collect.mjs"
 
 // Core checking logic, importable so it can be unit tested without spawning a
 // process: takes the parsed manifest object and the directory it lives in
@@ -141,6 +141,22 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   const warnings = []
   const err = (s) => errors.push(s)
   const warn = (s) => warnings.push(s)
+
+  // ---- name: Home is named after the feature this workspace covers, not the repo
+  {
+    const name = String(m.product?.name ?? "").trim()
+    let repo = null
+    for (const dir of [root, resolve(root, "..")]) {
+      try {
+        repo = JSON.parse(readFileSync(resolve(dir, "package.json"), "utf8")).name ?? null
+        break
+      } catch {
+        /* no package.json here */
+      }
+    }
+    if (!name || name === "Untitled feature" || (repo && name.toLowerCase() === String(repo).toLowerCase()))
+      warn(`product.name is ${name ? `"${name}"` : "empty"}: name the workspace after the product area or feature it covers ("Event search"), not the repo`)
+  }
 
   // ---- shape: JSON Schema (spec/stavy.schema.json), if ajv is installed
   // `simulateNoAjv` is a test-only hook (tests/unit/validate.unit.ts) so the
@@ -345,7 +361,7 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   if (m.strings && !/^(\/|[a-z]+:\/\/)/i.test(m.strings)) warn(`strings: "${m.strings}" should be a URL path the prototype serves (e.g. "/strings.json")`)
 
   // ---- last scan: targets the rendered prototype did not have (scripts/scan.mjs)
-  const snapDir = flags.snapshots ?? resolve(root, root === process.cwd() ? "public/snapshots" : "snapshots")
+  const snapDir = flags.snapshots ?? defaultSnapshotsDir(root)
   const indexPath = resolve(snapDir, "index.json")
   if (existsSync(indexPath)) {
     const index = JSON.parse(readFileSync(indexPath, "utf8"))
@@ -365,14 +381,14 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
       const cur = currentViewport(page)
       // A cropped or other-viewport variant has a size of its own.
       if (!key.includes("#") && entry.width != null && entry.height != null && (entry.width !== cur.width || entry.height !== cur.height))
-        warn(`scan: snapshot for ${key} was captured at ${entry.width}×${entry.height}, page viewport is ${cur.width}×${cur.height} — run scan`)
+        warn(`scan: snapshot for ${key} was captured at ${entry.width}×${entry.height}, page viewport is ${cur.width}×${cur.height} — run \`npm run stavy:scan\``)
     }
     const pinned = m.pages.flatMap((p) => (p.instances ?? [{ dims: {} }]).map((inst) => instanceKey(p.id, resolveDims(p, inst.dims))))
     const unscanned = pinned.filter((k) => !index[k])
-    if (unscanned.length) warn(`scan: ${unscanned.length} pinned state(s) have no snapshot yet — the viewer asks for them in dev; or run \`npm run scan\` (e.g. ${unscanned[0]})`)
+    if (unscanned.length) warn(`scan: ${unscanned.length} pinned state(s) have no snapshot yet — the viewer asks for them in dev; or run \`npm run stavy:scan\` (e.g. ${unscanned[0]})`)
     console.log(`scan: ${scanned} state(s) in ${relative(root, indexPath)}`)
   } else {
-    warn(`scan: no ${relative(root, indexPath)} yet — snapshots are a cache: the dev viewer fills it on demand, or run \`npm run scan\` against the dev server`)
+    warn(`scan: no ${relative(root, indexPath)} yet — snapshots are a cache: the dev viewer fills it on demand, or run \`npm run stavy:scan\` against the dev server`)
   }
 
   // ---- stavy-content: the index and every board file (warnings; only unparsable JSON is an error)

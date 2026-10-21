@@ -56,11 +56,11 @@ test("a long row wraps at six cards", async ({ page }) => {
 test("a flow collapses and expands", async ({ page }) => {
   await page.goto("/stavy/?view=map")
   const lane = page.locator('[data-toc="scenario:employee-submits"]')
-  await expect(lane.locator("[data-instance]")).toHaveCount(7)
+  await expect(lane.locator("[data-instance]")).toHaveCount(8)
   await lane.locator(".ps-lane-toggle").dispatchEvent("click")
   await expect(lane.locator("[data-instance]")).toHaveCount(0)
   await lane.locator(".ps-lane-toggle").dispatchEvent("click")
-  await expect(lane.locator("[data-instance]")).toHaveCount(7)
+  await expect(lane.locator("[data-instance]")).toHaveCount(8)
   // Steps carry their title under the thumbnail.
   await expect(lane.locator("div.leading-snug", { hasText: "Start a new expense" })).toBeAttached()
 })

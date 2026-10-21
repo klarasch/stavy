@@ -17,9 +17,11 @@
 //   --base        path the app is served under, as in the build's base (default: /)
 //   --port        local port for the capture (default: 4179)
 //   --skip-build  capture against an existing build
+//   --from-cache  don't capture: copy the local snapshot cache (.stavy/snapshots) into the
+//                 build. Fast and needs no browser; the pictures are as fresh as your last scan.
 // Any other flags go to scan (e.g. --workers 6, --strict).
 import { createServer } from "node:http"
-import { createReadStream, existsSync, statSync } from "node:fs"
+import { createReadStream, existsSync, statSync, cpSync, rmSync } from "node:fs"
 import { extname, join, resolve, sep, dirname } from "node:path"
 import { spawnSync, spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
@@ -35,7 +37,8 @@ const dist = resolve(opt("--dist", "dist"))
 const base = ("/" + opt("--base", "/").replace(/^\/+|\/+$/g, "")).replace(/\/$/, "") // "" or "/x"
 const port = Number(opt("--port", 4179))
 const skipBuild = argv.includes("--skip-build")
-const passThrough = argv.filter((a, i) => !OWN.has(a) && !OWN.has(argv[i - 1]) && a !== "--skip-build")
+const fromCache = argv.includes("--from-cache")
+const passThrough = argv.filter((a, i) => !OWN.has(a) && !OWN.has(argv[i - 1]) && a !== "--skip-build" && a !== "--from-cache")
 
 const say = (s) => console.log(`publish: ${s}`)
 
@@ -48,6 +51,21 @@ const manifest = join(dist, "stavy.json")
 if (!existsSync(manifest)) {
   console.error(`publish: ${manifest} not found — is --dist right, and does the build copy public/ (stavy.json, stavy/, stavy-content/)?`)
   process.exit(1)
+}
+
+if (fromCache) {
+  const cache = [resolve(".stavy/snapshots"), resolve("public/snapshots")].find((d) => existsSync(join(d, "index.json")))
+  if (!cache) {
+    console.error("publish: no snapshot cache (.stavy/snapshots/index.json) — run npm run stavy:scan first, or publish without --from-cache")
+    process.exit(1)
+  }
+  const out = join(dist, "snapshots")
+  if (resolve(cache) !== resolve(out)) {
+    rmSync(out, { recursive: true, force: true })
+    cpSync(cache, out, { recursive: true })
+  }
+  say(`copied ${cache} into ${out} — deploy ${dist}. The viewer is at ${base || ""}/stavy/ (read-only there).`)
+  process.exit(0)
 }
 
 /* ---------------- a minimal static server for the build ---------------- */
