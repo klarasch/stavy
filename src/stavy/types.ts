@@ -544,6 +544,8 @@ export interface BoardFile {
   status?: string
   /** Set when the status becomes "ready": when and who. */
   ready?: ReadyMark
+  /** Item id whose picture Home shows for this board (default: the first item with one) */
+  cover?: string
   /** Auto-layout for unplaced top-level items */
   layout?: { direction?: "row" | "column"; gap?: number; maxWidth?: number }
   items: BoardItem[]

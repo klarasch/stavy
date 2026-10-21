@@ -115,3 +115,71 @@ export function pickableStates(): Array<{ page: PageDef; label: string; state?: 
 }
 
 export { humanize }
+
+/** A board's picture for Home: what to show, and whether it is a crop (shown whole) or a screen (cropped to fit). */
+export interface BoardCover {
+  url: string
+  fit: "cover" | "contain"
+}
+
+/**
+ * The cover of a board: the item named by `board.cover`, else the first item
+ * that has a picture (a screen with its crop, a states group's first state, a
+ * flow's first step, an image), depth first.
+ */
+export function boardCover(board: { cover?: string; items?: BoardItemLike[] }, contentUrl: (src: string) => string): BoardCover | null {
+  const all: BoardItemLike[] = []
+  const walk = (items?: BoardItemLike[]) => {
+    for (const it of items ?? []) {
+      all.push(it)
+      if (it.type === "section") walk(it.items)
+    }
+  }
+  walk(board.items)
+  const named = board.cover ? all.find((it) => it.id === board.cover) : undefined
+  for (const it of named ? [named, ...all] : all) {
+    const c = coverOf(it, contentUrl)
+    if (c) return c
+  }
+  return null
+}
+
+type BoardItemLike = {
+  id?: string
+  type: string
+  items?: BoardItemLike[]
+  screen?: string
+  state?: string
+  dims?: Record<string, string>
+  crop?: string
+  do?: BoardAction[]
+  viewport?: { width: number; height: number }
+  states?: string[]
+  flow?: string
+  src?: string
+}
+
+function coverOf(it: BoardItemLike, contentUrl: (src: string) => string): BoardCover | null {
+  const fit = (crop?: string): BoardCover["fit"] => (crop ? "contain" : "cover")
+  switch (it.type) {
+    case "screen": {
+      const shot = it.screen ? resolveShot(it.screen, { state: it.state, dims: it.dims, crop: it.crop, do: it.do, viewport: it.viewport }) : null
+      return shot?.url ? { url: shot.url, fit: fit(it.crop) } : null
+    }
+    case "states": {
+      const page = it.screen ? getPage(it.screen) : undefined
+      const first = page ? statesOf(page, it.states)[0] : undefined
+      const shot = page && first ? resolveShot(page.id, { dims: first.dims, crop: it.crop }) : null
+      return shot?.url ? { url: shot.url, fit: fit(it.crop) } : null
+    }
+    case "flow": {
+      const step = manifest.scenarios.find((s) => s.id === it.flow)?.steps[0]
+      const shot = step ? resolveShot(step.page, { dims: step.dims }) : null
+      return shot?.url ? { url: shot.url, fit: "cover" } : null
+    }
+    case "image":
+      return it.src ? { url: /^(https?:)?\/\//.test(it.src) ? it.src : contentUrl(it.src), fit: "contain" } : null
+    default:
+      return null
+  }
+}

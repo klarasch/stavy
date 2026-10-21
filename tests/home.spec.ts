@@ -31,3 +31,13 @@ test("a decisions doc and a changelog doc are listed in Docs", async ({ page }) 
   await expect(page.locator(".ps-docs-md h2").first()).toContainText("Rejecting an expense")
   await expect(page.locator(".ps-docs-nav")).toContainText("Changelog")
 })
+
+test("a board without a plain screen still gets a cover on Home (its flow's first step)", async ({ page }) => {
+  const id = "approval-story"
+  await page.route(`**/stavy-content/boards/${id}.json`, (route) =>
+    route.fulfill({ json: { title: "Only words and a flow", items: [{ id: "md", type: "markdown", md: "Hello" }, { id: "f", type: "flow", flow: "employee-submits" }] } })
+  )
+  await page.goto("/stavy/?view=home")
+  const card = page.locator(".ps-home-board", { hasText: "Only words and a flow" })
+  await expect(card.locator(".ps-home-thumb img")).toBeVisible()
+})

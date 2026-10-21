@@ -5,6 +5,36 @@ prints the sections between the release a repo last took and the one it is
 taking, so write each entry for that reader: what they get, and what, if
 anything, they have to do.
 
+## 0.4.0 — unreleased
+
+**What you get**
+
+- **Ready for dev in one click.** On the dev server the status chip on a
+  screen, on each named state and on a board is a menu: Draft, In review,
+  Ready for dev. Marking something ready records when, who (your git name)
+  and its snapshots at that moment; after a scan changes the picture it says
+  **Changed since ready**. Home lists everything ready for dev, newest first.
+- **Notes on the map.** Press E on the map to add sticky notes, Markdown,
+  images, sections and arrows among the screens. They're saved to
+  `stavy-content/map.json`, each attached to the screen area it sits on, so
+  it moves with that screen when the map changes. An arrow can point at a
+  screen. Scan and validate read the file too.
+- **Board covers on Home.** A board shows the picture of its first screen
+  (cropped as on the board), states group, flow or image, or the item its
+  `cover` names. Boards made of flows and Markdown no longer show an empty
+  card.
+- Board arrows are drawn again (a stray selector in the viewer's CSS clipped
+  them).
+- Flow tests (`stavy:tests`) check a `via: "click"` step inside the step
+  whose click leads to it, and scan no longer reports a click-only step's
+  target as missing.
+
+**What to do**
+
+1. `npm run stavy:update`.
+2. Nothing else. `map.json` appears the first time someone adds a note on
+   the map; commit it like your boards.
+
 ## 0.3.1 — 2026-10-21 (alpha)
 
 Fixes from the first 0.3 adoption.

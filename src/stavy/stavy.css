@@ -844,6 +844,7 @@ textarea.ps-inline-input { resize: none; width: 100%; font: inherit; }
 .ps-home-card:hover { transform: translateY(-1px); border-color: var(--ps-faint); }
 .ps-home-thumb { aspect-ratio: 16 / 9; background: var(--ps-area-bg); display: flex; align-items: center; justify-content: center; overflow: hidden; color: var(--ps-faint); }
 .ps-home-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
+.ps-home-thumb img.is-contain { object-fit: contain; object-position: center; padding: 12px; }
 .ps-home-card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; }
 .ps-home-card-h { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
 .ps-home-card-title { font-size: 14px; font-weight: 600; }

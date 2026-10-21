@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { BookOpen, ChevronDown, ExternalLink, FileText, Globe, Layers, Link as LinkIcon, Map as MapIcon, Pencil, Plus, Presentation, Trash2 } from "../icons"
 import { cn } from "../cn"
-import { manifest, loadBoard, loadText, useManifestRev, pageUrl } from "../manifest"
+import { manifest, loadBoard, loadText, useManifestRev, pageUrl, contentUrl } from "../manifest"
 import { StatusControl, statusLabel } from "../status"
 import { fetchCommits, useContentRev, useDev, type RepoCommit } from "../dev"
 import { HelpButton, ShortcutsSheet, ThemeToggle, cycleTheme, useChrome, useHotkeys } from "../chrome"
 import { Markdown } from "../boards/MarkdownView"
 import { PageSwitcher } from "../boards/PageSwitcher"
 import { boardHref, docHref, mapHref, saveLinks, useContentIndex, useSnapshotsRev } from "../boards/store"
-import { resolveShot } from "../boards/resolve"
+import { boardCover } from "../boards/resolve"
 import type { BoardFile, BoardItem, ContentLink, ReadyMark } from "../types"
 import { parseDecision, relativeDate, splitSections, type Section } from "./sections"
 
@@ -204,17 +204,6 @@ function ChangeEntry({ section }: { section: Section }) {
 
 /* ---------------- boards ---------------- */
 
-function firstScreen(items: BoardItem[] | undefined): BoardItem | null {
-  for (const it of items ?? []) {
-    if (it.type === "screen") return it
-    if (it.type === "section") {
-      const n = firstScreen(it.items)
-      if (n) return n
-    }
-  }
-  return null
-}
-
 function BoardCardLink({ id, title, description }: { id: string; title: string; description?: string }) {
   const rev = useContentRev()
   useSnapshotsRev()
@@ -229,14 +218,17 @@ function BoardCardLink({ id, title, description }: { id: string; title: string; 
       off = true
     }
   }, [id, rev])
-  const first = board ? firstScreen(board.items) : null
-  const shot = first && first.type === "screen" ? resolveShot(first.screen, { state: first.state, dims: first.dims }) : null
+  const cover = board ? boardCover(board, contentUrl) : null
   const [broken, setBroken] = useState(false)
   const status = board?.status
   return (
     <Link to={boardHref(id)} className="ps-home-card ps-home-board">
       <div className="ps-home-thumb">
-        {shot?.url && !broken ? <img src={shot.url} alt="" loading="lazy" draggable={false} onError={() => setBroken(true)} /> : <Presentation />}
+        {cover && !broken ? (
+          <img src={cover.url} alt="" loading="lazy" draggable={false} className={cover.fit === "contain" ? "is-contain" : undefined} onError={() => setBroken(true)} />
+        ) : (
+          <Presentation />
+        )}
       </div>
       <div className="ps-home-card-body">
         <div className="ps-home-card-h">

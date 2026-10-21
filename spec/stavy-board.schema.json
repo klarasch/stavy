@@ -10,6 +10,7 @@
     "title": { "type": "string" },
     "description": { "type": "string" },
     "status": { "type": "string", "description": "draft | review | ready (ready for development) are styled; anything else shows as-is." },
+    "cover": { "type": "string", "description": "Item id whose picture Home shows for this board. Default: the first screen, states group, flow or image." },
     "ready": {
       "type": "object",
       "description": "Set by the viewer when the status becomes ready: when and who.",

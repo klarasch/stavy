@@ -176,7 +176,8 @@ goes on a board.
 - **Transient steps:** a spinner, a "running" row, a toast that times out. Give the step `"hold": true` (usually
   with `"via": "click"`): the app's timers wait while the step shows, and Next lets the app finish and moves on.
   Without it the app moves on by itself and the step points at nothing.
-- Board file: `{ "title", "description"?, "status"?, "items": [...] }`. Every item has `id`, `type`, optional `x`/`y`/`w`/`h`, `title`, `note`.
+- Board file: `{ "title", "description"?, "status"?, "cover"?, "items": [...] }`. `cover` names the item whose picture
+  Home shows (default: the first screen, states group, flow or image). Every item has `id`, `type`, optional `x`/`y`/`w`/`h`, `title`, `note`.
   - `screen`: `screen` (page id), `state` or `dims`, `crop`?, `do`?, `viewport`?
   - `do` actions, in order: `{ "click": t }`, `{ "hover": t }`, `{ "focus": t }`, `{ "press": "Shift+F10" }` (a key
     on whatever has focus), `{ "type": "text", "into": t }`, `{ "wait": ms }`, `{ "hold": true }` (before a click: keep
