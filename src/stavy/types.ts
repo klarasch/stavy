@@ -74,6 +74,18 @@ export interface StateDef {
   tags?: string[]
   /** Registered (linkable, scannable) but not shown on the map by default. */
   hidden?: boolean
+  /** Handover status of this state: "draft" | "review" | "ready" (ready for development). */
+  status?: string
+  ready?: ReadyMark
+}
+
+/** Written by the viewer when something is marked ready for development. */
+export interface ReadyMark {
+  /** YYYY-MM-DD */
+  at: string
+  by?: string
+  /** Snapshot hash per state key at that moment: a different hash now means it changed since. */
+  snapshots?: Record<string, string>
 }
 
 export interface PageDef {
@@ -112,8 +124,9 @@ export interface PageDef {
   urlDefaults?: Record<string, string>
   /** How the map lays out this page's states: a row (default) or, opt-in, a matrix over two axes. */
   layout?: "row" | "matrix"
-  /** Handover status, shown as a chip. Free text; "draft" | "review" | "ready" are styled. */
+  /** Handover status: "draft" | "review" | "ready" (ready for development). */
   status?: string
+  ready?: ReadyMark
   /** Optional shape/grouping label (a registered template id) */
   template?: string
   /**
@@ -525,8 +538,10 @@ export type BoardItem = ScreenItem | StatesItem | FlowItem | MarkdownItem | Note
 export interface BoardFile {
   title: string
   description?: string
-  /** "draft" | "review" | "ready" are styled; anything else shows as-is */
+  /** "draft" | "review" | "ready" (ready for development); anything else shows as-is */
   status?: string
+  /** Set when the status becomes "ready": when and who. */
+  ready?: ReadyMark
   /** Auto-layout for unplaced top-level items */
   layout?: { direction?: "row" | "column"; gap?: number; maxWidth?: number }
   items: BoardItem[]

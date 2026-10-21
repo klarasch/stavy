@@ -32,3 +32,30 @@ test("editing a flow step title on the map persists to stavy.json", async ({ pag
   const bad = await request.patch("/__stavy/manifest", { data: { path: ["pages", "dashboard", "url"], value: "/x" } })
   expect(bad.status()).toBe(400)
 })
+
+test("marking a screen ready for dev saves status, who and the snapshot baseline, and Home lists it", async ({ page }) => {
+  const file = resolve("stavy.json")
+  const original = readFileSync(file, "utf8")
+  try {
+    await page.goto("/stavy/?view=map")
+    // Jump to the screen through the contents, as a person would, then open its status menu.
+    await page.locator(".ps-toc").getByText("Dashboard", { exact: true }).click()
+    const head = page.locator('[data-toc="page:dashboard"]').locator(".ps-status-control").first()
+    await expect(head).toBeInViewport()
+    await head.locator("button.ps-status-trigger").click()
+    await page.getByRole("option", { name: "Ready for dev" }).click()
+    await expect(head.locator(".ps-status-ready")).toBeVisible()
+    const saved = JSON.parse(readFileSync(file, "utf8")).pages.find((p: { id: string }) => p.id === "dashboard")
+    expect(saved.status).toBe("ready")
+    expect(saved.ready.at).toMatch(/^\d{4}-\d\d-\d\d$/)
+    // Each of the screen's states that has a snapshot gets its hash recorded (when the scan wrote hashes).
+    if (saved.ready.snapshots) expect(Object.keys(saved.ready.snapshots).every((k) => k.startsWith("dashboard?"))).toBe(true)
+
+    await page.goto("/stavy/?view=home")
+    const ready = page.getByTestId("home-ready")
+    await expect(ready).toBeVisible()
+    await expect(ready.getByRole("link", { name: "Dashboard" })).toBeVisible()
+  } finally {
+    writeFileSync(file, original)
+  }
+})

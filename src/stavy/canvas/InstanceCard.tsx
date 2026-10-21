@@ -3,13 +3,14 @@ import { useNavigate } from "react-router-dom"
 import { CanvasInspectContext, useLiveWhenVisible } from "./visibility"
 import { getPage, pageUrl, appUrl, valueLabel, instanceKey, snapshotUrl, snapshotEntry, pageViewport } from "../manifest"
 import { frameDoc, setWireframe } from "../frame"
-import type { AnnotationDef } from "../types"
+import type { AnnotationDef, ReadyMark } from "../types"
 import { cn } from "../cn"
 import { useComments } from "../comments/store"
 import { useScan, useSnapshotRev } from "../snapshots"
 import { RotateCcw } from "../icons"
 import { EditableText } from "../EditableText"
-import type { ManifestPath } from "../dev"
+import { patchManifest, type ManifestPath } from "../dev"
+import { StatusControl } from "../status"
 
 const EMPTY_CHIPS: string[] = []
 
@@ -43,6 +44,9 @@ export const InstanceCard = memo(function InstanceCard({
   label,
   labelPath,
   notePath,
+  status,
+  ready: readyMark,
+  statusPath,
 }: {
   pageId: string
   dims: Record<string, string>
@@ -66,6 +70,10 @@ export const InstanceCard = memo(function InstanceCard({
   /** Where `label` / `note` live in stavy.json: double-click edits them in the dev server. */
   labelPath?: ManifestPath
   notePath?: ManifestPath
+  /** A named state's handover status, and where the dev server saves it */
+  status?: string
+  ready?: ReadyMark
+  statusPath?: ManifestPath
 }) {
   useSnapshotRev() // re-render when an on-demand scan refreshed the index
   const vp = frame ?? pageViewport()
@@ -90,6 +98,7 @@ export const InstanceCard = memo(function InstanceCard({
   const url = href ?? pageUrl(pageId, dims, wireframe ? { w: "1" } : undefined)
   const key = instanceKey(pageId, dims)
   const scan = useScan([key])
+  const writable = scan.writable
   const missing = !entry || snapErr
 
   // Hover with a short delay in, a grace period out — sweeping the pointer
@@ -221,9 +230,10 @@ export const InstanceCard = memo(function InstanceCard({
           ))}
         </div>
       )}
-      {label && (
-        <div className="text-[11.5px] font-medium leading-snug px-0.5">
-          <EditableText path={labelPath} value={label} />
+      {(label || status || (statusPath && writable)) && (
+        <div className="flex items-center gap-1.5 text-[11.5px] font-medium leading-snug px-0.5">
+          {label && <EditableText path={labelPath} value={label} />}
+          <StatusControl status={status} ready={readyMark} placeholder="Status" onChange={statusPath && writable ? (v) => patchManifest(statusPath, v) : undefined} />
         </div>
       )}
       {(note || notePath) && (
@@ -247,6 +257,8 @@ export const InstanceCard = memo(function InstanceCard({
   a.wireframe === b.wireframe &&
   a.label === b.label &&
   (a.labelPath ?? []).join("/") === (b.labelPath ?? []).join("/") &&
+  a.status === b.status &&
+  a.ready === b.ready &&
   (a.notePath ?? []).join("/") === (b.notePath ?? []).join("/") &&
   a.frame?.width === b.frame?.width &&
   a.frame?.height === b.frame?.height)

@@ -85,7 +85,12 @@ The person is iterating fast. Don't make them wait on Stavy.
 - Register states that someone will look at. A screen with one state is
   normal.
 - `group` sorts screens into sections; `status` (`draft`/`review`/`ready`)
-  tells developers what's settled.
+  tells developers what's settled. It can sit on a screen, a named state or a
+  board; `ready` means ready for development. People set it in the viewer,
+  which also records `ready` (when, who, and the snapshot hashes at that
+  moment). Don't mark anything ready yourself unless asked. If you change a
+  ready screen, say so: the viewer flags it "Changed since ready" after the
+  next scan, and the person decides whether it goes back to review.
 - Not URL-reachable yet? Add a scene to the app (additively) or leave it
   out. Never fake it.
 

@@ -641,11 +641,19 @@
 .ps-save.is-error { color: #dc2626; }
 
 /* ---- status chip: draft / review / ready ---- */
-.ps-status { text-transform: capitalize; }
+.ps-status { text-transform: none; }
 .ps-status-dot { width: 6px; height: 6px; border-radius: 999px; background: var(--ps-faint); }
 .ps-status-draft .ps-status-dot { background: var(--ps-pin); }
 .ps-status-review .ps-status-dot { background: #3b82f6; }
 .ps-status-ready .ps-status-dot { background: #22c55e; }
+/* The status menu's own dots carry the status class themselves. */
+.ps-status-dot.ps-status-draft { background: var(--ps-pin); }
+.ps-status-dot.ps-status-review { background: #3b82f6; }
+.ps-status-dot.ps-status-ready { background: #22c55e; }
+.ps-status-none { color: var(--ps-faint); border-style: dashed; }
+.ps-status-trigger { cursor: pointer; border-radius: 999px; }
+.ps-status-trigger:focus-visible { outline: 2px solid var(--ps-focus); outline-offset: 2px; }
+.ps-status-changed { color: var(--ps-pin); border-color: color-mix(in srgb, var(--ps-pin) 45%, transparent); background: color-mix(in srgb, var(--ps-pin) 12%, transparent); }
 
 /* ---- the board surface ---- */
 .ps-board-root { position: relative; }
@@ -853,6 +861,11 @@ textarea.ps-inline-input { resize: none; width: 100%; font: inherit; }
 .ps-home-decision-t { font-size: 14px; font-weight: 600; }
 .ps-home-decision p { font-size: 13px; line-height: 1.55; margin: 8px 0 0; }
 .ps-home-k { font-weight: 600; }
+.ps-home-ready { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ps-home-ready li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--ps-border); font-size: 13px; }
+.ps-home-ready-t { font-weight: 500; color: var(--ps-fg); text-decoration: none; }
+.ps-home-ready-t:hover { text-decoration: underline; }
+.ps-home-ready-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
 .ps-home-commits { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .ps-home-commits li { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--ps-border); font-size: 13px; }
 .ps-home-commit-s { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -872,3 +885,8 @@ textarea.ps-inline-input { resize: none; width: 100%; font: inherit; }
 .ps-cpins { position: absolute; left: 0; top: 0; width: 0; height: 0; }
 .ps-commenting .ps-canvas-content { cursor: crosshair; }
 .ps-commenting .ps-canvas-content [data-item-id], .ps-commenting .ps-canvas-content [data-instance] { cursor: crosshair; }
+
+/* An unset status on a map card appears on hover only: a big map stays quiet. */
+[data-instance] .ps-status-control:has(.ps-status-none) { opacity: 0; transition: opacity 120ms; }
+[data-instance]:hover .ps-status-control:has(.ps-status-none),
+[data-instance] .ps-status-control:has(.ps-status-none):focus-within { opacity: 1; }

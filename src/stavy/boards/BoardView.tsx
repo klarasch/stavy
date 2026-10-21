@@ -20,6 +20,7 @@ import { resolveShot } from "./resolve"
 import { SurfaceCommentLayer } from "../comments/SurfaceCommentLayer"
 import { CommentsPanel } from "../comments/CommentsPanel"
 import { useComments } from "../comments/store"
+import { StatusControl } from "../status"
 
 /**
  * An authored board (stavy-content/boards/<id>.json): a free-form canvas page
@@ -863,7 +864,24 @@ export function BoardView() {
                 <span className="font-medium text-[13px]">{manifest.product.name}</span>
                 <span style={{ color: "var(--ps-faint)" }}>/</span>
                 <PageSwitcher current={{ kind: "board", id }} board={board} />
-                {board?.status && <StatusChip status={board.status} />}
+                {board && (
+                  <StatusControl
+                    status={board.status}
+                    ready={board.ready}
+                    onChange={
+                      writable
+                        ? (v) => {
+                            const { status: _s, ready: _r, ...rest } = board
+                            commit({
+                              ...rest,
+                              ...(v ? { status: v } : {}),
+                              ...(v === "ready" ? { ready: { at: new Date().toISOString().slice(0, 10), ...(dev?.user ? { by: dev.user } : {}) } } : {}),
+                            })
+                          }
+                        : undefined
+                    }
+                  />
+                )}
               </div>
 
               <div className="ps ps-glass absolute top-4 right-4 z-20 rounded-2xl px-1.5 py-1 flex items-center gap-0.5" data-ps-ui>
@@ -983,14 +1001,6 @@ export function BoardView() {
 
 /* ------------------------------------------------------------------ */
 
-function StatusChip({ status }: { status: string }) {
-  return (
-    <Chip sm className={cn("ps-status", `ps-status-${status}`)} title="Handover status">
-      <span className="ps-status-dot" />
-      {status}
-    </Chip>
-  )
-}
 
 /** The board's own title and description, set in the canvas above its content like a page heading. */
 function BoardHeading({ board, x, y, editMode, onPatch }: { board: BoardFile; x: number; y: number; editMode: boolean; onPatch: (p: Partial<BoardFile>) => void }) {

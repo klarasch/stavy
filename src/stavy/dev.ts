@@ -9,7 +9,7 @@ import { appBase, contentUrl, reloadManifest, workspaceBase } from "./manifest"
  * read-only. Nothing else changes.
  */
 
-type Health = { ok: boolean; writable: boolean; rev: number; scan?: { running: boolean; ok?: boolean; finishedAt?: string } }
+type Health = { ok: boolean; writable: boolean; rev: number; /** git user.name of whoever runs the dev server */ user?: string | null; scan?: { running: boolean; ok?: boolean; finishedAt?: string } }
 
 let health: Health | null = null
 const listeners = new Set<() => void>()

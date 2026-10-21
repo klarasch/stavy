@@ -28,6 +28,8 @@ import { useComments, MAP_BOARD } from "../comments/store"
 import { SurfaceCommentLayer } from "../comments/SurfaceCommentLayer"
 import { useScan } from "../snapshots"
 import { EditableText } from "../EditableText"
+import { StatusControl } from "../status"
+import { useDev, patchManifest } from "../dev"
 import { useManifestRev } from "../manifest"
 import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "../chrome"
 import type { BoardDef, PageDef, Scenario } from "../types"
@@ -108,6 +110,13 @@ function Area({
  * instance with a note of its own, or a page without states, edits the
  * instance entry. No path when the file has no such entry to edit.
  */
+/** A named state's status and where to set it (only pages with named states have per-state status). */
+function stateStatus(page: PageDef, stateId: string | undefined) {
+  const st = stateId ? page.states?.find((x) => x.id === stateId) : undefined
+  if (!st) return {}
+  return { status: st.status, ready: st.ready, statusPath: ["pages", page.id, "states", st.id, "status"] as (string | number)[] }
+}
+
 function notePathOf(page: PageDef, inst: { idx: number; note?: string; full: Record<string, string> }): (string | number)[] | undefined {
   const st = page.states?.find((x) => x.id === inst.full[STATE_DIM])
   if (st && (inst.note === undefined || inst.note === st.note)) return ["pages", page.id, "states", st.id, "note"]
@@ -128,6 +137,7 @@ const PageGroup = memo(function PageGroup({
   figures: BoardDef[]
 }) {
   const navigate = useNavigate()
+  const writable = !!useDev()?.writable
   const template = getTemplate(page.template)
   const scale = cardScale(page)
   const fr = frameOf(page)
@@ -200,11 +210,7 @@ const PageGroup = memo(function PageGroup({
                 )
               )}
             </span>
-            {page.status && (
-              <Chip sm className={`ps-status-${page.status.toLowerCase()}`} title={`Status: ${page.status}`}>
-                {page.status}
-              </Chip>
-            )}
+            <StatusControl status={page.status} ready={page.ready} onChange={writable ? (v) => patchManifest(["pages", page.id, "status"], v) : undefined} />
           </h3>
         </span>
       </div>
@@ -228,6 +234,7 @@ const PageGroup = memo(function PageGroup({
                     note={inst.note ?? page.states?.find((x) => x.id === inst.full[STATE_DIM])?.note}
                     labelPath={page.states ? ["pages", page.id, "states", inst.full[STATE_DIM], "label"] : undefined}
                     notePath={notePathOf(page, inst)}
+                    {...stateStatus(page, inst.full[STATE_DIM])}
                     scale={scale}
                     frame={page.frame}
                     chips={varying.filter((d) => d !== STATE_DIM)}

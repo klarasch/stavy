@@ -9,7 +9,12 @@
     "$schema": { "type": "string" },
     "title": { "type": "string" },
     "description": { "type": "string" },
-    "status": { "type": "string", "description": "draft | review | ready are styled; anything else shows as-is." },
+    "status": { "type": "string", "description": "draft | review | ready (ready for development) are styled; anything else shows as-is." },
+    "ready": {
+      "type": "object",
+      "description": "Set by the viewer when the status becomes ready: when and who.",
+      "properties": { "at": { "type": "string" }, "by": { "type": "string" } }
+    },
     "layout": {
       "type": "object",
       "description": "Auto-layout for unplaced top-level items.",

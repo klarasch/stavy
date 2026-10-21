@@ -23,8 +23,9 @@
 // fresh from disk, so hand edits and agent edits can't collide.
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, writeFileSync, createReadStream } from "node:fs"
 import { dirname, extname, join, relative, resolve, sep } from "node:path"
-import { execFile, spawn } from "node:child_process"
+import { execFile, execFileSync, spawn } from "node:child_process"
 import { applyPatch } from "./lib/patch.mjs"
+import { normalizeManifest, instanceKey, resolveDims, STATE_DIM } from "./lib/model.mjs"
 import { FRAME_HOOK } from "./lib/gate.mjs"
 
 const MAX_BODY = 15 * 1024 * 1024
@@ -114,6 +115,44 @@ export default function stavy(opts = {}) {
     })
   }
 
+  /**
+   * What "ready" records: the date, who (git user.name), and each covered
+   * state's snapshot hash right now, so the viewer can say when a screen
+   * changed after it was marked ready.
+   */
+  let user
+  const gitUser = () => {
+    if (user === undefined) {
+      try {
+        user = execFileSync("git", ["config", "user.name"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null
+      } catch {
+        user = null // no git identity
+      }
+    }
+    return user
+  }
+  const readyMeta = (m, path) => {
+    const meta = { at: new Date().toISOString().slice(0, 10) }
+    if (gitUser()) meta.by = gitUser()
+    try {
+      const index = JSON.parse(readFileSync(join(snapshotsDir, "index.json"), "utf8"))
+      const norm = normalizeManifest(JSON.parse(JSON.stringify(m)))
+      const page = norm.pages.find((p) => p.id === path[1])
+      if (page) {
+        const insts = path[2] === "states" ? [{ dims: { [STATE_DIM]: path[3] } }] : page.instances ?? [{ dims: {} }]
+        const snapshots = {}
+        for (const inst of insts) {
+          const key = instanceKey(page.id, resolveDims(page, inst.dims))
+          if (index[key]?.hash) snapshots[key] = index[key].hash
+        }
+        if (Object.keys(snapshots).length) meta.snapshots = snapshots
+      }
+    } catch {
+      /* no scan yet: ready without a baseline */
+    }
+    return meta
+  }
+
   return {
     name: "stavy",
     apply: "serve",
@@ -194,7 +233,7 @@ export default function stavy(opts = {}) {
         }
         const route = path.slice(at + "/__stavy/".length)
         try {
-          if (route === "health") return json(res, 200, { ok: true, writable: true, rev, scan: { running: scan.running, ok: scan.ok, finishedAt: scan.finishedAt } })
+          if (route === "health") return json(res, 200, { ok: true, writable: true, rev, user: gitUser(), scan: { running: scan.running, ok: scan.ok, finishedAt: scan.finishedAt } })
           if (route === "scan") {
             if (req.method === "GET") return json(res, 200, scan)
             if (req.method !== "POST") return json(res, 405, { ok: false })
@@ -209,7 +248,8 @@ export default function stavy(opts = {}) {
             const body = JSON.parse((await readBody(req)).toString() || "{}")
             const raw = readFileSync(manifestPath, "utf8")
             const m = JSON.parse(raw)
-            applyPatch(m, body.path, body.value) // throws (→ 400) for anything but the allowed text fields
+            const ready = body.path?.at?.(-1) === "status" && body.value === "ready" ? readyMeta(m, body.path) : undefined
+            applyPatch(m, body.path, body.value, { ready }) // throws (→ 400) for anything but the allowed text fields
             writeFileSync(manifestPath, JSON.stringify(m, null, 2) + (raw.endsWith("\n") ? "\n" : ""))
             bump()
             return json(res, 200, { ok: true, rev })

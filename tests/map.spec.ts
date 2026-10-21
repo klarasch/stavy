@@ -20,9 +20,15 @@ test("states render as a wrapping row: no placeholders, named states labelled, a
       { id: "details", label: "Details", note: "Fill in the basics", dims: { step: "details" } },
       { id: "receipt", dims: { step: "receipt" } },
       { id: "review-step", label: "Review", note: "Check before sending", dims: { step: "review" } },
-      { id: "done", dims: { step: "done" } },
+      { id: "done", dims: { step: "done" }, status: "ready", ready: { at: "2026-10-01", by: "Morgan", snapshots: { "submit-expense?_state=done": "an-old-hash" } } },
     ]
     delete p.instances
+  })
+  // The current scan has a different hash for "done" than when it was marked ready.
+  await page.route("**/snapshots/index.json", async (route) => {
+    const index = await (await route.fetch()).json()
+    index["submit-expense?_state=done"] = { ...(Object.values(index)[0] as object), hash: "a-new-hash" }
+    await route.fulfill({ json: index })
   })
   await page.goto("/stavy/?view=map")
   const area = page.locator('[data-toc="page:submit-expense"]')
@@ -33,7 +39,11 @@ test("states render as a wrapping row: no placeholders, named states labelled, a
   await expect(area.getByText("Check before sending")).toBeAttached()
   await expect(area.getByText("4 states")).toBeAttached()
   expect(await area.innerText()).not.toMatch(/_state/i)
-  await expect(area.locator(".ps-status-review")).toHaveText("review")
+  await expect(area.locator(".ps-status-review").first()).toHaveText("In review")
+  // A state marked ready shows it on its card, and that its picture changed since.
+  const done = area.locator(`[data-instance="submit-expense?_state=done"]`)
+  await expect(done.locator(".ps-status-ready")).toHaveText("Ready for dev")
+  await expect(done.getByText("Changed since ready")).toBeVisible()
   // Nothing is ever drawn for a combination nobody pinned.
   await expect(page.locator(".ps-cell-empty")).toHaveCount(0)
 })

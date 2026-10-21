@@ -508,6 +508,13 @@
                 "hidden": {
                   "type": "boolean",
                   "description": "Registered (linkable, scannable) but not shown on the map by default."
+                },
+                "status": {
+                  "type": "string",
+                  "description": "Handover status of this state: draft | review | ready (ready for development)."
+                },
+                "ready": {
+                  "$ref": "#/$defs/ready"
                 }
               }
             }
@@ -521,7 +528,10 @@
           },
           "status": {
             "type": "string",
-            "description": "Handover status chip. Free text; draft | review | ready are styled."
+            "description": "Handover status: draft | review | ready (ready for development). The viewer sets it in edit mode."
+          },
+          "ready": {
+            "$ref": "#/$defs/ready"
           },
           "tags": {
             "type": "array",
@@ -803,6 +813,15 @@
     }
   },
   "$defs": {
+    "ready": {
+      "type": "object",
+      "description": "Written by the viewer when the status becomes \"ready\": when, who, and each covered state's snapshot hash at that moment, so it can tell when a ready screen changed.",
+      "properties": {
+        "at": { "type": "string", "description": "Date marked ready (YYYY-MM-DD)" },
+        "by": { "type": "string" },
+        "snapshots": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
     "id": {
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",

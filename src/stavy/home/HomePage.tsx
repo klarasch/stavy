@@ -2,14 +2,15 @@ import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { BookOpen, ChevronDown, ExternalLink, FileText, Globe, Layers, Link as LinkIcon, Map as MapIcon, Pencil, Plus, Presentation, Trash2 } from "../icons"
 import { cn } from "../cn"
-import { manifest, loadBoard, loadText, useManifestRev } from "../manifest"
+import { manifest, loadBoard, loadText, useManifestRev, pageUrl } from "../manifest"
+import { StatusControl, statusLabel } from "../status"
 import { fetchCommits, useContentRev, useDev, type RepoCommit } from "../dev"
 import { HelpButton, ShortcutsSheet, ThemeToggle, cycleTheme, useChrome, useHotkeys } from "../chrome"
 import { Markdown } from "../boards/MarkdownView"
 import { PageSwitcher } from "../boards/PageSwitcher"
 import { boardHref, docHref, mapHref, saveLinks, useContentIndex, useSnapshotsRev } from "../boards/store"
 import { resolveShot } from "../boards/resolve"
-import type { BoardFile, BoardItem, ContentLink } from "../types"
+import type { BoardFile, BoardItem, ContentLink, ReadyMark } from "../types"
 import { parseDecision, relativeDate, splitSections, type Section } from "./sections"
 
 /**
@@ -71,6 +72,8 @@ export function HomePage() {
           </header>
 
           <LinksSection links={index.links ?? []} writable={!!dev?.writable} />
+
+          <ReadySection boardIds={boards.map((b) => b.id)} />
 
           {boards.length > 0 && (
             <section className="ps-home-sec">
@@ -238,11 +241,90 @@ function BoardCardLink({ id, title, description }: { id: string; title: string; 
       <div className="ps-home-card-body">
         <div className="ps-home-card-h">
           <span className="ps-home-card-title">{board?.title ?? title}</span>
-          {status && <span className={cn("ps-chip ps-chip-sm", `ps-status-${status.toLowerCase()}`)}>{status}</span>}
+          {status && <StatusControl status={status} ready={board?.ready} />}
         </div>
         {(board?.description ?? description) && <div className="ps-sub">{board?.description ?? description}</div>}
       </div>
     </Link>
+  )
+}
+
+/* ---------------- ready for dev ---------------- */
+
+type ReadyRow = { key: string; title: string; context?: string; href: string; ready?: ReadyMark }
+
+function useBoardFiles(ids: string[]): Record<string, BoardFile> {
+  const rev = useContentRev()
+  const [files, setFiles] = useState<Record<string, BoardFile>>({})
+  const key = ids.join(",")
+  useEffect(() => {
+    let off = false
+    Promise.all(ids.map((id) => loadBoard(id).then((b) => [id, b] as const, () => null))).then((rows) => {
+      if (!off) setFiles(Object.fromEntries(rows.filter((r): r is readonly [string, BoardFile] => !!r)))
+    })
+    return () => {
+      off = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, rev])
+  return files
+}
+
+/**
+ * What engineers can pick up: every screen, state and board marked "ready",
+ * newest first, with who marked it and whether it changed since.
+ */
+function ReadySection({ boardIds }: { boardIds: string[] }) {
+  const files = useBoardFiles(boardIds)
+  const rows: ReadyRow[] = []
+  const counts: Record<string, number> = {}
+  const count = (s?: string) => s && s !== "ready" && (counts[s] = (counts[s] ?? 0) + 1)
+  for (const p of manifest.pages) {
+    count(p.status)
+    if (p.status === "ready") rows.push({ key: `page:${p.id}`, title: p.label, context: "Screen", href: pageUrl(p.id, {}), ready: p.ready })
+    for (const st of p.states ?? []) {
+      count(st.status)
+      if (st.status === "ready")
+        rows.push({ key: `state:${p.id}/${st.id}`, title: st.label ?? st.id, context: p.label, href: pageUrl(p.id, { _state: st.id }), ready: st.ready })
+    }
+  }
+  for (const id of boardIds) {
+    const b = files[id]
+    count(b?.status)
+    if (b?.status === "ready") rows.push({ key: `board:${id}`, title: b.title, context: "Board", href: boardHref(id), ready: b.ready })
+  }
+  if (!rows.length && !Object.keys(counts).length) return null
+  rows.sort((a, b) => (b.ready?.at ?? "").localeCompare(a.ready?.at ?? ""))
+  const others = Object.entries(counts).map(([s, n]) => `${n} ${statusLabel(s).toLowerCase()}`)
+  return (
+    <section className="ps-home-sec" data-testid="home-ready">
+      <h2>
+        Ready for dev {others.length > 0 && <span className="ps-home-more">{others.join(", ")}</span>}
+      </h2>
+      {rows.length === 0 ? (
+        <p className="ps-sub">Nothing is marked ready yet. Set a screen, state or board to Ready for dev in the editor.</p>
+      ) : (
+        <ul className="ps-home-ready">
+          {rows.map((r) => (
+            <li key={r.key}>
+              <Link to={r.href} className="ps-home-ready-t">
+                {r.title}
+              </Link>
+              {r.context && <span className="ps-sub">{r.context}</span>}
+              <span className="ps-home-ready-meta">
+                <StatusControl status="ready" ready={r.ready} />
+                {r.ready?.at && (
+                  <span className="ps-sub">
+                    {r.ready.at}
+                    {r.ready.by ? `, ${r.ready.by}` : ""}
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

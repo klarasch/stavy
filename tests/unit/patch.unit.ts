@@ -59,3 +59,33 @@ describe("manifest patch paths", () => {
     expect(() => applyPatch(m, ["pages", "inbox", "label"], 3 as never)).toThrow()
   })
 })
+
+describe("status", () => {
+  const m = () => ({ pages: [{ id: "p", label: "P", states: [{ id: "a", url: "/a" }] }], scenarios: [] }) as any
+
+  it("sets a page or state status from the allowed set", () => {
+    const x = m()
+    applyPatch(x, ["pages", "p", "status"], "review")
+    applyPatch(x, ["pages", "p", "states", "a", "status"], "draft")
+    expect(x.pages[0].status).toBe("review")
+    expect(x.pages[0].states[0].status).toBe("draft")
+    expect(() => applyPatch(x, ["pages", "p", "status"], "shipped")).toThrow(/status must be one of/)
+  })
+
+  it("records the ready mark on ready and drops it otherwise", () => {
+    const x = m()
+    const ready = { at: "2026-10-21", by: "K", snapshots: { "p?_state=a": "h1" } }
+    applyPatch(x, ["pages", "p", "states", "a", "status"], "ready", { ready })
+    expect(x.pages[0].states[0].ready).toEqual(ready)
+    applyPatch(x, ["pages", "p", "states", "a", "status"], "review")
+    expect(x.pages[0].states[0].ready).toBeUndefined()
+    applyPatch(x, ["pages", "p", "states", "a", "status"], "")
+    expect(x.pages[0].states[0].status).toBeUndefined()
+  })
+
+  it("marks ready with a date when no mark is given", () => {
+    const x = m()
+    applyPatch(x, ["pages", "p", "status"], "ready")
+    expect(x.pages[0].ready.at).toMatch(/^\d{4}-\d\d-\d\d$/)
+  })
+})
