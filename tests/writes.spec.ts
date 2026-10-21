@@ -80,7 +80,15 @@ test("a note on the map is saved to map.json, anchored to the area it sits on, a
     await editor.press("Meta+Enter")
     await expect(page.locator("[data-map-layer] [data-item-type=note]")).toContainText("Ask PM")
 
-    await expect.poll(() => (existsSync(file) ? JSON.parse(readFileSync(file, "utf8")).items?.length : 0), { timeout: 5000 }).toBe(1)
+    // The file may be mid-write when read: treat unparsable as not there yet.
+    const items = () => {
+      try {
+        return JSON.parse(readFileSync(file, "utf8")).items?.length ?? 0
+      } catch {
+        return 0
+      }
+    }
+    await expect.poll(items, { timeout: 5000 }).toBe(1)
     const note = JSON.parse(readFileSync(file, "utf8")).items[0]
     expect(note.type).toBe("note")
     expect(note.text).toContain("Ask PM")
@@ -90,12 +98,24 @@ test("a note on the map is saved to map.json, anchored to the area it sits on, a
     // After a reload the note is drawn next to the same area.
     const anchorBox = async () => page.locator(`[data-toc="${note.anchor}"]`).boundingBox()
     const noteBox = async () => page.locator("[data-map-layer] [data-item-type=note]").boundingBox()
-    const before = { a: await anchorBox(), n: await noteBox() }
+    // Read positions once they've settled (the map re-measures its areas just after a save).
+    const settled = async () => {
+      let last = ""
+      for (let i = 0; i < 20; i++) {
+        const now = { a: await anchorBox(), n: await noteBox() }
+        const key = JSON.stringify(now)
+        if (key === last) return now
+        last = key
+        await page.waitForTimeout(100)
+      }
+      return { a: await anchorBox(), n: await noteBox() }
+    }
+    const before = await settled()
     await page.reload()
     await expect(page.locator("[data-map-layer] [data-item-type=note]")).toBeVisible()
     await page.locator(".ps-toc").getByText("Dashboard", { exact: true }).click()
     await page.waitForTimeout(600)
-    const after = { a: await anchorBox(), n: await noteBox() }
+    const after = await settled()
     const k = (r: { width: number } | null, s: { width: number } | null) => (r && s ? r.width / s.width : 1)
     // Offset from the area, in the area's own scale, is unchanged.
     const off = (x: { a: any; n: any }) => ({ dx: (x.n.x - x.a.x) / x.a.width, dy: (x.n.y - x.a.y) / x.a.width })
