@@ -84,3 +84,16 @@ them when it ships in one.
    `stavy.tgz` attached. That file name is fixed, so
    `releases/latest/download/stavy.tgz` always serves the newest release.
 
+
+### Publishing a nightly
+
+To try unreleased changes in a real repo before cutting a release, push the
+commit to the `nightly` branch (`git push -f origin HEAD:nightly`), or run the
+`nightly` workflow by hand from the Actions tab. It runs the same checks and
+`npm run release` as a release, with the version stamped
+`<package.json version>-nightly.<YYYYMMDD>.<shortsha>` (package.json isn't
+changed), and replaces the asset on the `nightly` prerelease, moving the tag to
+that commit. It is never marked latest, so `releases/latest` is unaffected. No
+CHANGELOG section is needed; an `## Unreleased` section at the top, if
+present, is shown to whoever installs the nightly. To build one locally:
+`STAVY_CHANNEL=nightly npm run release`.

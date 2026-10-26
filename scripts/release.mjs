@@ -4,6 +4,7 @@
 // schema, the skill, the docs. Unpack it anywhere and run its own init:
 //
 //   node scripts/release.mjs            → release/stavy.tgz + release/NOTES.md
+//   STAVY_CHANNEL=nightly node scripts/release.mjs   → the same, versioned as a nightly
 //   node scripts/release.mjs --no-build (reuse dist-viewer/ as it is)
 //
 // CI runs this on a v* tag and attaches release/stavy.tgz to the GitHub
@@ -18,7 +19,7 @@ import { execFileSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { changelogSection, copiedFiles, knownHashes } from "./lib/install.mjs"
+import { changelogSection, copiedFiles, knownHashes, unreleasedSection } from "./lib/install.mjs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const argv = process.argv.slice(2)
@@ -29,7 +30,11 @@ const die = (s) => {
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { cwd: root, encoding: "utf8", ...opts })
 
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"))
-const version = pkg.version
+// STAVY_CHANNEL=nightly stamps <version>-nightly.<YYYYMMDD>.<shortsha> into the
+// tarball (package.json in the repo is untouched) and needs no CHANGELOG section.
+const nightly = process.env.STAVY_CHANNEL === "nightly"
+if (process.env.STAVY_CHANNEL && !nightly) die(`unknown STAVY_CHANNEL "${process.env.STAVY_CHANNEL}" (only "nightly").`)
+let version = pkg.version
 const tag = process.env.GITHUB_REF_TYPE === "tag" ? process.env.GITHUB_REF_NAME : null
 if (tag && tag !== `v${version}`) die(`tag ${tag} doesn't match package.json version ${version}.`)
 
@@ -39,7 +44,11 @@ if (run("git", ["status", "--porcelain", "--untracked-files=no"]).trim() && !arg
   die("uncommitted changes — a release must be a commit. Commit first (or --allow-dirty for a local try).")
 }
 const changelog = readFileSync(join(root, "CHANGELOG.md"), "utf8")
-const notes = changelogSection(changelog, version)
+if (nightly) version = `${pkg.version}-nightly.${new Date().toISOString().slice(0, 10).replaceAll("-", "")}.${commit.slice(0, 7)}`
+const unreleased = unreleasedSection(changelog)
+const notes = nightly
+  ? `Nightly build ${version}. Not a release: it may change or break without notice.\n${unreleased ? `\n## Unreleased\n\n${unreleased}\n` : ""}`
+  : changelogSection(changelog, version)
 if (!notes) die(`CHANGELOG.md has no "## ${version}" section — write one before releasing.`)
 
 if (!argv.includes("--no-build")) {
@@ -104,7 +113,7 @@ const OVERLAY_ROOT = "0933a6d"
 const known = knownHashes({ src: root, paths: [...new Set([...Object.values(copiedFiles()), "skill/SKILL.md", "skill/RULES.md"])], since: OVERLAY_ROOT })
 writeFileSync(join(stage, "known-hashes.json"), JSON.stringify(known) + "\n")
 
-const release = { name: "stavy", version, commit, date: new Date().toISOString().slice(0, 10) }
+const release = { name: "stavy", version, commit, date: new Date().toISOString().slice(0, 10), ...(nightly ? { channel: "nightly" } : {}) }
 writeFileSync(join(stage, "RELEASE.json"), JSON.stringify(release, null, 2) + "\n")
 writeFileSync(
   join(stage, "package.json"),

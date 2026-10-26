@@ -337,21 +337,49 @@ export function readRelease(src) {
   return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : null
 }
 
-const semver = (v) => (String(v ?? "").match(/^(\d+)\.(\d+)\.(\d+)/) ?? []).slice(1).map(Number)
+// 1.2.3 or 1.2.3-nightly.20261026.abc1234 (a prerelease sorts below its release).
+const parseVersion = (v) => {
+  const m = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(String(v ?? ""))
+  return m ? { nums: [+m[1], +m[2], +m[3]], pre: m[4] ? m[4].split(".") : null } : { nums: [], pre: null }
+}
+export const isPrerelease = (v) => !!parseVersion(v).pre
+/** The release a version builds toward: 0.4.1-nightly.x -> 0.4.1. */
+export const baseVersion = (v) => parseVersion(v).nums.join(".") || null
 export function compareVersions(a, b) {
-  const [x, y] = [semver(a), semver(b)]
-  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0)
+  const [x, y] = [parseVersion(a), parseVersion(b)]
+  for (let i = 0; i < 3; i++) if ((x.nums[i] ?? 0) !== (y.nums[i] ?? 0)) return (x.nums[i] ?? 0) - (y.nums[i] ?? 0)
+  if (!x.pre || !y.pre) return x.pre ? -1 : y.pre ? 1 : 0
+  // Identifier by identifier: numbers numerically (nightly dates), the rest as text.
+  for (let i = 0; i < Math.max(x.pre.length, y.pre.length); i++) {
+    const [p, q] = [x.pre[i], y.pre[i]]
+    if (p === undefined) return -1
+    if (q === undefined) return 1
+    if (p === q) continue
+    const [pn, qn] = [/^\d+$/.test(p), /^\d+$/.test(q)]
+    if (pn && qn) return Number(p) - Number(q)
+    if (pn !== qn) return pn ? -1 : 1
+    return p < q ? -1 : 1
+  }
   return 0
 }
 
 /** CHANGELOG.md split into `## <version>` sections, newest first as written. */
 export function changelogSections(text) {
   const out = []
-  for (const part of text.split(/^(?=## \d+\.\d+\.\d+)/m)) {
+  for (const part of text.split(/^(?=## )/m)) {
     const m = /^## (\d+\.\d+\.\d+)[^\n]*\n/.exec(part)
     if (m) out.push({ version: m[1], heading: m[0].trim(), body: part.slice(m[0].length).trim() })
   }
   return out
+}
+
+/** The "## Unreleased" section's body, or null when absent or empty. */
+export function unreleasedSection(text) {
+  for (const part of text.split(/^(?=## )/m)) {
+    const m = /^## Unreleased[^\n]*(?:\n|$)/i.exec(part)
+    if (m) return part.slice(m[0].length).trim() || null
+  }
+  return null
 }
 
 export function changelogSection(text, version) {
@@ -363,4 +391,16 @@ export function changelogBetween(text, since, upTo) {
   return changelogSections(text).filter(
     (s) => compareVersions(s.version, upTo) <= 0 && (!since || compareVersions(s.version, since) > 0),
   )
+}
+
+/**
+ * What an update from `since` to `target` should print. A nightly target is
+ * compared by the release it builds toward, and a nightly lock by the release
+ * it was built toward, so a nightly never replays a section already shown.
+ * A nightly also gets the "## Unreleased" section, which it may contain.
+ */
+export function changelogForUpdate(text, since, target) {
+  const nightly = isPrerelease(target)
+  const sections = changelogBetween(text, nightly && since ? baseVersion(since) : since, nightly ? baseVersion(target) : target)
+  return { sections, unreleased: nightly ? unreleasedSection(text) : null }
 }

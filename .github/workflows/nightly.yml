@@ -1,0 +1,43 @@
+name: nightly
+# Builds the same stavy.tgz as a release, versioned <version>-nightly.<date>.<sha>,
+# and publishes it to the one prerelease tagged `nightly` (never "latest").
+#   https://github.com/klarasch/stavy/releases/download/nightly/stavy.tgz
+on:
+  push:
+    branches: [nightly]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 } # full history: known-hashes.json covers every past version
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx tsc -b
+      - run: npm test
+      # Same build, self-test and pack as a release; STAVY_CHANNEL stamps the
+      # nightly version and skips the "CHANGELOG has this version" check.
+      - run: node scripts/release.mjs
+        env:
+          STAVY_CHANNEL: nightly
+      # Move the tag to this commit, then replace the asset on the prerelease.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git tag -f nightly "$GITHUB_SHA"
+          git push -f origin refs/tags/nightly
+          title="Stavy $(node -p 'require("./release/stavy/RELEASE.json").version')"
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release edit nightly --prerelease --latest=false --title "$title" --notes-file release/NOTES.md
+            gh release upload nightly release/stavy.tgz --clobber
+          else
+            gh release create nightly release/stavy.tgz --prerelease --latest=false --verify-tag --title "$title" --notes-file release/NOTES.md
+          fi
