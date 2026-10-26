@@ -22,12 +22,15 @@
 //   --strict   a missing scenario-step target fails the scan (otherwise a warning)
 //
 // A rendered page identical to the cached one keeps its file and `at`, so the
-// viewer does not reload images that did not change.
+// viewer does not reload images that did not change; `checkedAt` says when it
+// was last looked at. The index is written after every capture (merged into a
+// fresh read, replaced atomically), so a viewer watching it updates card by
+// card. With --keys, states are captured in the order given.
 //
 // Requires `playwright` + Chromium (`npx playwright install chromium`) and a
 // running dev/preview server at --url. Exit code 1 only when a state fails to
 // load (or, with --strict, when a scenario target is missing).
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs"
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, renameSync } from "node:fs"
 import { createHash } from "node:crypto"
 import { resolve, dirname } from "node:path"
 import { chromium } from "playwright"
@@ -78,6 +81,22 @@ mkdirSync(out, { recursive: true })
 const indexPath = resolve(out, "index.json")
 const readIndex = () => (existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, "utf8")) : {})
 const index = readIndex()
+// Replace the index in one step: a reader never sees half a file.
+const writeIndex = (data) => {
+  const tmp = `${indexPath}.${process.pid}.tmp`
+  writeFileSync(tmp, JSON.stringify(data, null, 1) + "\n")
+  renameSync(tmp, indexPath)
+}
+// Merge one entry into the index as it is now on disk (another scan may be writing too).
+const writeEntry = (key, entry) => {
+  try {
+    const merged = readIndex()
+    merged[key] = entry
+    writeIndex(merged)
+  } catch {
+    /* unreadable index: the final write below still records it */
+  }
+}
 
 const sizeFor = (s) => ({ W: s.variant?.viewport?.width ?? s.page.frame?.width ?? defaultW, H: s.variant?.viewport?.height ?? s.page.frame?.height ?? defaultH })
 // Keys in --keys may contain commas (a `type` action); a key always starts "<page-id>?",
@@ -353,8 +372,10 @@ async function capture(page, s, consoleErrors) {
     ...(actionFailures.length ? { actionFailed: actionFailures } : {}),
     hash,
     at: same ? prev.at : new Date().toISOString(),
+    checkedAt: new Date().toISOString(),
   }
   results.set(s.key, entry)
+  writeEntry(s.key, entry)
   same ? counts.unchanged++ : counts.captured++
 
   const why = [...s.why].join(", ")
@@ -428,7 +449,7 @@ if (all && !only && keysArg == null) {
     delete merged[key]
   }
 }
-writeFileSync(indexPath, JSON.stringify(merged, null, 1) + "\n")
+writeIndex(merged)
 
 for (const w of warnings) console.log(`  warn  ${w}`)
 const missingN = [...results.values()].filter((e) => e.missing?.length).length

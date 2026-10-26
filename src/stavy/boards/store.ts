@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react"
 import { contentIndex, loadContentIndex } from "../manifest"
 import { deleteContent, useContentRev, writeContent } from "../dev"
-import { refreshSnapshotIndex, useSnapshotRev } from "../snapshots"
+import { useLiveSnapshotRev } from "../snapshots"
 import type { BoardFile, ContentIndex, ContentLink } from "../types"
 
 /**
@@ -32,21 +32,12 @@ export function useContentIndex(): ContentIndex {
   return useSyncExternalStore(subscribe, () => index)
 }
 
-let lastSnapRev = 0
 /**
  * Re-read the snapshot index on every content change — a scan an agent ran
  * from the terminal finishes, a board asked for a variant — so cards on a
- * board (and the map's own cards, via snapshots.ts) show new captures live.
+ * board show new captures live (snapshots.ts useLiveSnapshotRev).
  */
-export function useSnapshotsRev(): number {
-  const rev = useContentRev()
-  useEffect(() => {
-    if (!rev || rev === lastSnapRev) return
-    lastSnapRev = rev
-    void refreshSnapshotIndex()
-  }, [rev])
-  return useSnapshotRev()
-}
+export const useSnapshotsRev = useLiveSnapshotRev
 
 /* ------------------------------------------------------------------ */
 /* Routing: ?b=<board> · ?doc=<id> · ?view=map · neither = Home        */

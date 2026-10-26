@@ -584,6 +584,8 @@ export interface SnapshotEntry {
   hash?: string
   /** ISO timestamp the image last changed */
   at?: string
+  /** ISO timestamp the state was last captured, changed or not */
+  checkedAt?: string
 }
 
 /** instanceKey(page, dims) → entry */

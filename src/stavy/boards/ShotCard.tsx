@@ -2,7 +2,7 @@ import { memo, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { InstanceCard } from "../canvas/InstanceCard"
 import { frameOf, pageUrl, snapshotIndex } from "../manifest"
-import { useScan } from "../snapshots"
+import { useScan, useUpdating } from "../snapshots"
 import { cn } from "../cn"
 import { snapshotHref, type ResolvedShot } from "./resolve"
 import { useSnapshotsRev } from "./store"
@@ -48,6 +48,7 @@ function VariantCard({ shot, width, href }: { shot: ResolvedShot; width: number;
   const aspect = entry ? entry.height / entry.width : shot.variant?.crop ? 0.45 : fr.height / fr.width
   const h = Math.round(width * aspect)
   const missing = !url || err
+  const updating = useUpdating(entry)
 
   return (
     <div className="ps flex flex-col gap-1.5" style={{ width }} data-instance={shot.key}>
@@ -85,6 +86,7 @@ function VariantCard({ shot, width, href }: { shot: ResolvedShot; width: number;
         ) : (
           <img className="ps-card-img" src={url!} alt={`${shot.page.label} · ${shot.label}`} draggable={false} loading="lazy" onError={() => setErr(true)} />
         )}
+        {updating && !missing && <span className="ps-card-updating" data-ps-ui title="Updating after a code change"><span className="ps-spinner" /></span>}
       </div>
     </div>
   )
