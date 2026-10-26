@@ -125,7 +125,7 @@ function stavyManifest(): Plugin {
 export default defineConfig({
   // Sub-path hosting (GitHub Pages): BASE_PATH=/stavy/ npm run build
   base: process.env.BASE_PATH ?? "/",
-  plugins: [react(), tailwindcss(), stavyManifest(), stavy({ root: ".", snapshots: "public/snapshots" })],
+  plugins: [react(), tailwindcss(), stavyManifest(), stavy({ root: ".", snapshots: "public/snapshots", autoRefresh: { ignore: ["src/stavy", "stavy", "spec"] } })],
   // Keep React component names in production builds so the inspector can
   // show "Badge" instead of "Ct" on deployed prototypes.
   esbuild: { keepNames: true },

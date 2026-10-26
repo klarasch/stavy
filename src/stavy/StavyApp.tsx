@@ -6,6 +6,7 @@ import { ChromeProvider, EyeToggle } from "./chrome"
 import { CommentsProvider } from "./comments/store"
 import { useManifestSync } from "./dev"
 import { contentIndex } from "./manifest"
+import { LiveSnapshots } from "./snapshots"
 
 const hasContent = () => Object.keys(contentIndex).length > 0
 
@@ -56,6 +57,7 @@ export function StavyApp() {
           <Route path="*" element={<Root />} />
         </Routes>
         <EyeToggle />
+        <LiveSnapshots />
       </CommentsProvider>
     </ChromeProvider>
   )

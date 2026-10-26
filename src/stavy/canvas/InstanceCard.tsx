@@ -6,7 +6,7 @@ import { frameDoc, setWireframe } from "../frame"
 import type { AnnotationDef, ReadyMark } from "../types"
 import { cn } from "../cn"
 import { useComments } from "../comments/store"
-import { useScan, useSnapshotRev } from "../snapshots"
+import { useScan, useSnapshotRev, useUpdating } from "../snapshots"
 import { RotateCcw } from "../icons"
 import { EditableText } from "../EditableText"
 import { patchManifest, type ManifestPath } from "../dev"
@@ -100,6 +100,7 @@ export const InstanceCard = memo(function InstanceCard({
   const scan = useScan([key])
   const writable = scan.writable
   const missing = !entry || snapErr
+  const updating = useUpdating(entry)
 
   // Hover with a short delay in, a grace period out — sweeping the pointer
   // across the canvas must not mount a frame per card it crosses.
@@ -177,6 +178,7 @@ export const InstanceCard = memo(function InstanceCard({
             />
           )}
           {snapshot && !snapErr && <img className="ps-card-img" src={snapshot} alt="" draggable={false} onError={() => setSnapErr(true)} />}
+          {updating && !scan.busy && <span className="ps-card-updating" data-ps-ui title="Updating after a code change"><span className="ps-spinner" /></span>}
           {/* The shield: cards are static previews — click opens the player; the inspector hit-tests through it. */}
           <div className="ps-card-shield" onClick={() => navigate(url)} />
           {scan.writable && !missing && (

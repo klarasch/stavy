@@ -5,7 +5,7 @@ import { CanvasInspectContext, useLiveWhenVisible } from "../canvas/visibility"
 import { settleFrame } from "../frame"
 import { cropBox, replayActions, replaysLive } from "./liveVariant"
 import { appUrl, frameOf, pageUrl, snapshotIndex } from "../manifest"
-import { useScan } from "../snapshots"
+import { useScan, useUpdating } from "../snapshots"
 import { cn } from "../cn"
 import { snapshotHref, type ResolvedShot } from "./resolve"
 import { useSnapshotsRev } from "./store"
@@ -51,6 +51,7 @@ function VariantCard({ shot, width, href }: { shot: ResolvedShot; width: number;
   const aspect = entry ? entry.height / entry.width : shot.variant?.crop ? 0.45 : fr.height / fr.width
   const h = Math.round(width * aspect)
   const missing = !url || err
+  const updating = useUpdating(entry)
 
   // Live like the map's cards: while the inspector hovers this card (or holds
   // a selection in it), or in live mode near the viewport, the real app runs
@@ -149,6 +150,7 @@ function VariantCard({ shot, width, href }: { shot: ResolvedShot; width: number;
             {scan.busy ? "Capturing" : "Capture"}
           </button>
         )}
+        {updating && !missing && <span className="ps-card-updating" data-ps-ui title="Updating after a code change"><span className="ps-spinner" /></span>}
       </div>
     </div>
   )

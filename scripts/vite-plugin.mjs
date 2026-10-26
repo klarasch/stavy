@@ -7,24 +7,33 @@
 //   export default defineConfig({ plugins: [react(), stavy()] })
 //
 // What it adds, all under /__stavy/:
-//   GET    /__stavy/health          { ok, writable, rev, scan }   rev bumps on any content/manifest/snapshot change
+//   GET    /__stavy/health          { ok, writable, rev, scan, refreshing, sourceChangedAt }
+//                                   rev bumps on any content/manifest/snapshot change
 //   PUT    /__stavy/content/<path>  write a file under stavy-content/ (boards, docs, notes, comments, assets)
 //   DELETE /__stavy/content/<path>  remove one
 //   POST   /__stavy/scan            { keys?: string[], all?: boolean } → re-capture those states in the background
 //   GET    /__stavy/scan            the running / last scan
+//   POST   /__stavy/visible         { keys: string[] } the cards the viewer has on screen: refreshed first
 //   PATCH  /__stavy/manifest        { path, value } → set ONE text field of stavy.json (titles, labels, notes;
-//                                   see scripts/lib/patch.mjs for the allowed paths). Read fresh, set, write back.
+//                                   see scripts/lib/patch.mjs for the allowed paths). Read fresh, set, write
+//                                   back only the bytes of that value, so the diff is one line.
 //   GET    /__stavy/git-log         ?limit=20[&path=…] → [{ hash, date, author, subject }], [] outside a repo
 // and, when stavy.json is not inside public/, serves /stavy.json and
 // /stavy-content/** from where they are.
 //
+// Auto-refresh: when the app's source changes, it re-captures the states in
+// the background (scripts/lib/refresh.mjs): the cards on screen first, then
+// the rest. The scan writes its index after each capture, so cards update one
+// by one. `stavy({ autoRefresh: false })` turns it off.
+//
 // It never rewrites stavy.json wholesale or touches app code: the only change
 // it makes to the screen registry is the single text field PATCH names, read
 // fresh from disk, so hand edits and agent edits can't collide.
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, watch, writeFileSync, createReadStream } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, watch, writeFileSync, createReadStream } from "node:fs"
 import { dirname, extname, join, relative, resolve, sep } from "node:path"
 import { execFile, execFileSync, spawn } from "node:child_process"
-import { applyPatch } from "./lib/patch.mjs"
+import { patchManifestText } from "./lib/patch.mjs"
+import { createRefresher } from "./lib/refresh.mjs"
 import { normalizeManifest, instanceKey, resolveDims, STATE_DIM } from "./lib/model.mjs"
 import { FRAME_HOOK } from "./lib/gate.mjs"
 
@@ -41,12 +50,15 @@ const TYPES = {
 }
 
 /**
- * @param {{ root?: string, manifest?: string, snapshots?: string, scanScript?: string, url?: string }} [opts]
+ * @param {{ root?: string, manifest?: string, snapshots?: string, scanScript?: string, url?: string,
+ *           autoRefresh?: boolean | { debounceMs?: number, ignore?: (string | RegExp)[] } }} [opts]
  *   root       folder holding stavy.json (default: public/ if public/stavy.json exists, else the project root)
  *   manifest   path to stavy.json (default: <root>/stavy.json)
  *   snapshots  folder scan writes snapshots to (default: <root>/snapshots)
  *   scanScript path to scan.mjs (default: scripts/stavy/scan.mjs, else scripts/scan.mjs)
  *   url        the dev server's own URL for scans (default: derived from the server)
+ *   autoRefresh re-capture after the app's source changes (default: on). `ignore`: more paths
+ *              (relative to the project, or RegExps) whose changes don't count as app changes
  */
 export default function stavy(opts = {}) {
   const cwd = process.cwd()
@@ -62,8 +74,8 @@ export default function stavy(opts = {}) {
   const bump = () => (rev = Date.now())
   /** @type {{ running: boolean, keys?: string[] | "all", startedAt?: string, finishedAt?: string, ok?: boolean, log: string }} */
   let scan = { running: false, log: "" }
-  let queued = null
   let serverUrl = opts.url ?? null
+  const auto = opts.autoRefresh === false ? null : typeof opts.autoRefresh === "object" ? { ...opts.autoRefresh } : {}
 
   const json = (res, code, body) => {
     res.statusCode = code
@@ -91,29 +103,43 @@ export default function stavy(opts = {}) {
     return p === contentDir || p.startsWith(contentDir + sep) ? p : null
   }
 
-  const runScan = (keys) => {
-    if (scan.running) {
-      queued = keys === "all" || queued === "all" ? "all" : [...new Set([...(queued ?? []), ...keys])]
-      return
-    }
-    const args = [scanScript, manifestPath, "--url", serverUrl ?? "http://localhost:5173", "--out", snapshotsDir]
-    if (keys === "all") args.push("--all")
-    else args.push("--keys", keys.join(","))
-    scan = { running: true, keys, startedAt: new Date().toISOString(), log: "" }
-    const child = spawn(process.execPath, args, { cwd, env: process.env })
-    const take = (d) => (scan.log = (scan.log + d.toString()).slice(-8000))
-    child.stdout.on("data", take)
-    child.stderr.on("data", take)
-    child.on("close", (code) => {
-      scan = { ...scan, running: false, ok: code === 0, finishedAt: new Date().toISOString() }
-      bump()
-      if (queued) {
-        const next = queued
-        queued = null
-        runScan(next)
+  // One scan process at a time; the refresher decides what goes next.
+  let logger = console
+  const spawnScan = (keys, { background }) =>
+    new Promise((done) => {
+      const args = [scanScript, manifestPath, "--url", serverUrl ?? "http://localhost:5173", "--out", snapshotsDir]
+      if (keys === "all") args.push("--all")
+      else args.push("--keys", keys.join(","))
+      if (background) args.push("--workers", "2")
+      scan = { running: true, keys, startedAt: new Date().toISOString(), log: "" }
+      const child = spawn(process.execPath, args, { cwd, env: process.env })
+      const take = (d) => {
+        scan.log = (scan.log + d.toString()).slice(-8000)
+        bump() // the scan writes its index after each capture: let the viewer look
       }
+      child.stdout.on("data", take)
+      child.stderr.on("data", take)
+      child.on("error", () => {})
+      child.on("close", (code) => {
+        scan = { ...scan, running: false, ok: code === 0, finishedAt: new Date().toISOString() }
+        bump()
+        // No browser to scan with: stop refreshing on every save, say so once.
+        if (code !== 0 && auto && !auto.off && /Cannot find (package|module) 'playwright'|Executable doesn't exist/.test(scan.log)) {
+          auto.off = true
+          logger.warn("[stavy] auto-refresh off: the scan needs Playwright + Chromium (npx playwright install chromium)")
+        }
+        done(code)
+      })
     })
+  /** Every state the snapshot index holds, in its order. */
+  const capturedKeys = () => {
+    try {
+      return Object.keys(JSON.parse(readFileSync(join(snapshotsDir, "index.json"), "utf8")))
+    } catch {
+      return []
+    }
   }
+  const refresher = createRefresher({ run: spawnScan, capturedKeys, debounceMs: auto?.debounceMs ?? 800 })
 
   /**
    * What "ready" records: the date, who (git user.name), and each covered
@@ -153,6 +179,41 @@ export default function stavy(opts = {}) {
     return meta
   }
 
+  /**
+   * Count a change as the app's when it isn't Stavy's own output or tooling:
+   * content, snapshots, the manifest, build output, tests and docs don't.
+   */
+  const watchSource = (server) => {
+    const publicDir = resolve(cwd, "public")
+    // A built viewer in public/<dir>/ (it has a VERSION file) isn't the app either.
+    let viewerDirs = []
+    try {
+      viewerDirs = readdirSync(publicDir).map((d) => join(publicDir, d)).filter((d) => existsSync(join(d, "VERSION")))
+    } catch {
+      /* no public/ */
+    }
+    const under = (file, dir) => file === dir || file.startsWith(dir + sep)
+    const extra = (auto.ignore ?? []).map((x) => (x instanceof RegExp ? x : resolve(cwd, x)))
+    const ignored = (file) => {
+      const f = resolve(file)
+      if (!under(f, cwd)) return true
+      if (f === manifestPath || under(f, contentDir) || under(f, snapshotsDir) || viewerDirs.some((d) => under(f, d))) return true
+      const rel = relative(cwd, f).split(sep).join("/")
+      if (under(f, dirname(scanScript))) return true // Stavy's own scripts
+      if (/(^|\/)(node_modules|\.git|\.stavy)\//.test(rel)) return true
+      if (/^(dist[^/]*|test-results|playwright-report|coverage|tests?|e2e|docs)\//.test(rel)) return true
+      if (/\.(md|log)$/i.test(rel) || /(^|\/)\.DS_Store$/.test(rel)) return true
+      return extra.some((x) => (x instanceof RegExp ? x.test(rel) : under(f, x)))
+    }
+    const changed = (file) => {
+      if (auto.off || ignored(file)) return
+      refresher.sourceChanged()
+    }
+    server.watcher.on("change", changed)
+    server.watcher.on("add", changed)
+    server.watcher.on("unlink", changed)
+  }
+
   return {
     name: "stavy",
     apply: "serve",
@@ -164,6 +225,8 @@ export default function stavy(opts = {}) {
       handler: () => [{ tag: "script", children: FRAME_HOOK.replace(/^<script>|<\/script>$/g, ""), injectTo: "head-prepend" }],
     },
     configureServer(server) {
+      logger = server.config.logger ?? console
+      if (auto) watchSource(server)
       for (const dir of [contentDir, snapshotsDir, dirname(manifestPath)]) {
         try {
           if (existsSync(dir)) watch(dir, { recursive: dir !== dirname(manifestPath) }, (_e, f) => {
@@ -233,24 +296,46 @@ export default function stavy(opts = {}) {
         }
         const route = path.slice(at + "/__stavy/".length)
         try {
-          if (route === "health") return json(res, 200, { ok: true, writable: true, rev, user: gitUser(), scan: { running: scan.running, ok: scan.ok, finishedAt: scan.finishedAt } })
+          if (route === "health") {
+            const r = refresher.status()
+            return json(res, 200, {
+              ok: true,
+              writable: true,
+              rev,
+              user: gitUser(),
+              scan: { running: scan.running, ok: scan.ok, finishedAt: scan.finishedAt },
+              autoRefresh: !!auto && !auto.off,
+              refreshing: r.refreshing,
+              sourceChangedAt: r.sourceChangedAt,
+            })
+          }
+          if (route === "visible") {
+            if (req.method !== "POST") return json(res, 405, { ok: false })
+            const body = JSON.parse((await readBody(req)).toString() || "{}")
+            const keys = Array.isArray(body.keys) ? body.keys.filter((k) => typeof k === "string" && k.length < 2000) : []
+            refresher.setVisible(keys)
+            return json(res, 200, { ok: true })
+          }
           if (route === "scan") {
             if (req.method === "GET") return json(res, 200, scan)
             if (req.method !== "POST") return json(res, 405, { ok: false })
             const body = JSON.parse((await readBody(req)).toString() || "{}")
             const keys = body.all ? "all" : Array.isArray(body.keys) ? body.keys.filter((k) => typeof k === "string") : []
             if (keys !== "all" && keys.length === 0) return json(res, 400, { ok: false, error: "keys or all required" })
-            runScan(keys)
-            return json(res, 202, { ok: true, queued: scan.running })
+            const queued = scan.running
+            refresher.request(keys)
+            return json(res, 202, { ok: true, queued })
           }
           if (route === "manifest") {
             if (req.method !== "PATCH") return json(res, 405, { ok: false })
             const body = JSON.parse((await readBody(req)).toString() || "{}")
             const raw = readFileSync(manifestPath, "utf8")
-            const m = JSON.parse(raw)
-            const ready = body.path?.at?.(-1) === "status" && body.value === "ready" ? readyMeta(m, body.path) : undefined
-            applyPatch(m, body.path, body.value, { ready }) // throws (→ 400) for anything but the allowed text fields
-            writeFileSync(manifestPath, JSON.stringify(m, null, 2) + (raw.endsWith("\n") ? "\n" : ""))
+            const ready = body.path?.at?.(-1) === "status" && body.value === "ready" ? readyMeta(JSON.parse(raw), body.path) : undefined
+            // Throws (→ 400) for anything but the allowed text fields.
+            const r = patchManifestText(raw, body.path, body.value, { ready })
+            // `text` changes only the edited value's bytes. When that edit can't be
+            // made (it never should), fall back to rewriting the whole file.
+            writeFileSync(manifestPath, r.text ?? JSON.stringify(r.manifest, null, 2) + (raw.endsWith("\n") ? "\n" : ""))
             bump()
             return json(res, 200, { ok: true, rev })
           }

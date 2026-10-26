@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "validate": "node scripts/validate.mjs",
     "scan": "node scripts/scan.mjs",
+    "stavy:format": "node scripts/format.mjs",
     "check": "node scripts/validate.mjs --coverage --refs docs/PRD-118.md --require-schema",
     "init": "node scripts/init.mjs",
     "migrate": "node scripts/migrate.mjs",

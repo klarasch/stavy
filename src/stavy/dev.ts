@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { appBase, contentUrl, reloadManifest, workspaceBase } from "./manifest"
+import { formatBoard, isBoardPath } from "../../scripts/lib/format.mjs"
 
 /**
  * The dev endpoint (scripts/vite-plugin.mjs). When the prototype's dev server
@@ -9,7 +10,20 @@ import { appBase, contentUrl, reloadManifest, workspaceBase } from "./manifest"
  * read-only. Nothing else changes.
  */
 
-type Health = { ok: boolean; writable: boolean; rev: number; /** git user.name of whoever runs the dev server */ user?: string | null; scan?: { running: boolean; ok?: boolean; finishedAt?: string } }
+type Health = {
+  ok: boolean
+  writable: boolean
+  rev: number
+  /** git user.name of whoever runs the dev server */
+  user?: string | null
+  scan?: { running: boolean; ok?: boolean; finishedAt?: string }
+  /** The dev server re-captures states after the app's source changes */
+  autoRefresh?: boolean
+  /** A refresh after a source change is waiting or under way */
+  refreshing?: boolean
+  /** When the app's source last changed (ISO), if it did since the server started */
+  sourceChangedAt?: string | null
+}
 
 let health: Health | null = null
 const listeners = new Set<() => void>()
@@ -69,9 +83,13 @@ export function useContentRev(): number {
   return rev
 }
 
-/** Write a file under stavy-content/. JSON values are pretty-printed. */
+/**
+ * Write a file under stavy-content/. Boards and map.json are written in the
+ * diff-friendly board layout (scripts/lib/format.mjs); other JSON pretty-printed.
+ */
 export async function writeContent(rel: string, data: unknown): Promise<void> {
-  const body = typeof data === "string" || data instanceof Blob ? data : JSON.stringify(data, null, 2) + "\n"
+  const body =
+    typeof data === "string" || data instanceof Blob ? data : isBoardPath(rel) ? formatBoard(data) : JSON.stringify(data, null, 2) + "\n"
   const r = await fetch(api(`content/${rel.replace(/^\/+/, "")}`), { method: "PUT", body })
   if (!r.ok) throw new Error(`save ${rel} → ${r.status} ${await r.text()}`)
 }
@@ -89,6 +107,11 @@ export async function requestScan(keys: string[] | "all"): Promise<void> {
     body: JSON.stringify(keys === "all" ? { all: true } : { keys }),
   })
   if (!r.ok) throw new Error(`scan → ${r.status}`)
+}
+
+/** Tell the dev server which cards are on screen, so a refresh captures them first. */
+export async function postVisible(keys: string[]): Promise<void> {
+  await fetch(api("visible"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ keys }) })
 }
 
 /** A text field of stavy.json the viewer may edit (see scripts/lib/patch.mjs for the allowed paths). */

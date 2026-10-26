@@ -868,6 +868,22 @@ A workspace SHOULD ship:
   from the viewer (a card's refresh button), and injects the one-line `<head>`
   hook that lets a freshly loaded state be held from its first timer (§1.4).
   Without it the viewer is read-only; the viewer and scan work either way.
+  **Auto-refresh:** when the app's source changes (not Stavy's content,
+  snapshots, manifest, tests or docs), it waits for a quiet ~800 ms and
+  re-captures in the background, one scan process at a time: the cards the
+  viewer reports on screen first (`POST /__stavy/visible`), then every other
+  captured state in small chunks; a change during a scan starts the order
+  over. The scan writes `index.json` after each capture (merged into a fresh
+  read, replaced atomically), so cards update one by one; an identical
+  re-capture keeps its file and `at`, and `checkedAt` records the look. While
+  a refresh is pending, a card captured before the change shows a small
+  "updating" mark. `stavy({ autoRefresh: false })` turns it off.
+  **Small diffs:** writes keep files reviewable. Boards and `map.json` are
+  written in one fixed layout (`scripts/lib/format.mjs`: board keys one per
+  line, items expanded one key per line, arrows and a section's items one per
+  line; `stavy:format` applies it), and an edit to a `stavy.json` text field
+  changes only that value's bytes, inserting a new key in its object's own
+  style.
 - **`publish`** (`scripts/publish.mjs`, `npm run stavy:publish`) — a static
   build that carries its own snapshots. Snapshots are not in git, so a
   deployable build has to make them: it builds the app, serves the build on a

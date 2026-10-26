@@ -9,6 +9,8 @@
 //   ["scenarios", <id>, "label" | "description"]
 //   ["scenarios", <id>, "steps", <index>, "title" | "note"]
 
+import { removeAt, setAt } from "./jsonEdit.mjs"
+
 const isIndex = (n) => Number.isInteger(n) && n >= 0
 
 /**
@@ -75,4 +77,52 @@ export function applyPatch(manifest, path, value, opts = {}) {
     delete parent[key]
   } else parent[key] = v
   return manifest
+}
+
+/**
+ * applyPatch on the file's text: returns the patched manifest and the new
+ * text with only the changed values' bytes touched (scripts/lib/jsonEdit.mjs),
+ * so a label edit is a one-line diff. Throws, like applyPatch, for a path or
+ * value that isn't allowed. `text` is null when the textual edit couldn't be
+ * made or didn't produce the same data; the caller then writes the whole file.
+ */
+export function patchManifestText(raw, path, value, opts = {}) {
+  const manifest = JSON.parse(raw)
+  const { parent } = resolvePatchPath(manifest, path)
+  const where = pathTo(manifest, parent)
+  const before = JSON.parse(JSON.stringify(parent))
+  applyPatch(manifest, path, value, opts)
+  let text = null
+  try {
+    let out = raw
+    const keys = [...new Set([...Object.keys(before), ...Object.keys(parent)])]
+    for (const k of keys) {
+      if (JSON.stringify(before[k]) === JSON.stringify(parent[k])) continue
+      out = k in parent ? setAt(out, [...where, k], parent[k]) : removeAt(out, [...where, k])
+    }
+    if (sameData(JSON.parse(out), manifest)) text = out
+  } catch {
+    /* text stays null: whole-file write */
+  }
+  return { manifest, text }
+}
+
+/** Keys and indexes from `root` to the object `target` (by identity). */
+function pathTo(root, target, at = []) {
+  if (root === target) return at
+  if (root && typeof root === "object") {
+    for (const [k, v] of Object.entries(root)) {
+      const p = v && typeof v === "object" ? pathTo(v, target, [...at, Array.isArray(root) ? Number(k) : k]) : null
+      if (p) return p
+    }
+  }
+  return null
+}
+
+function sameData(a, b) {
+  if (a === b) return true
+  if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false
+  const ka = Object.keys(a)
+  if (ka.length !== Object.keys(b).length) return false
+  return ka.every((k) => k in b && sameData(a[k], b[k]))
 }
