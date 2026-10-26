@@ -63,6 +63,22 @@ Board columns are narrow; prose there turns into a wall of text nobody reads.
 Every sentence that explains, specifies or lists belongs in
 `stavy-content/docs/<id>.md`.
 
+Sort each piece of content with one test: **would the reader point at it,
+or read it?**
+
+| Board (point at it) | Doc (read it) |
+| --- | --- |
+| a state, a crop, a flow — the evidence | the rules that decide which state shows |
+| a 2–5 word caption naming a state | why it behaves that way |
+| a numbered callout on a part of a crop | the full list of edge cases and limits |
+| one open question, one risk, one decision (a note) | the reasoning, alternatives, history (`decisions.md`) |
+| a diagram of how states connect | validation rules, error copy, tables, API notes |
+| "See Error rules →" | the Error rules section |
+
+A good board still makes sense with only its captions; a good doc still
+makes sense with its embeds removed (embeds show what the words describe, at
+the point they describe it).
+
 - On a board, text is a label, not a paragraph: a lead of two or three
   sentences at most, captions of a few words, notes of one sentence.
 - No rules, edge-case lists, copy tables or long Markdown on a board. Put
