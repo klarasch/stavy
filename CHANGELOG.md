@@ -22,6 +22,18 @@ anything, they have to do.
   linked from the board (`[Error rules →](?doc=import#errors)`), instead of
   long Markdown in narrow board columns. Doc links with a `#heading` scroll
   to that heading.
+- **Code changes show up on their own.** With the dev plugin running, saving
+  a file in the app re-captures the cards on screen first (a small spinner
+  marks a card that's updating), then the rest in the background. Cards
+  update one by one as each capture lands. Needs Playwright + Chromium, like
+  `stavy:scan`; turn it off with `stavy({ autoRefresh: false })` in
+  `vite.config.ts`.
+- **Small diffs.** Renaming or re-labelling in the viewer changes only that
+  line of `stavy.json`; board and map edits keep the file's layout.
+  `npm run stavy:format` lays existing boards out the same way (once, then
+  edits stay small).
+- **Nightly builds.** `https://github.com/klarasch/stavy/releases/download/nightly/stavy.tgz`
+  installs like a release and says it's a nightly; see docs/STAVY-UPDATING.md.
 - `stavy:validate` warns when a board's Markdown runs past 80 words or a
   note past 40.
 - **Fixed: Home's "All changes" and "Decision log" links.** When
