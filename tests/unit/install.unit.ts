@@ -279,3 +279,57 @@ describe("releases", () => {
     expect(changelogSection(text, "0.2.1")).toBe("- b")
   })
 })
+
+describe("nightly versions", () => {
+  it("orders prereleases below their release and nightly dates numerically", async () => {
+    const { compareVersions, isPrerelease, baseVersion } = await import("../../scripts/lib/install.mjs")
+    const n = (d: string, sha = "abc1234") => `0.4.1-nightly.${d}.${sha}`
+    expect(compareVersions(n("20261026"), "0.4.1")).toBeLessThan(0)
+    expect(compareVersions("0.4.1", n("20261026"))).toBeGreaterThan(0)
+    expect(compareVersions(n("20261026"), "0.4.0")).toBeGreaterThan(0)
+    expect(compareVersions(n("20261026"), n("20261027"))).toBeLessThan(0)
+    expect(compareVersions(n("20261101"), n("20261026"))).toBeGreaterThan(0)
+    expect(compareVersions(n("20261026"), n("20261026"))).toBe(0)
+    expect(compareVersions("0.4.1", "0.4.1")).toBe(0)
+    expect(compareVersions("0.5.0-nightly.1", "0.4.9")).toBeGreaterThan(0)
+    expect(isPrerelease(n("20261026"))).toBe(true)
+    expect(isPrerelease("0.4.1")).toBe(false)
+    expect(baseVersion(n("20261026"))).toBe("0.4.1")
+  })
+
+  const text = "# Changelog\n\nIntro.\n\n## Unreleased\n\n- next\n\n## 0.4.1 — d\n\n- c\n\n## 0.4.0 — d\n\n- b\n\n## 0.3.0\n\n- a\n"
+  const v = (r: { sections: { version: string }[] }) => r.sections.map((s) => s.version)
+
+  it("reads the Unreleased section", async () => {
+    const { unreleasedSection, changelogSections } = await import("../../scripts/lib/install.mjs")
+    expect(unreleasedSection(text)).toBe("- next")
+    expect(unreleasedSection("## 0.1.0\n\n- x\n")).toBeNull()
+    expect(unreleasedSection("## Unreleased\n\n## 0.1.0\n\n- x\n")).toBeNull()
+    expect(changelogSections(text).map((s: { version: string }) => s.version)).toEqual(["0.4.1", "0.4.0", "0.3.0"])
+  })
+
+  it("picks the changelog for a nightly: Unreleased plus sections since the lock", async () => {
+    const { changelogForUpdate } = await import("../../scripts/lib/install.mjs")
+    const nightly = "0.4.1-nightly.20261026.abc1234"
+    // stable lock -> nightly
+    let r = changelogForUpdate(text, "0.4.0", nightly)
+    expect(v(r)).toEqual(["0.4.1"])
+    expect(r.unreleased).toBe("- next")
+    // nightly of the same release -> a newer nightly: nothing replayed
+    r = changelogForUpdate(text, "0.4.1-nightly.20261020.def5678", nightly)
+    expect(v(r)).toEqual([])
+    expect(r.unreleased).toBe("- next")
+    // lock on the release a nightly builds toward
+    r = changelogForUpdate(text, "0.4.1", nightly)
+    expect(v(r)).toEqual([])
+  })
+
+  it("a stable install over a nightly shows the release's own section, not Unreleased", async () => {
+    const { changelogForUpdate } = await import("../../scripts/lib/install.mjs")
+    const r = changelogForUpdate(text, "0.4.1-nightly.20261026.abc1234", "0.4.1")
+    expect(v(r)).toEqual(["0.4.1"])
+    expect(r.unreleased).toBeNull()
+    // nightly built toward 0.4.0 (before the bump), then stable 0.4.0
+    expect(v(changelogForUpdate(text, "0.4.0-nightly.20261001.aaaaaaa", "0.4.0"))).toEqual(["0.4.0"])
+  })
+})

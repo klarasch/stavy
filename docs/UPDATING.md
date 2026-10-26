@@ -189,3 +189,25 @@ rm -r public/stavy public/stavy.json scripts/stavy .stavy STAVY.md docs/STAVY-*.
 ```
 
 Then drop the `stavy:*` scripts from `package.json`. The app never knew it was there.
+
+## 7. Trying a nightly
+
+A nightly is the newest unreleased build, for trying a change before it ships.
+It is not a release and can break. It is a prerelease on GitHub, so
+`releases/latest` never serves it.
+
+```bash
+curl -L -o stavy-nightly.tgz https://github.com/klarasch/stavy/releases/download/nightly/stavy.tgz
+mkdir stavy-nightly && tar -xzf stavy-nightly.tgz -C stavy-nightly
+node stavy-nightly/stavy/scripts/init.mjs .      # from your repo; installs or updates
+```
+
+`init` says `nightly build <version> — not a release` and prints the
+CHANGELOG's `## Unreleased` section along with anything since your last
+update. A nightly's version looks like `0.4.1-nightly.20261026.abc1234`.
+Run it again later to take a newer nightly.
+
+To go back, install the latest release the usual way
+(`releases/latest/download/stavy.tgz`, then its `scripts/init.mjs`). A
+release counts as newer than the nightlies built toward it, so this is a
+normal update.

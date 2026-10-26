@@ -32,11 +32,12 @@ import { dirname, relative, resolve, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import {
   apply,
-  changelogBetween,
+  changelogForUpdate,
   compareVersions,
   detectEdits,
   git,
   gitShow,
+  isPrerelease,
   LOCK,
   plan,
   readLock,
@@ -95,10 +96,12 @@ if (upDirty && !flag("--allow-dirty") && !check) {
 so the next update couldn't show what changed. Commit first, or pass --allow-dirty.`)
 }
 const short = release ? `${pkgVersion} (${commit.slice(0, 12)})` : commit.slice(0, 12) + (upDirty ? "-dirty" : "")
-const upstream = { version: pkgVersion, commit: commit + (upDirty ? "-dirty" : ""), ...(release ? { release: true } : {}) }
+const nightly = isPrerelease(pkgVersion)
+const upstream = { version: pkgVersion, commit: commit + (upDirty ? "-dirty" : ""), ...(release ? { release: true } : {}), ...(nightly ? { channel: "nightly" } : {}) }
 
 say(`${lock || legacy ? "Updating" : "Installing"} Stavy in ${target}`)
 say(`  from ${src} @ ${short}${lock?.upstream?.commit ? ` (last taken: ${lock.upstream.commit.slice(0, 12)})` : ""}`)
+if (nightly) say(`  nightly build ${pkgVersion} — not a release`)
 
 const targetDirty = !check && git(target, "status", "--porcelain", "--untracked-files=no")
 if (targetDirty) {
@@ -113,13 +116,18 @@ edits afterwards. Commit first, or pass --allow-dirty.`)
 const last = lock?.upstream?.commit?.replace(/-dirty$/, "")
 if (!check && release && lock && last !== commit && existsSync(join(src, "CHANGELOG.md"))) {
   const since = lock.upstream?.version
-  const sections = changelogBetween(readFileSync(join(src, "CHANGELOG.md"), "utf8"), since, pkgVersion)
+  const { sections, unreleased } = changelogForUpdate(readFileSync(join(src, "CHANGELOG.md"), "utf8"), since, pkgVersion)
   if (since && compareVersions(pkgVersion, since) < 0) say(`\n  Note: ${pkgVersion} is OLDER than the ${since} you last took.`)
-  else if (sections.length) {
+  else if (sections.length || unreleased) {
     say(`\n  Stavy changes since ${since ?? "your last update"}:`)
+    const lines = (body) => body.split("\n").forEach((l) => say(`    ${l}`))
+    if (unreleased) {
+      say("\n    ## Unreleased (not in any release yet)")
+      lines(unreleased)
+    }
     for (const s of sections) {
       say(`\n    ${s.heading}`)
-      for (const l of s.body.split("\n")) say(`    ${l}`)
+      lines(s.body)
     }
     say("\n  Some of these may let you delete something local: a workaround Stavy has since absorbed.")
   }
