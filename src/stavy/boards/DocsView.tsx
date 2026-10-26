@@ -22,7 +22,12 @@ import { useComments } from "../comments/store"
  * state and opens it). With the dev endpoint a doc can be edited as plain
  * Markdown and saved back.
  */
-const docPath = (d: { src?: string } | undefined, id: string) => d?.src ?? `docs/${id}.md`
+/** The changelog and the decision log live at the content root, and are always in Docs, listed or not. */
+const BUILTIN_DOCS = [
+  { id: "changelog", title: "Changelog", src: "changelog.md" },
+  { id: "decisions", title: "Decisions", src: "decisions.md" },
+]
+const docPath = (d: { src?: string } | undefined, id: string) => d?.src ?? BUILTIN_DOCS.find((b) => b.id === id)?.src ?? `docs/${id}.md`
 
 export function DocsView() {
   const [sp, setSp] = useSearchParams()
@@ -63,7 +68,8 @@ export function DocsView() {
       else if (commentsOpen) setParam("comments", null)
     },
   })
-  const docs = index.docs ?? []
+  const listed = index.docs ?? []
+  const docs = [...listed, ...BUILTIN_DOCS.filter((b) => !listed.some((d) => d.id === b.id))]
   const id = sp.get("doc") || docs[0]?.id || ""
   const current = docs.find((d) => d.id === id)
   const docComments = comments.filter((c) => c.doc === id && !c.resolved).length

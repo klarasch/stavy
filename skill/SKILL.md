@@ -233,8 +233,9 @@ goes on a board.
   - `note`: `text`, `color`?, `author`?
   - `section`: `title`, `items`, `layout`? (`row`|`column`|`grid`), `columns`?
   - `image`: `src`, `alt`?, `callouts`?  ·  `mermaid`: `code`  ·  `arrow`: `from`, `to`, `label`?, `style`?
-- `index.json`: `{ "boards": [{ "id", "title" }], "docs": [{ "id", "title" }], "links": [...] }`. Entries are objects,
-  not bare ids. Keep each `title` the same as the board file's `title` (Home shows the file's).
+- `index.json`: `{ "boards": [{ "id", "title" }], "docs": [{ "id", "title", "src"? }], "links": [...] }`. Entries are objects,
+  not bare ids. A doc's file is `docs/<id>.md` unless `src` says otherwise; `changelog` and `decisions` are always
+  in Docs (from `changelog.md` and `decisions.md` at the content root) whether listed or not. Keep each `title` the same as the board file's `title` (Home shows the file's).
 - Heading slugs: lowercase, punctuation dropped, spaces → `-` ("Error states" → `error-states`).
 - Doc embeds: `![caption](stavy:page/state)` renders a snapshot card; `[text](stavy:page/state)` links to the player.
 - Scan keys: `--keys contacts` (a screen), `--keys contacts/empty` (a state, with its crops), comma separated.

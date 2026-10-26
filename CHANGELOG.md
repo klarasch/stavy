@@ -24,6 +24,11 @@ anything, they have to do.
   to that heading.
 - `stavy:validate` warns when a board's Markdown runs past 80 words or a
   note past 40.
+- **Fixed: Home's "All changes" and "Decision log" links.** When
+  `index.json` listed the changelog or decisions without `src` (or not at
+  all), Docs looked in `docs/` and rendered the dev server's fallback page
+  instead. They now always open `changelog.md` / `decisions.md`, and a
+  missing doc says so instead of showing the app's HTML.
 
 **What you do:** nothing. Long text already on your boards shows up as
 validate warnings; ask Claude to move it into a doc.

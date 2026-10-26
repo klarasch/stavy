@@ -41,3 +41,30 @@ test("a board without a plain screen still gets a cover on Home (its flow's firs
   const card = page.locator(".ps-home-board", { hasText: "Only words and a flow" })
   await expect(card.locator(".ps-home-thumb img")).toBeVisible()
 })
+
+// Home links to ?doc=changelog / ?doc=decisions. Those files live at the
+// content root, so an index entry without `src` (or no entry at all) used to
+// fetch docs/changelog.md — and the dev server's index.html fallback was then
+// rendered as the doc.
+test("Home's changelog and decision-log links render even when index.json doesn't say where they live", async ({ page }) => {
+  await page.route("**/stavy-content/index.json", async (route) => {
+    const res = await route.fetch()
+    const json = await res.json()
+    json.docs = [{ id: "approval-rules", title: "Approval rules" }, { id: "changelog", title: "Changelog" }]
+    await route.fulfill({ json })
+  })
+  await page.goto("/stavy/")
+  await page.getByRole("link", { name: "All changes" }).click()
+  await expect(page.locator(".ps-docs-md h2").first()).toBeVisible()
+  await expect(page.locator(".ps-docs-page")).not.toContainText("<!doctype")
+  await page.goto("/stavy/")
+  await page.getByRole("link", { name: "Decision log" }).click()
+  await expect(page.locator(".ps-docs-md h2").first()).toContainText("Rejecting an expense")
+  await expect(page.locator(".ps-docs-nav")).toContainText("Decisions")
+})
+
+test("a doc that doesn't exist says so instead of rendering the app's index.html", async ({ page }) => {
+  await page.goto("/stavy/?doc=nope")
+  await expect(page.locator(".ps-docs-page")).toContainText("No doc")
+  await expect(page.locator(".ps-docs-md")).toHaveCount(0)
+})

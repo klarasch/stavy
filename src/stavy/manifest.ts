@@ -90,7 +90,11 @@ export async function loadText(rel: string): Promise<string> {
   const path = /\.[a-z]+$/i.test(rel) ? rel : `docs/${rel}.md`
   const r = await fetch(contentUrl(path), { cache: "no-store" })
   if (!r.ok) throw new Error(`${path} → ${r.status}`)
-  return r.text()
+  const text = await r.text()
+  // Dev servers and static hosts answer a missing file with the app's index.html
+  // (status 200): never render that as the doc.
+  if (!/\.html?$/i.test(path) && (/text\/html/i.test(r.headers.get("content-type") ?? "") || /^\s*<(!doctype|html)/i.test(text))) throw new Error(`${path} → not found`)
+  return text
 }
 
 /** Re-read the snapshot index (after an on-demand scan). */
