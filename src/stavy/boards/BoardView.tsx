@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { Crosshair, Layers, Maximize2, MessageCircle, MessageCirclePlus, Minus, Pencil, Play, Plus, Redo2, Undo2 } from "../icons"
 import { cn } from "../cn"
-import { getPage, getTemplate, manifest, resolveDims } from "../manifest"
-import { Inspector, type FrameHit } from "../overlays/Inspector"
-import { elementAt } from "../frame"
+import { manifest } from "../manifest"
+import { Inspector } from "../overlays/Inspector"
+import { cardHit } from "../canvas/cardHit"
 import { useDev } from "../dev"
 import { HelpButton, PsButton, PsDivider, ShortcutsSheet, ThemeToggle, cycleTheme, useChrome, useHotkeys } from "../chrome"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "../canvas/PanZoom"
@@ -99,17 +99,6 @@ export function BoardView() {
   const [hold, setHold] = useState<HTMLIFrameElement | null>(null)
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null)
   const inspectCtx = useMemo<CanvasInspect>(() => ({ on: inspect, live: liveMode, hold }), [inspect, liveMode, hold])
-  const inspectHit = useCallback((e: MouseEvent): FrameHit | null => {
-    const card = (e.target as Element | null)?.closest<HTMLElement>("[data-instance]")
-    const iframe = card?.querySelector("iframe")
-    if (!card || !iframe) return null
-    const el = elementAt(iframe, e.clientX, e.clientY)
-    if (!el) return null
-    const [pageId, qs] = (card.getAttribute("data-instance") ?? "").split("?")
-    const page = getPage(pageId)
-    if (!page) return null
-    return { el, iframe, ctx: { page, template: getTemplate(page.template), dims: resolveDims(page, Object.fromEntries(new URLSearchParams(qs ?? ""))) } }
-  }, [])
   const fmtZoom = (k: number) => (k >= 1 ? `${k.toFixed(1)}×` : `${Math.round(k * 100)}%`)
   const onLive = useCallback((lt: Transform) => {
     if (zoomLabel.current) zoomLabel.current.textContent = fmtZoom(lt.k)
@@ -219,7 +208,7 @@ export function BoardView() {
               }}
             />
           )}
-          {inspect && !hidden && viewportEl && <Inspector host={viewportEl} hit={inspectHit} onClose={() => setFlag("i", false)} onPinChange={setHold} />}
+          {inspect && !hidden && viewportEl && <Inspector host={viewportEl} hit={cardHit} onClose={() => setFlag("i", false)} onPinChange={setHold} />}
 
           {marqueeEl}
 

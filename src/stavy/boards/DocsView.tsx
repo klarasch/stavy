@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
-import { FileText, Layers, MessageCircle, MessageCirclePlus, Pencil, Plus } from "../icons"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
+import { Crosshair, FileText, Layers, MessageCircle, MessageCirclePlus, Pencil, Plus } from "../icons"
 import { cn } from "../cn"
 import { manifest } from "../manifest"
 import { useDev, writeContent } from "../dev"
@@ -10,6 +10,9 @@ import { PageSwitcher } from "./PageSwitcher"
 import { createDoc, docHref, useContentIndex } from "./store"
 import { DocCommentLayer } from "../comments/DocCommentLayer"
 import { CommentsPanel } from "../comments/CommentsPanel"
+import { Inspector } from "../overlays/Inspector"
+import { cardHit } from "../canvas/cardHit"
+import { CanvasInspectContext, type CanvasInspect } from "../canvas/visibility"
 import { useComments } from "../comments/store"
 
 /**
@@ -42,11 +45,20 @@ export function DocsView() {
     [sp, setSp]
   )
   const onOpenComment = useCallback((cid: string | null) => setParam("c", cid), [setParam])
+  // Inspect the embedded states like a board's: hover a card and the real app
+  // mounts underneath it, so the inspector reads live DOM, not the snapshot.
+  const [mainEl, setMainEl] = useState<HTMLElement | null>(null)
+  const [hold, setHold] = useState<HTMLIFrameElement | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+  const inspect = sp.get("i") === "1" && editing == null
+  const inspectCtx = useMemo<CanvasInspect>(() => ({ on: inspect, live: false, hold }), [inspect, hold])
   useHotkeys({
     t: () => setTheme(cycleTheme(theme)),
     m: () => setPlacing((p) => !p),
+    i: () => setParam("i", inspect ? null : "1"),
     Escape: () => {
-      if (placing) setPlacing(false)
+      if (inspect) setParam("i", null)
+      else if (placing) setPlacing(false)
       else if (openCommentId) setParam("c", null)
       else if (commentsOpen) setParam("comments", null)
     },
@@ -56,10 +68,16 @@ export function DocsView() {
   const current = docs.find((d) => d.id === id)
   const docComments = comments.filter((c) => c.doc === id && !c.resolved).length
   const { text, error } = useMarkdownSource(id ? docPath(current, id) : undefined)
-  const [editing, setEditing] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [newTitle, setNewTitle] = useState<string | null>(null)
   useEffect(() => setEditing(null), [id])
+  // Boards link to a doc's section (`?doc=import#errors`): land on that heading.
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (!article || !hash || hash.length < 2) return
+    const el = article.querySelector(`#${CSS.escape(decodeURIComponent(hash.slice(1)))}`)
+    el?.scrollIntoView({ block: "start" })
+  }, [article, hash, text])
 
   const save = async () => {
     if (editing == null) return
@@ -75,6 +93,7 @@ export function DocsView() {
   }
 
   return (
+    <CanvasInspectContext.Provider value={inspectCtx}>
     <div className="ps h-screen flex flex-col" style={{ background: "var(--ps-canvas-bg)" }}>
       {!hidden && (
         <div className="flex items-center justify-between gap-3 p-4 pb-0">
@@ -106,6 +125,9 @@ export function DocsView() {
                 <PsDivider />
               </>
             )}
+            <PsButton active={inspect} tip="Inspect: hover an embedded screen to read its live DOM" keys={["I"]} tipBelow disabled={editing != null} onClick={() => setParam("i", inspect ? null : "1")}>
+              <Crosshair /> Inspect
+            </PsButton>
             <PsButton
               icon
               active={placing}
@@ -127,7 +149,7 @@ export function DocsView() {
           </div>
         </div>
       )}
-      <ShortcutsSheet items={[["Leave a comment", "M"], ["Theme", "T"], ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"]]} />
+      <ShortcutsSheet items={[["Inspect embedded screens", "I"], ["Leave a comment", "M"], ["Theme", "T"], ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"]]} />
 
       <div className="flex-1 min-h-0 flex gap-4 p-4">
         <nav className="ps-docs-nav ps-glass rounded-2xl p-1.5 shrink-0" aria-label="Docs">
@@ -159,7 +181,7 @@ export function DocsView() {
             ))}
         </nav>
 
-        <main className="ps-docs-main flex-1 min-w-0 overflow-y-auto rounded-2xl">
+        <main ref={setMainEl} className={cn("ps-docs-main flex-1 min-w-0 overflow-y-auto rounded-2xl", inspect && "ps-inspect-on")}>
           {editing != null ? (
             <textarea className="ps-docs-editor ps-mono" value={editing} onChange={(e) => setEditing(e.target.value)} autoFocus spellCheck />
           ) : error ? (
@@ -186,6 +208,8 @@ export function DocsView() {
           }}
         />
       )}
+      {inspect && !hidden && mainEl && <Inspector host={mainEl} hit={cardHit} onClose={() => setParam("i", null)} onPinChange={setHold} />}
     </div>
+    </CanvasInspectContext.Provider>
   )
 }

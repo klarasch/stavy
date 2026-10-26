@@ -12,8 +12,8 @@ import {
   pageViewport, frameOf, stateLabel, STATE_DIM,
   pageFigures, standaloneBoards,
 } from "../manifest"
-import { elementAt } from "../frame"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "./PanZoom"
+import { cardHit } from "./cardHit"
 import { CanvasInspectContext, CanvasViewportContext, type CanvasInspect, type CanvasViewport } from "./visibility"
 import { InstanceCard } from "./InstanceCard"
 import { CanvasNotes } from "./CanvasNotes"
@@ -23,7 +23,7 @@ import { SiteMap } from "./SiteMap"
 import { BoardCard } from "./BoardCard"
 import { CoverageBoard } from "./CoverageBoard"
 import { PageSwitcher } from "../boards/PageSwitcher"
-import { Inspector, type FrameHit } from "../overlays/Inspector"
+import { Inspector } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
 import { useComments, MAP_BOARD } from "../comments/store"
 import { SurfaceCommentLayer } from "../comments/SurfaceCommentLayer"
@@ -625,19 +625,7 @@ export function CanvasPage() {
 
   // Inspect on the canvas: the pointer lands on a card's shield; resolve it to
   // the element under it inside that card's (live) frame.
-  const hit = useCallback((e: MouseEvent): FrameHit | null => {
-    const card = (e.target as Element | null)?.closest<HTMLElement>("[data-instance]")
-    const iframe = card?.querySelector("iframe")
-    if (!card || !iframe) return null
-    const el = elementAt(iframe, e.clientX, e.clientY)
-    if (!el) return null
-    const key = card.getAttribute("data-instance") ?? ""
-    const [pageId, qs] = key.split("?")
-    const page = getPage(pageId)
-    if (!page) return null
-    const dims = Object.fromEntries(new URLSearchParams(qs ?? ""))
-    return { el, iframe, ctx: { page, template: getTemplate(page.template), dims: resolveDims(page, dims) } }
-  }, [])
+  const hit = cardHit
 
   const linkExtra = useMemo(
     () => ({ ...wCarry, ...(wireframe ? { w: "1" } : {}) }),

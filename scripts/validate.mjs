@@ -36,6 +36,10 @@ const ACTION_KEYS = ["click", "hover", "focus", "press", "type", "wait"]
 // A URL or a site path ("/figures/x.png"): not a file inside stavy-content/.
 const isUrl = (s) => /^([a-z]+:|\/)/i.test(s)
 
+const BOARD_MD_WORDS = 80
+const BOARD_NOTE_WORDS = 40
+const wordCount = (t) => t.replace(/[#>*_`|[\]()-]/g, " ").split(/\s+/).filter(Boolean).length
+
 /** stavy-content/index.json and boards/*.json: references resolve, ids are unique, shapes are plausible. */
 function validateContent(m, root, { err, warn, validateBoard }) {
   const dir = resolve(root, CONTENT_DIR)
@@ -110,6 +114,13 @@ function validateContent(m, root, { err, warn, validateBoard }) {
         warn(`${iw}: unknown type "${it.type}" (${BOARD_TYPES.join(" | ")})`)
         continue
       }
+      // Boards are the picture, docs are the words (SKILL "Boards are the picture"):
+      // long prose on a board renders as a wall of text in a narrow column.
+      const long = [
+        ["markdown", it.type === "markdown" ? it.md : undefined, BOARD_MD_WORDS],
+        ["note", it.type === "note" ? it.text : it.note, BOARD_NOTE_WORDS],
+      ].find(([, t, max]) => typeof t === "string" && wordCount(t) > max)
+      if (long) warn(`${iw}: ${long[0]} is ${wordCount(long[1])} words — boards carry short labels; move the explanation to a doc and link it`)
       if (it.type === "screen" || it.type === "states") {
         const page = pageIndex.get(it.screen)
         if (!page) {

@@ -5,6 +5,29 @@ prints the sections between the release a repo last took and the one it is
 taking, so write each entry for that reader: what they get, and what, if
 anything, they have to do.
 
+## Unreleased
+
+**What you get**
+
+- **Crops and doc embeds are inspectable.** A board item cropped to a
+  component (or opened with `do`, or at another viewport) used to be a
+  screenshot only. With Inspect on, hovering it now mounts the real app,
+  replays its actions and places the frame on the crop, so the inspector
+  reads live DOM. Docs gained the same Inspect button (I) for embedded
+  states. Live mode (L) on a board shows crops live too. Only `click`,
+  `hover` and `focus` replay live; an item that types or presses keys keeps
+  its snapshot, so hovering never fills in or submits anything.
+- **Boards stay visual.** The skill now agrees a board's or doc's outline
+  with you before composing it, and keeps rules, edge cases and copy in docs,
+  linked from the board (`[Error rules →](?doc=import#errors)`), instead of
+  long Markdown in narrow board columns. Doc links with a `#heading` scroll
+  to that heading.
+- `stavy:validate` warns when a board's Markdown runs past 80 words or a
+  note past 40.
+
+**What you do:** nothing. Long text already on your boards shows up as
+validate warnings; ask Claude to move it into a doc.
+
 ## 0.4.0 — 2026-10-21 (alpha)
 
 **What you get**

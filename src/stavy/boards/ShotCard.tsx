@@ -1,7 +1,10 @@
-import { memo, useEffect, useState } from "react"
+import { memo, useContext, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { InstanceCard } from "../canvas/InstanceCard"
-import { frameOf, pageUrl, snapshotIndex } from "../manifest"
+import { CanvasInspectContext, useLiveWhenVisible } from "../canvas/visibility"
+import { settleFrame } from "../frame"
+import { cropBox, replayActions, replaysLive } from "./liveVariant"
+import { appUrl, frameOf, pageUrl, snapshotIndex } from "../manifest"
 import { useScan } from "../snapshots"
 import { cn } from "../cn"
 import { snapshotHref, type ResolvedShot } from "./resolve"
@@ -11,9 +14,9 @@ import { useSnapshotsRev } from "./store"
  * One state as a card on a board. A plain state is the map's own
  * `InstanceCard` (snapshot, opens the player, live frame on demand). A
  * *variant* — cropped to a target, acted on (`do`), or at another viewport —
- * has its own capture keyed by `variantKey`, so it gets a lighter card that
- * only knows that capture: the image, or a clean placeholder with the label
- * and, when the dev endpoint can scan, a Capture button.
+ * has its own capture keyed by `variantKey`: the image, or a placeholder with
+ * a Capture button. Inspecting it mounts the real app with the actions
+ * replayed and the frame placed on the crop (see liveVariant.ts).
  */
 export const ShotCard = memo(function ShotCard({
   shot,
@@ -49,15 +52,74 @@ function VariantCard({ shot, width, href }: { shot: ResolvedShot; width: number;
   const h = Math.round(width * aspect)
   const missing = !url || err
 
+  // Live like the map's cards: while the inspector hovers this card (or holds
+  // a selection in it), or in live mode near the viewport, the real app runs
+  // underneath — the actions replayed, the frame placed on the crop — so the
+  // inspector reads real DOM instead of a screenshot.
+  const frameRef = useRef<HTMLDivElement>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const inspect = useContext(CanvasInspectContext)
+  const near = useLiveWhenVisible(frameRef)
+  const [hover, setHover] = useState(false)
+  const hoverT = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const enter = () => {
+    if (hoverT.current) clearTimeout(hoverT.current)
+    hoverT.current = setTimeout(() => setHover(true), 140)
+  }
+  const leave = () => {
+    if (hoverT.current) clearTimeout(hoverT.current)
+    hoverT.current = setTimeout(() => setHover(false), 600)
+  }
+  useEffect(() => () => { if (hoverT.current) clearTimeout(hoverT.current) }, [])
+  const held = !!inspect.hold && inspect.hold === iframeRef.current
+  // A variant that types or presses keys keeps its snapshot: replaying it on every hover could change data.
+  const canLive = replaysLive(shot.variant?.do)
+  const live = canLive && ((inspect.on && (hover || held)) || (inspect.live && near))
+  const [place, setPlace] = useState<{ x: number; y: number; k: number; h: number } | null>(null)
+  useEffect(() => {
+    if (!live) setPlace(null)
+  }, [live])
+  const onLoad = async () => {
+    const iframe = iframeRef.current
+    if (!iframe) return
+    await settleFrame(iframe)
+    await replayActions(iframe, shot.variant?.do)
+    const box = shot.variant?.crop ? cropBox(iframe, shot.variant.crop, fr) : null
+    if (iframeRef.current !== iframe) return
+    setPlace(box ? { x: box.x, y: box.y, k: width / box.width, h: Math.round((box.height * width) / box.width) } : { x: 0, y: 0, k: width / fr.width, h: Math.round((fr.height * width) / fr.width) })
+  }
+
   return (
-    <div className="ps flex flex-col gap-1.5" style={{ width }} data-instance={shot.key}>
+    <div
+      className="ps flex flex-col gap-1.5"
+      style={{ width }}
+      data-instance={shot.key}
+      onPointerEnter={inspect.on ? enter : undefined}
+      onPointerLeave={inspect.on ? leave : undefined}
+    >
       <div
+        ref={frameRef}
         className={cn("ps-card-frame relative rounded-lg overflow-hidden cursor-zoom-in", missing ? "ps-shot-missing" : "bg-white")}
-        style={{ width, height: h }}
-        onClick={() => navigate(href)}
+        style={{ width, height: !entry && place ? place.h : h }}
       >
+        {live && (
+          <iframe
+            ref={iframeRef}
+            className={cn("ps-frame ps-card-live", place && "is-ready")}
+            title={`${shot.page.label} · ${shot.label}`}
+            src={appUrl(shot.page, shot.dims)}
+            tabIndex={-1}
+            style={{
+              width: fr.width,
+              height: fr.height,
+              transform: place ? `scale(${place.k}) translate(${-place.x}px, ${-place.y}px)` : `scale(${width / fr.width})`,
+              opacity: place ? 1 : 0,
+            }}
+            onLoad={() => void onLoad()}
+          />
+        )}
         {missing ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center">
+          <div className="ps-card-placeholder absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center">
             <span className="text-[11.5px] font-medium" style={{ color: "var(--ps-muted)" }}>
               {shot.page.label} · {shot.label}
             </span>
@@ -66,24 +128,26 @@ function VariantCard({ shot, width, href }: { shot: ResolvedShot; width: number;
                 .filter(Boolean)
                 .join(" · ")}
             </span>
-            {scan.writable && (
-              <button
-                type="button"
-                className="ps-btn ps-capture"
-                data-ps-ui
-                disabled={scan.busy}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  scan.start()
-                }}
-              >
-                {scan.busy ? <span className="ps-spinner" /> : null}
-                {scan.busy ? "Capturing" : "Capture"}
-              </button>
-            )}
           </div>
         ) : (
           <img className="ps-card-img" src={url!} alt={`${shot.page.label} · ${shot.label}`} draggable={false} loading="lazy" onError={() => setErr(true)} />
+        )}
+        {/* The shield: cards are static previews — click opens the player; the inspector hit-tests through it. */}
+        <div className="ps-card-shield" onClick={() => navigate(href)} />
+        {missing && scan.writable && !place && (
+          <button
+            type="button"
+            className="ps-btn ps-capture absolute left-1/2 bottom-3 -translate-x-1/2 z-[2]"
+            data-ps-ui
+            disabled={scan.busy}
+            onClick={(e) => {
+              e.stopPropagation()
+              scan.start()
+            }}
+          >
+            {scan.busy ? <span className="ps-spinner" /> : null}
+            {scan.busy ? "Capturing" : "Capture"}
+          </button>
         )}
       </div>
     </div>

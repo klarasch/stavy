@@ -37,6 +37,44 @@ that, and skip the rest.
   ("Event search"), never the repo name: Home and every header show it. Set
   it when you first touch a new workspace; ask if it isn't clear.
 
+## Agree the content before you compose
+
+Composing a board or doc is cheap for you and expensive for the person to
+untangle. Before you write one (or restructure one), propose its outline in
+chat and wait for a yes:
+
+- the question it answers and who reads it;
+- the items in reading order — which states, crops, flows, notes — one line
+  each;
+- what goes in the doc instead (rules, edge cases, copy, tables), by heading.
+
+Keep the outline short enough to answer in one reply. If the person says
+"just do it", go ahead, but still say in one line what you left out. Small
+patches (a caption, one more state) need no outline. When nobody can answer
+(an unattended or scheduled run), compose from the outline you would have
+proposed and list your assumptions at the top of your report, not on the
+board.
+
+## Boards are the picture, docs are the words
+
+A board is a **visual, simplified annotation of how the feature works**: the
+states, the crops, the flow, and short labels that point at what matters.
+Board columns are narrow; prose there turns into a wall of text nobody reads.
+Every sentence that explains, specifies or lists belongs in
+`stavy-content/docs/<id>.md`.
+
+- On a board, text is a label, not a paragraph: a lead of two or three
+  sentences at most, captions of a few words, notes of one sentence.
+- No rules, edge-case lists, copy tables or long Markdown on a board. Put
+  them in the doc and link to the section from the board
+  (`[Error rules](?doc=import#errors)`), or embed only a section that is a
+  few lines long.
+- Annotate with the picture first: crop to the component, show its states
+  side by side, number the parts with a short `note` each. If you need more
+  than one sentence to explain a crop, the explanation goes in the doc.
+- When a board grows text anyway (people add it), offer to move it to the
+  doc; don't do it silently.
+
 ## The workspace
 
 ```
@@ -118,7 +156,7 @@ required shape — pick what explains it best:
 | an open menu, hover, focus | `screen` with `do: [{ "click": "FilterButton" }]` / `{ "hover": … }` |
 | responsive versions | `screen` items with `viewport` |
 | a journey | `flow` (wraps, never capped) |
-| rules, edge cases, copy, tables | `markdown` — never an image of text |
+| rules, edge cases, copy, tables | the doc, linked from a short `markdown` label — never on the board, never an image of text |
 | a state machine or sequence | `mermaid`, or an SVG you draw into `assets/` as an `image` |
 | an open question, a decision, a caveat | `note` (yellow = question, blue = decision, pink = risk) |
 | how parts connect | `arrow` between item ids, sparingly |
@@ -130,13 +168,15 @@ How to compose:
   sections lay out their children (`layout: row|column|grid`, `columns`).
   Order the items as the story reads. Give screens a `w` only to make one
   bigger or smaller than its neighbours.
-- Lead with a short `markdown` block (what this board is, who it's for), then
-  the evidence, then open questions.
-- Captions (`title`) name the state in the reader's words; `note` says why it
-  matters. One or two sentences.
-- **Spec text lives in docs.** If the rules for a component are long, write
-  them in `docs/<id>.md` and embed the section: `{ "type": "markdown",
-  "src": "docs/import.md#errors" }`. One source, no drift.
+- Lead with a short `markdown` block (what this board is, who it's for, a
+  link to the doc), then the evidence, then open questions.
+- Captions (`title`) name the state in the reader's words, in a few words;
+  `note` says why it matters, in one sentence.
+- **Spec text lives in docs.** Write rules, edge cases and copy in
+  `docs/<id>.md` and link the section from the board:
+  `{ "type": "markdown", "md": "[Error rules →](?doc=import#errors)" }`.
+  Embed a section (`"src": "docs/import.md#errors"`) only when it is a few
+  lines long. One source, no drift.
 - Register every new board in `stavy-content/index.json`. Keep its `links`
   (`{ "title", "url", "kind"? }`) true when the person mentions a PRD, ticket
   or Figma file: Home shows them.
@@ -144,6 +184,11 @@ How to compose:
   Patch items by `id`; never rewrite a board wholesale, never drop fields you
   don't know, never move an item that has `x`/`y` unless asked. Don't edit
   or delete notes with an `author` other than you.
+- **`do` only opens and points.** Use it to open a menu, a dialog, a
+  tooltip — never to submit, save, delete or send. The viewer replays
+  `click`/`hover`/`focus` on every inspect hover, against whatever app the
+  workspace points at (maybe staging). An item that needs `type` or `press`
+  stays a snapshot when inspected; prefer a named scene for that state.
 - After adding screen items with `crop`/`do`/`viewport`, capture them:
   `stavy:scan` (incremental) picks them up.
 

@@ -760,8 +760,10 @@ A conforming viewer SHOULD provide:
 - **Distinct chrome**: viewer UI must be visually separate from the prototype
   (the reference viewer uses floating dark chrome) so tool and product are
   never confused in a demo.
-- **Inspector**: dev mode, on the player and on canvas thumbnails while
-  hovered. Works entirely through the frame (§2.3): for the focused element
+- **Inspector**: dev mode, on the player and on every card while hovered —
+  map thumbnails, board items (a crop shows the live frame placed on the
+  crop, with the item's `do` replayed best-effort) and states embedded in
+  docs. Works entirely through the frame (§2.3): for the focused element
   it answers *which component is this, with which props* (read from the
   frame's fiber tree — needs `esbuild.keepNames` or equivalent in production
   builds so component names survive minification), *which classes/tokens
