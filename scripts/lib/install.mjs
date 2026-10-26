@@ -119,6 +119,10 @@ export function copiedFiles() {
     "scripts/stavy/lib/model.d.mts": "scripts/lib/model.d.mts",
     "scripts/stavy/lib/collect.mjs": "scripts/lib/collect.mjs",
     "scripts/stavy/lib/patch.mjs": "scripts/lib/patch.mjs", // the dev plugin imports it
+    "scripts/stavy/lib/jsonEdit.mjs": "scripts/lib/jsonEdit.mjs", // patch.mjs imports it
+    "scripts/stavy/lib/refresh.mjs": "scripts/lib/refresh.mjs", // the dev plugin imports it
+    "scripts/stavy/lib/format.mjs": "scripts/lib/format.mjs", // format.mjs imports it
+    "scripts/stavy/format.mjs": "scripts/format.mjs",
     "scripts/stavy/lib/gate.mjs": "scripts/lib/gate.mjs", // scan and the dev plugin import it
     "scripts/stavy/vite-plugin.mjs": "scripts/vite-plugin.mjs",
     "scripts/stavy/migrate.mjs": "scripts/migrate.mjs",

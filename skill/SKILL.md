@@ -143,7 +143,8 @@ How to compose:
 - **Respect human edits.** People move, resize and annotate in the viewer.
   Patch items by `id`; never rewrite a board wholesale, never drop fields you
   don't know, never move an item that has `x`/`y` unless asked. Don't edit
-  or delete notes with an `author` other than you.
+  or delete notes with an `author` other than you. Keep the file's layout
+  (one item or one key per line, as the viewer writes it): `stavy:format`.
 - After adding screen items with `crop`/`do`/`viewport`, capture them:
   `stavy:scan` (incremental) picks them up.
 
