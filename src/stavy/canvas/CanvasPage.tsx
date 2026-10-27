@@ -1108,7 +1108,8 @@ export function CanvasPage() {
 
             {/* ---- Scenarios: one area, lanes stacked, each folded to a line until opened ---- */}
             <Area title="Scenarios" kind={`${scenarios.length} walkthrough${scenarios.length === 1 ? "" : "s"}`} icon={<BookOpen />} tocId="area:scenarios" className="self-start">
-              <div className="flex flex-col gap-6">
+              {/* Lane titles keep their size on screen as you zoom out; leave room under the area's own title. */}
+              <div className="flex flex-col gap-6 pt-6">
                 {scenarios.map((sc) => (
                   <ScenarioLane
                     key={sc.id}
