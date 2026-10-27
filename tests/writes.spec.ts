@@ -10,7 +10,7 @@ test("editing a flow step title on the map persists to stavy.json", async ({ pag
   const file = resolve("stavy.json")
   const original = readFileSync(file, "utf8")
   try {
-    await page.goto("/stavy/?view=map")
+    await page.goto("/stavy/?view=map&fl=employee-submits")
     const lane = page.locator('[data-toc="scenario:employee-submits"]')
     const label = lane.locator("[data-editable$='steps/0/title']")
     await expect(label).toBeVisible()

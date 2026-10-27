@@ -336,6 +336,42 @@
 .ps-lane-toggle:hover { background: var(--ps-hover); color: var(--ps-fg); }
 .ps-lane-toggle svg { width: 14px; height: 14px; transition: transform .12s; }
 .ps-lane-toggle[data-open="true"] svg { transform: rotate(90deg); }
+/* ---- map disclosure: a screen folds to one card; "N states" opens it ---- */
+.ps-disclose {
+  display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 8px 0 5px;
+  border-radius: 999px; border: 1px solid var(--ps-border); background: var(--ps-glass-strong);
+  font-size: 11px; font-weight: 500; color: var(--ps-fg); white-space: nowrap; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04); transition: background .12s, box-shadow .12s;
+}
+.ps-disclose:hover:not(:disabled) { background: var(--ps-hover); }
+.ps-disclose:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ps-focus-soft), 0 0 0 1px var(--ps-focus); }
+.ps-disclose svg { width: 12px; height: 12px; color: var(--ps-muted); transition: transform .12s; }
+.ps-disclose[aria-expanded="true"] svg { transform: rotate(90deg); }
+.ps-disclose:disabled { cursor: default; padding-left: 8px; color: var(--ps-muted); box-shadow: none; }
+/* the other states, stacked behind the overview card */
+.ps-stack-layer {
+  position: absolute; border-radius: 8px; background: var(--ps-glass-strong);
+  box-shadow: 0 0 0 1px var(--ps-border), 0 1px 2px rgba(0,0,0,.05);
+}
+/* a folded flow: first and last step, small */
+.ps-lane-peek { display: flex; align-items: center; gap: 10px; margin: 6px 0 0 28px; padding: 0; border: 0; background: none; cursor: pointer; text-align: left; }
+.ps-lane-thumb { position: relative; display: block; overflow: hidden; border-radius: 5px; background: #fff; box-shadow: 0 0 0 1px var(--ps-border), 0 1px 2px rgba(0,0,0,.05); transition: box-shadow .12s; }
+.ps-lane-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.ps-lane-peek:hover .ps-lane-thumb { box-shadow: 0 0 0 2px var(--ps-focus), 0 1px 2px rgba(0,0,0,.05); }
+.ps-lane-peek-mid { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ps-faint); }
+.ps-lane-peek-mid svg { width: 13px; height: 13px; }
+/* boards folded to chips */
+.ps-board-chip {
+  display: inline-flex; align-items: center; gap: 9px; height: 42px; max-width: 320px; padding: 0 12px 0 14px;
+  border-radius: 14px; border: 1px solid var(--ps-border); background: var(--ps-glass-strong);
+  font-size: 15px; font-weight: 500; color: var(--ps-fg); cursor: pointer; transition: background .12s;
+}
+.ps-board-chip:hover:not(:disabled) { background: var(--ps-hover); }
+.ps-board-chip svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--ps-muted); }
+.ps-board-chip .ps-board-chip-chev { width: 12px; height: 12px; color: var(--ps-faint); transition: transform .12s; }
+.ps-board-chip[aria-expanded="true"] { background: var(--ps-active); }
+.ps-board-chip[aria-expanded="true"] .ps-board-chip-chev { transform: rotate(90deg); }
+.ps-board-chip:disabled { cursor: default; }
 /* ---- on-demand snapshots ---- */
 .ps-card-refresh {
   position: absolute; top: 5px; right: 5px; z-index: 2; width: 22px; height: 22px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
@@ -477,11 +513,20 @@
 }
 .ps-area-title svg { width: 14px; height: 14px; color: var(--ps-muted); }
 .ps-area-title .ps-area-kind { color: var(--ps-faint); font-weight: 500; }
+.ps-area-title svg { flex-shrink: 0; }
+/* a tile's pill is capped to the tile; a long name ends in an ellipsis */
+.ps-area-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* a folded screen's "N states", pinned to the stack's top-right corner */
+.ps-fold-badge { position: absolute; right: -6px; z-index: 2; }
+.ps-zl-tr { transform-origin: right top; }
+/* an unset status on a folded tile ("Set status", dev only) waits for hover or focus */
+.ps-fold-status[data-empty] { opacity: 0; transition: opacity .12s; }
+.ps-area:hover .ps-fold-status[data-empty], .ps-fold-status[data-empty]:focus-within { opacity: 1; }
 /* ---- sections: one level above an area title, so it must not compete with the pill ---- */
 .ps-group-h {
   display: inline-block; transform: scale(var(--ps-inv-big, 1)); transform-origin: left bottom;
   font-size: 12.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--ps-faint); white-space: nowrap;
+  color: var(--ps-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;
 }
 /* ---- site map: pages as nodes, arrows derived from the scenarios ---- */
 .ps-map-wires { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }

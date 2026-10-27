@@ -152,6 +152,16 @@ leaving large holes and one very long strip.
   section, so adding one state shifts its neighbours, not the whole canvas.
 - Fixed order of zones: site map → flows → screens by section.
 
+**Done (0.4, simpler than planned):** the map became an overview instead of
+a packer problem. One card per screen (state count on it), flows folded to
+title + first/last step, boards folded to chips; each opens in place and
+what is open lives in the URL (`x`, `fl`, `bx`, `states=all`). Folded screens
+are same-size tiles in a CSS grid whose width aims at ≈16:10
+(`canvas/disclosure.ts`, unit-tested); open screens break the grid and wrap;
+sections wrap side by side; order is kept. Not done: sizes are still
+measured from the DOM, not computed from the manifest, and there is no
+skyline packer for the all-open map.
+
 ## 4. Tours that work
 
 Clicking the highlighted element today is blocked (`preventDefault()` +

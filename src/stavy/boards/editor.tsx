@@ -697,6 +697,8 @@ export function useBoardEditor({
 
   return {
     board,
+    /** The file as written (the map's layer keeps each item's `anchor` here) */
+    stored,
     error,
     commit,
     layout,

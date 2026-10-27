@@ -138,7 +138,8 @@ The person is iterating fast. Don't make them wait on Stavy.
   (role × state), and `layout: "matrix"` opts a page into a grid. Default is
   a row. Never add states to fill a grid.
 - Register states that someone will look at. A screen with one state is
-  normal.
+  normal. The map shows one card per screen and opens the rest on a click,
+  so registering many states doesn't crowd it.
 - `group` sorts screens into sections; `status` (`draft`/`review`/`ready`)
   tells developers what's settled. It can sit on a screen, a named state or a
   board; `ready` means ready for development. People set it in the viewer,
@@ -214,7 +215,9 @@ How to compose:
 The map lays itself out from `stavy.json`; `stavy-content/map.json` adds free
 items on top (a board file: notes, Markdown, images, arrows). Each top-level
 item names the area it belongs to, and `x`/`y` are relative to that area's
-top-left, so it moves with its screen when the map changes:
+top-left, so it moves with its screen when the map changes. A screen with a
+note anchored to it is always shown open (all states), so place notes against
+the open screen:
 
 ```json
 { "title": "Map", "items": [

@@ -11,7 +11,8 @@ import { test, expect } from "@playwright/test"
 // area puts the registry over LIVE_BUDGET with candidates just off-screen.
 // Zooming then re-runs the check on every frame.
 
-for (const url of ["/stavy/?live=1", "/stavy/?live=1&d_locale=de-DE"]) {
+// `states=all`: the crowded area needs every state on the map, not the overview card.
+for (const url of ["/stavy/?live=1&states=all", "/stavy/?live=1&states=all&d_locale=de-DE"]) {
   test(`canvas survives zooming a crowded area (${url})`, async ({ page }) => {
     const errors: string[] = []
     page.on("pageerror", (e) => errors.push(e.message))

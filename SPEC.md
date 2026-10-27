@@ -225,7 +225,8 @@ A **state** is a URL with a name. A page lists the moments worth looking at:
   of seeds, flags and open panels to land on a moment, give it one named
   scene (`?scene=bulk-conflict`) instead of an axis per seed. The state's URL
   is then the only thing the app has to read (§2.1).
-- The map shows a page's states as a row. `layout: "matrix"` opts a page into
+- The map shows one card per page (its first state) and opens the rest on
+  request; open, a page's states are a row. `layout: "matrix"` opts a page into
   a grid over its two most-varying dimensions. No placeholder cells are drawn
   for combinations nobody registered.
 - Scenario steps, board items and doc embeds point at a state by id
@@ -688,6 +689,20 @@ A conforming viewer SHOULD provide:
   cards render as their snapshot or a label placeholder; nothing needs to be
   mounted for the overview to be legible, which is what makes the canvas
   scale to an enterprise-sized workspace.
+- **Overview first, every state one step away.** By default the canvas
+  shows one card per page (its first pinned state, the same one the site map
+  uses) with an "N states" control on it; scenario lanes fold to their title,
+  chips and first/last step; boards fold to chips. Opening a page shows all
+  its states plus its anatomy and figures. What is open is URL state:
+  `x=<page>,<page>` (pages), `fl=<scenario>,…` (lanes), `bx=<board>,…`
+  (boards), `states=all` (everything; the reference viewer binds it to A).
+  Anything that targets a folded state opens its page first: a jump from the
+  table of contents to a figure, `at=<page>?<dims>` (a deep link to one
+  state, dims may be partial), and an opened comment on a card. A page with
+  map-layer notes anchored to it stays open, and edit mode shows everything,
+  so notes always sit against the layout they were placed on. Folded pages
+  pack as same-size tiles in a grid aimed at a roughly 16:10 overview; open
+  pages break the grid. Order is kept within and across sections.
 - **The player**: one same-origin `<iframe>` of the real prototype filling the
   viewport, with the viewer chrome floating over it
   (`/stavy/?p=<page>&d_<dim>=…`). The prototype is fully interactive here — it
@@ -809,7 +824,8 @@ A conforming viewer SHOULD provide:
   (`/stavy/?p=<pageId>&d_<dim>=<value>&...`), so any state is shareable.
   Viewer modes are URL state too (`w=1` wireframe, `i=1` inspect,
   `tour=<id>&ts=<n>`), and the canvas persists its viewport (`v=x,y,zoom`)
-  and flags (`notes=1`, `w=1`, `live=1`, `map=0`) — a link reproduces exactly
+  and flags (`notes=1`, `w=1`, `live=1`, `map=0`, and what is open:
+  `x`, `fl`, `bx`, `states=all`) — a link reproduces exactly
   what the sender saw.
 - **Honesty + hide UI**: the chrome carries a "Mock only — not a real
   product" label and a shortcut (⌘\ / Ctrl+\) that hides all viewer UI for
