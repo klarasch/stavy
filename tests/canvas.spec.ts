@@ -69,7 +69,7 @@ test("site map arrows are hoverable and a node fits that page's area", async ({ 
 // A figure (a board anchored to a page, SPEC §1.7) belongs to its page's area,
 // not to the Boards area: that is the whole point of anchoring one.
 test("an anchored board renders inside its page area, with its callouts", async ({ page }) => {
-  await page.goto("/stavy/?ui=0")
+  await page.goto("/stavy/?ui=0&x=expenses")
   const figure = page.locator('[data-toc="page:expenses"] [data-toc="board:status-filter-menu"]')
   await expect(figure).toHaveCount(1)
   await expect(figure.locator("img")).toHaveAttribute("src", "/figures/status-filter-menu.png")

@@ -1,8 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   ArrowRight, ChevronRight, RotateCcw, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play, Waypoints,
-  Pencil, Undo2, Redo2,
+  Pencil, Undo2, Redo2, GalleryHorizontalEnd, FileText, Image as ImageIcon, CheckCircle2,
 } from "../icons"
 import { cn } from "../cn"
 import {
@@ -10,7 +10,7 @@ import {
   isWorkspaceDim, workspaceDimensions, workspaceDimsFromParams, workspaceCarry, workspaceKey,
   workspaceOverridesFor, pageInWorkspace, scenarioInWorkspace, varyingDims, varyingAcross, groupPages, instanceKey,
   pageViewport, frameOf, stateLabel, STATE_DIM,
-  pageFigures, standaloneBoards,
+  pageFigures, standaloneBoards, snapshotUrl,
 } from "../manifest"
 import { elementAt } from "../frame"
 import { PanZoom, clampK, type PanZoomHandle, type Transform } from "./PanZoom"
@@ -34,6 +34,7 @@ import { useDev, patchManifest } from "../dev"
 import { useBoardEditor } from "../boards/editor"
 import { AddPalette } from "../boards/Palette"
 import { mapSpace, useMapAreas } from "./mapLayer"
+import { readDisclosure, isOpen, setOpen, setAll, overviewDims, stateCount, runsOf, shelfWidth, shelfColumns, type DisclosureKind, type ShelfItem, type Universe } from "./disclosure"
 import { useManifestRev } from "../manifest"
 import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "../chrome"
 import type { BoardDef, BoardFile, PageDef, Scenario } from "../types"
@@ -64,6 +65,12 @@ const MAX_ROW = 6
 /** Flow steps are thumbnails, smaller than page cards. */
 const STEP_THUMB_W = 150
 const STEPS_PER_ROW = 6
+/** A folded flow shows its first and last step this wide. */
+const LANE_PEEK_W = 96
+/** Gap between areas on the map. */
+const AREA_GAP = 40
+/** An area's padding and border, both sides (.ps-area). */
+const AREA_PAD = 90
 
 function chunk<T>(xs: T[], n: number): T[][] {
   const out: T[][] = []
@@ -77,21 +84,35 @@ function cardScale(page: PageDef) {
 
 /** A named region of the canvas. The title pill scales with 1/zoom so it reads from orbit. */
 function Area({
-  title, kind, icon, tocId, children, className,
+  title, kind, icon, tocId, children, className, onTitleDoubleClick, pillMax,
 }: {
+  /** Widest the title pill may look on screen (canvas px): a tile's pill never runs into its neighbour */
+  pillMax?: number
   title: React.ReactNode
   kind?: string
   icon: React.ReactNode
   tocId?: string
   children: React.ReactNode
   className?: string
+  /** Double-clicking the title opens what the area folds away */
+  onTitleDoubleClick?: () => void
 }) {
   return (
     <section className={cn("ps-area", className)} data-toc={tocId}>
-      <div className="ps-area-title" data-ps-ui>
-        <span>
+      <div
+        className="ps-area-title"
+        data-ps-ui
+        onDoubleClick={
+          onTitleDoubleClick &&
+          ((e) => {
+            e.stopPropagation()
+            onTitleDoubleClick()
+          })
+        }
+      >
+        <span style={pillMax ? { maxWidth: `calc(${pillMax}px / var(--ps-inv-big, 1))` } : undefined}>
           {icon}
-          {title}
+          <span className="ps-area-name">{title}</span>
           {kind && <span className="ps-area-kind">{kind}</span>}
         </span>
       </div>
@@ -127,8 +148,55 @@ function notePathOf(page: PageDef, inst: { idx: number; note?: string; full: Rec
   return page.instances ? ["pages", page.id, "instances", inst.idx, "note"] : undefined
 }
 
+/**
+ * A screen's "N states" control: on the folded card's corner, or first in the
+ * open screen's header. Zoom-constant like the other labels. Nothing to show
+ * for a screen with one state, no anatomy and no figures.
+ */
+function FoldToggle({ page, wdims, open, onToggle, keptOpen }: {
+  page: PageDef
+  wdims: Record<string, string>
+  open: boolean
+  /** Fold or unfold; `fit` also fits the area afterwards */
+  onToggle?: (open: boolean, fit?: boolean) => void
+  /** Why this screen can't fold right now (map notes sit on it, edit mode) */
+  keptOpen?: string
+}) {
+  const n = stateCount(page, wdims)
+  const figures = pageFigures(page.id).length
+  const more = [
+    n > 1 && `${n} states`,
+    (page.annotations?.length ?? 0) > 0 && "anatomy",
+    figures > 0 && (figures === 1 ? "a figure" : `${figures} figures`),
+  ].filter(Boolean) as string[]
+  if (!more.length) return null
+  const label = n > 1 ? more[0] : more.join(" · ").replace(/^a /, "").replace(/^./, (c) => c.toUpperCase())
+  const what = more.join(", ").replace(/, ([^,]*)$/, " and $1")
+  return (
+    <button
+      type="button"
+      className="ps-disclose"
+      aria-expanded={open}
+      disabled={!onToggle}
+      title={keptOpen ?? (open ? "Show only the first state" : `Show ${what}`)}
+      onClick={(e) => {
+        // The second click of a double-click must not fold it straight back.
+        if (e.detail > 1) return
+        onToggle?.(!open)
+      }}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        onToggle?.(true, true)
+      }}
+    >
+      <span>{label}</span>
+      {onToggle && <ChevronRight />}
+    </button>
+  )
+}
+
 const PageGroup = memo(function PageGroup({
-  page, showNotes, wireframe, wdims, linkExtra, figures,
+  page, showNotes, wireframe, wdims, linkExtra, figures, open, fold,
 }: {
   page: PageDef
   showNotes: boolean
@@ -139,6 +207,10 @@ const PageGroup = memo(function PageGroup({
   linkExtra: Record<string, string>
   /** Boards anchored to this page (SPEC §1.7) */
   figures: BoardDef[]
+  /** All states (plus anatomy and figures), or just the overview card */
+  open: boolean
+  /** The "N states" control (FoldToggle) */
+  fold?: React.ReactNode
 }) {
   const navigate = useNavigate()
   const writable = !!useDev()?.writable
@@ -185,15 +257,65 @@ const PageGroup = memo(function PageGroup({
     return { instances, varying, matrix, colDim, rowDim, extraVarying, groups, row }
   }, [page, wOver])
 
-  const { varying, matrix, colDim, rowDim, extraVarying, groups, row } = layout
+  const { instances, varying, matrix, colDim, rowDim, extraVarying, groups, row } = layout
   const cols = colDim ? page.dimensions[colDim] : [null]
   const rows = rowDim ? page.dimensions[rowDim] : [null]
+
+  const n = instances.length
+  const status = <StatusControl status={page.status} ready={page.ready} onChange={writable ? (v) => patchManifest(["pages", page.id, "status"], v) : undefined} />
+
+  if (!open) {
+    // The overview: one card (the screen's first state), the rest stacked behind it.
+    // Its "N states" control (FoldToggle) sits on the stack.
+    const firstKey = instanceKey(page.id, overviewDims(page, wdims))
+    const first = instances.find((i) => instanceKey(page.id, i.full) === firstKey) ?? instances[0]
+    return (
+      <div>
+        {/* Status stays settable from the overview (a screen is marked ready here). */}
+        {(page.status || writable) && (
+          <div className="flex items-center gap-2 mb-1 ps-fold-status" data-empty={page.status ? undefined : "true"}>
+            <span className="ps-zl">{status}</span>
+          </div>
+        )}
+        {first && (
+          <div className="relative" style={{ width: w, marginTop: n > 1 ? 14 : 0 }}>
+            {/* On the stack's corner, zoom-constant, growing over the card rather than out of the tile. */}
+            {fold && (
+              <span className="ps-zl ps-zl-tr ps-fold-badge" style={{ top: n > 1 ? -18 : -8 }}>
+                {fold}
+              </span>
+            )}
+            {n > 1 && (
+              <>
+                <div className="ps-stack-layer" aria-hidden style={{ left: 16, top: -10, width: w - 32, height: h }} />
+                <div className="ps-stack-layer" aria-hidden style={{ left: 8, top: -5, width: w - 16, height: h }} />
+              </>
+            )}
+            <InstanceCard
+              pageId={page.id}
+              dims={first.full}
+              label={page.states ? stateLabel(page, first.full[STATE_DIM]) : undefined}
+              labelPath={page.states ? ["pages", page.id, "states", first.full[STATE_DIM], "label"] : undefined}
+              {...stateStatus(page, first.full[STATE_DIM])}
+              scale={scale}
+              frame={page.frame}
+              annotations={page.annotations}
+              showPins={showNotes}
+              wireframe={wireframe}
+              href={pageUrl(page.id, first.full, linkExtra)}
+            />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div>
       <div className="flex items-center gap-2 mb-1">
         <span className="ps-zl">
           <h3 className="flex items-center gap-2">
+            {fold}
             {template && <Chip sm mono>{template.label}</Chip>}
             {page.fidelity && (
               <Chip sm title="Fidelity rung (see SKILL.md)">
@@ -202,7 +324,7 @@ const PageGroup = memo(function PageGroup({
               </Chip>
             )}
             <span className="flex items-center gap-1">
-              {Object.entries(page.dimensions).filter(([d]) => !isWorkspaceDim(d)).map(([d, vs]) =>
+              {Object.entries(page.dimensions).filter(([d]) => !isWorkspaceDim(d) && !(n > 1 && d === STATE_DIM)).map(([d, vs]) =>
                 d === STATE_DIM ? (
                   <span key={d} className="ps-chip ps-chip-sm font-normal">
                     {vs.length} state{vs.length === 1 ? "" : "s"}
@@ -214,7 +336,7 @@ const PageGroup = memo(function PageGroup({
                 )
               )}
             </span>
-            <StatusControl status={page.status} ready={page.ready} onChange={writable ? (v) => patchManifest(["pages", page.id, "status"], v) : undefined} />
+            {status}
           </h3>
         </span>
       </div>
@@ -423,8 +545,42 @@ function RowFragment({
 
 
 /** One flow: numbered step thumbnails wrapped onto rows, collapsible. */
-function ScenarioLane({ sc, wdims, linkExtra }: { sc: Scenario; wdims: Record<string, string>; linkExtra: Record<string, string> }) {
-  const [open, setOpen] = useState(true)
+/** A folded flow's peek: its first and last step, small, with the count between. */
+function LanePeek({ steps, stepDims, onOpen }: { steps: Array<{ i: number; page?: PageDef }>; stepDims: Record<string, string>[]; onOpen: () => void }) {
+  const ends = steps.length > 1 ? [steps[0], steps[steps.length - 1]] : steps
+  const thumb = (x: { i: number; page?: PageDef }) => {
+    const fr = frameOf(x.page!)
+    return (
+      <span className="ps-lane-thumb" style={{ width: LANE_PEEK_W, height: Math.round((LANE_PEEK_W * fr.height) / fr.width) }}>
+        <img src={snapshotUrl(x.page!, stepDims[x.i])} alt="" draggable={false} onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+      </span>
+    )
+  }
+  return (
+    <button type="button" className="ps-lane-peek" title="Show every step" onClick={onOpen}>
+      {thumb(ends[0])}
+      {ends.length > 1 && (
+        <>
+          <span className="ps-lane-peek-mid">
+            <ArrowRight />
+            {steps.length > 2 && <span>{steps.length - 2} more</span>}
+            {steps.length > 2 && <ArrowRight />}
+          </span>
+          {thumb(ends[1])}
+        </>
+      )}
+    </button>
+  )
+}
+
+function ScenarioLane({ sc, wdims, linkExtra, open, onToggle }: {
+  sc: Scenario
+  wdims: Record<string, string>
+  linkExtra: Record<string, string>
+  open: boolean
+  onToggle?: (open: boolean) => void
+}) {
+  const setOpen = (v: boolean) => onToggle?.(v)
   // Every step resolved once: the lane labels only the axes that move between
   // steps (a lifecycle advancing), never the ones that hold still.
   const stepDims = sc.steps.map((st) => {
@@ -448,6 +604,7 @@ function ScenarioLane({ sc, wdims, linkExtra }: { sc: Scenario; wdims: Record<st
           ))}
         </div>
       </span>
+      {!open && steps.length > 0 && <LanePeek steps={steps} stepDims={stepDims} onOpen={() => setOpen(true)} />}
       {open && sc.description && (
         <p className="ps-sub mb-4 max-w-2xl">
           <EditableText path={["scenarios", sc.id, "description"]} value={sc.description} />
@@ -531,7 +688,7 @@ export function CanvasPage() {
   const dev = useDev()
   const writable = !!dev?.writable
   const editMode = writable && sp.get("e") === "1"
-  const { open: openComments } = useComments()
+  const { open: openComments, comments: allComments } = useComments()
   const scanAll = useScan("all")
   const wKey = workspaceKey(sp)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -568,7 +725,10 @@ export function CanvasPage() {
     const id = setTimeout(() => {
       const v = `${Math.round(t.x)},${Math.round(t.y)},${t.k.toFixed(3)}`
       if (sp.get("v") === v) return
-      const next = new URLSearchParams(sp)
+      // From the live URL, not this render's params (nor the router's updater,
+      // which sees the same stale copy): a fold or "All states" written in the
+      // meantime must survive the viewport write.
+      const next = new URLSearchParams(window.location.search)
       next.set("v", v)
       setSp(next, { replace: true })
     }, 300)
@@ -577,7 +737,9 @@ export function CanvasPage() {
   }, [t])
 
   // The map's own layer: notes and other free items, anchored to areas.
-  const areas = useMapAreas(contentEl, pz, `${manifestRev}|${wKey}|${showMap}`)
+  // Re-measured when what is folded changes, too: areas move and resize.
+  const discKey = ["states", "x", "fl", "bx", "e"].map((k) => sp.get(k) ?? "").join("|")
+  const areas = useMapAreas(contentEl, pz, `${manifestRev}|${wKey}|${showMap}|${discKey}`)
   const space = useMemo(() => mapSpace(areas), [areas])
   const layer = useBoardEditor({ file: "map.json", editMode, wireframe, pz, contentElRef, space, extraBoxes: areas, fallback: MAP_LAYER_EMPTY })
 
@@ -589,16 +751,8 @@ export function CanvasPage() {
     for (const fn of vpListeners.current) fn()
   }, [])
 
-  // Zoom the viewport to fit the chosen section.
-  const jumpTo = useCallback((tocId: string) => {
-    const el = contentEl?.querySelector<HTMLElement>(`[data-toc="${CSS.escape(tocId)}"]`)
-    if (!el || !pz.current) return
-    pz.current.fitTo(el, true)
-    el.setAttribute("data-flash", "true")
-    setTimeout(() => el.removeAttribute("data-flash"), 1200)
-  }, [contentEl])
-
   useHotkeys({
+    a: () => toggleAll(),
     m: () => setPlacing((p) => !p),
     n: () => setFlag("notes", !showNotes),
     w: () => setFlag("w", !wireframe),
@@ -653,6 +807,247 @@ export function CanvasPage() {
   // Sections (SPEC §1.3): page areas cluster by `group`, ungrouped last.
   const sections = groupPages(pages)
   const scenarios = manifest.scenarios.filter((sc) => scenarioInWorkspace(sc, wdims))
+  const hasCoverage = (manifest.requirements?.length ?? 0) > 0
+  const screens = [...sections.flatMap((s) => s.pages), ...components]
+
+  /* ---------------- progressive disclosure (disclosure.ts) ---------------- */
+
+  const universe: Universe = {
+    screens: screens.map((p) => p.id),
+    lanes: scenarios.map((s) => s.id),
+    boards: [...(hasCoverage ? ["coverage"] : []), ...standaloneBoards.map((b) => b.id)],
+  }
+  const disc = readDisclosure(sp)
+  // Notes are authored against the full map, so edit mode shows everything.
+  if (editMode) disc.all = true
+  // A map note anchored to a screen keeps it open: the note was placed
+  // relative to the open screen and would land on other cards otherwise.
+  const noted = new Set(
+    (layer.stored?.items ?? []).flatMap((it) => { const a = (it as { anchor?: string }).anchor; return a?.startsWith("page:") ? [a.slice(5)] : [] })
+  )
+  const screenOpen = (id: string) => isOpen(disc, "screens", id) || noted.has(id)
+  const keptOpenWhy = (id: string) =>
+    editMode ? "Edit mode shows every state" : noted.has(id) && !isOpen(disc, "screens", id) ? "Kept open: a map note sits on this screen" : undefined
+
+  // After a fold or unfold, the area the person acted on stays where it was on
+  // screen; the rest of the map reflows around it.
+  const placeHold = useRef<{ toc: string; left: number; top: number } | null>(null)
+  const areaEl = (toc: string) => contentEl?.querySelector<HTMLElement>(`[data-toc="${CSS.escape(toc)}"]`) ?? null
+  const holdPlace = (toc: string | null) => {
+    const el = toc ? areaEl(toc) : null
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    placeHold.current = { toc: toc!, left: r.left, top: r.top }
+  }
+  useLayoutEffect(() => {
+    const h = placeHold.current
+    if (!h || !pz.current) return
+    placeHold.current = null
+    const el = areaEl(h.toc)
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const dx = r.left - h.left
+    const dy = r.top - h.top
+    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return
+    const cur = pz.current.get()
+    pz.current.set({ ...cur, x: cur.x - dx, y: cur.y - dy })
+  })
+  /** The area under the middle of the window: what "All states" keeps in place. */
+  const centerArea = () => {
+    const vp = contentEl?.parentElement?.getBoundingClientRect()
+    if (!vp || !contentEl) return null
+    const cx = vp.left + vp.width / 2
+    const cy = vp.top + vp.height / 2
+    let best: string | null = null
+    let bestD = Infinity
+    for (const el of contentEl.querySelectorAll<HTMLElement>("section.ps-area[data-toc]")) {
+      const r = el.getBoundingClientRect()
+      const d = Math.hypot(Math.max(r.left - cx, 0, cx - r.right), Math.max(r.top - cy, 0, cy - r.bottom))
+      if (d < bestD) {
+        bestD = d
+        best = el.dataset.toc!
+      }
+    }
+    return best
+  }
+
+  // Fits wait for the render that unfolds their target.
+  const pendingFit = useRef<string | null>(null)
+  const fitNow = useCallback((target: string) => {
+    let el: HTMLElement | null = null
+    if (target.startsWith("inst:")) {
+      const key = target.slice(5)
+      el = contentEl?.querySelector<HTMLElement>(`[data-toc="${CSS.escape(`page:${key.split("?")[0]}`)}"] [data-instance="${CSS.escape(key)}"]`) ?? null
+    } else el = contentEl?.querySelector<HTMLElement>(`[data-toc="${CSS.escape(target)}"]`) ?? null
+    if (!el || !pz.current) return false
+    pz.current.fitTo(el, true)
+    el.setAttribute("data-flash", "true")
+    setTimeout(() => el.removeAttribute("data-flash"), 1200)
+    return true
+  }, [contentEl])
+  useEffect(() => {
+    const target = pendingFit.current
+    if (target && fitNow(target)) pendingFit.current = null
+  })
+
+  /** What must be open for a jump target to be on the map. */
+  const needFor = (target: string): { kind: DisclosureKind; id: string } | null => {
+    if (target.startsWith("board:")) {
+      const id = target.slice(6)
+      const fig = manifest.boards?.find((b) => b.id === id && b.page)
+      return fig ? { kind: "screens", id: fig.page! } : { kind: "boards", id }
+    }
+    if (target.startsWith("inst:")) {
+      const key = target.slice(5)
+      const page = getPage(key.split("?")[0])
+      if (!page || key === instanceKey(page.id, overviewDims(page, wdims))) return null
+      return { kind: "screens", id: page.id }
+    }
+    return null
+  }
+  const opened = (need: { kind: DisclosureKind; id: string }) =>
+    need.kind === "screens" ? screenOpen(need.id) : isOpen(disc, need.kind, need.id)
+
+  // Zoom the viewport to fit a section, a board or a state, unfolding it first.
+  const jumpTo = (target: string) => {
+    const need = needFor(target)
+    if (need && !opened(need)) {
+      pendingFit.current = target
+      setSp(setOpen(sp, need.kind, [need.id], true, universe), { replace: true })
+      return
+    }
+    fitNow(target)
+  }
+
+  // Stable for the memoised site map; always calls the current jumpTo.
+  const jumpRef = useRef(jumpTo)
+  jumpRef.current = jumpTo
+  const onJump = useCallback((target: string) => jumpRef.current(target), [])
+
+  const toggle = (kind: DisclosureKind, id: string, open: boolean, fit = false) => {
+    const toc = kind === "screens" ? `page:${id}` : kind === "boards" ? "area:boards" : "area:scenarios"
+    if (fit) pendingFit.current = toc
+    else holdPlace(toc)
+    setSp(setOpen(sp, kind, [id], open, universe), { replace: true })
+  }
+  const toggleAll = () => {
+    if (editMode) return
+    holdPlace(centerArea())
+    setSp(setAll(sp, !disc.all), { replace: true })
+  }
+
+  // Deep link to one state (`at=<page>?<dims>`): unfold its screen, fit the card.
+  const at = sp.get("at")
+  useEffect(() => {
+    if (!at || !contentEl) return
+    // Dims may be partial (`expense-detail?role=finance&lifecycle=approved`): resolve them like the player does.
+    const [pid, qs] = at.split("?")
+    const page = getPage(pid)
+    let next = new URLSearchParams(sp)
+    next.delete("at")
+    if (page) {
+      const key = instanceKey(page.id, resolveDims(page, { ...Object.fromEntries(new URLSearchParams(qs ?? "")), ...workspaceOverridesFor(page, wdims) }))
+      if (needFor(`inst:${key}`)) next = setOpen(next, "screens", [page.id], true, universe)
+      pendingFit.current = `inst:${key}`
+    }
+    setSp(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [at, contentEl])
+
+  // A comment opened on a card that is folded away unfolds its screen; the
+  // comment layer then brings the pin into view.
+  useEffect(() => {
+    const c = openCommentId ? allComments.find((x) => x.id === openCommentId) : undefined
+    if (!c || c.board !== MAP_BOARD || !c.item) return
+    const need = needFor(`inst:${c.item}`)
+    if (need && !opened(need)) setSp(setOpen(sp, need.kind, [need.id], true, universe), { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openCommentId, allComments])
+
+  // Calm packing: folded screens are same-size tiles in a grid; open ones
+  // break the grid and wrap at the same width (disclosure.ts).
+  const shelf: ShelfItem[] = screens.map((p) => {
+    const s = cardScale(p)
+    const fr = frameOf(p)
+    const cw = fr.width * s
+    const ch = fr.height * s
+    const open = screenOpen(p.id)
+    if (!open) return { id: p.id, open, w: cw + AREA_PAD, h: ch + 150 }
+    const n = p.instances?.length ?? 1
+    const cols = Math.min(n, MAX_ROW)
+    let w = cols * (cw + 20) - 20 + AREA_PAD
+    let h = Math.ceil(n / MAX_ROW) * (ch + 70) + 130
+    if (p.annotations?.length) {
+      w = Math.max(w, ANATOMY_CARD_TARGET_W + 400)
+      h += 340
+    }
+    if (pageFigures(p.id).length) h += 380
+    return { id: p.id, open, w: Math.round(w), h: Math.round(h) }
+  })
+  const tileW = (ps: PageDef[]) => Math.max(...ps.map((p) => Math.round(frameOf(p).width * cardScale(p)))) + AREA_PAD
+  const shelfW = screens.length ? shelfWidth(shelf, tileW(screens), AREA_GAP) : 0
+  /** One section's areas: folded screens as a grid of tiles, open ones wrapping at the shelf width. */
+  const renderScreens = (ps: PageDef[], kind: "page" | "component") =>
+    runsOf(shelf.filter((it) => ps.some((p) => p.id === it.id))).map((run) => {
+      const runPages = run.ids.map((id) => ps.find((p) => p.id === id)!)
+      const tw = tileW(runPages)
+      const areasOf = runPages.map((page) => {
+        const why = keptOpenWhy(page.id)
+        return (
+          <Area
+            key={page.id}
+            title={<EditableText path={["pages", page.id, "label"]} value={page.label} />}
+            kind={run.open ? kind : undefined}
+            icon={kind === "page" ? <Layers /> : <Boxes />}
+            tocId={`page:${page.id}`}
+            pillMax={run.open ? undefined : tw - 16}
+            onTitleDoubleClick={run.open ? undefined : () => toggle("screens", page.id, true, true)}
+          >
+            <PageGroup
+              page={page}
+              showNotes={showNotes}
+              wireframe={wireframe}
+              wdims={wdims}
+              linkExtra={linkExtra}
+              figures={pageFigures(page.id)}
+              open={run.open}
+              fold={
+                <FoldToggle
+                  page={page}
+                  wdims={wdims}
+                  open={run.open}
+                  keptOpen={why}
+                  onToggle={why ? undefined : (o, fit) => toggle("screens", page.id, o, fit)}
+                />
+              }
+            />
+          </Area>
+        )
+      })
+      if (run.open)
+        return (
+          <div key={run.ids[0]} className="flex flex-wrap items-start" style={{ gap: AREA_GAP, maxWidth: shelfW }}>
+            {areasOf}
+          </div>
+        )
+      return (
+        <div key={run.ids[0]} className="grid" style={{ gap: AREA_GAP, gridTemplateColumns: `repeat(${runCols(run.ids.length, tw)}, ${tw}px)` }}>
+          {areasOf}
+        </div>
+      )
+    })
+  const runCols = (n: number, tw: number) => Math.min(n, shelfColumns(shelfW, tw, AREA_GAP))
+  /** A section's width when all of it is folded (else the shelf width): its heading never runs past it. */
+  const sectionW = (ps: PageDef[]) => {
+    if (ps.some((p) => screenOpen(p.id))) return shelfW
+    const tw = tileW(ps)
+    const c = runCols(ps.length, tw)
+    return c * tw + (c - 1) * AREA_GAP
+  }
+  const screenSections = [
+    ...sections.map((s) => ({ key: s.group ?? "ungrouped", label: s.group, pages: s.pages, kind: "page" as const })),
+    ...(components.length ? [{ key: "components", label: "Components", pages: components, kind: "component" as const }] : []),
+  ]
 
   const setWorkspaceDim = (dimId: string, value: string) => {
     const dim = workspaceDimensions.find((d) => d.id === dimId)
@@ -672,68 +1067,89 @@ export function CanvasPage() {
           data-canvas-root
           className={cn("ps flex flex-col items-start gap-14 p-12", wireframe && "proto-wireframe", inspect && "ps-inspect-on")}
         >
-          {/* ---- Site map: how the screens fit together (arrows from scenarios) ---- */}
-          {showMap && pages.length > 1 && (
-            <Area title="Site map" kind={`${pages.length} screens`} icon={<Waypoints />} tocId="area:map" className="self-start">
-              <SiteMap pages={pages} scenarios={scenarios} wdims={wdims} linkExtra={linkExtra} onJump={jumpTo} />
-            </Area>
-          )}
+          {/* ---- Overview zone: site map, boards and flows side by side ---- */}
+          <div className="flex flex-wrap items-start" style={{ gap: 56, maxWidth: Math.max(shelfW, 2400) }}>
+            {/* ---- Site map: how the screens fit together (arrows from scenarios) ---- */}
+            {showMap && pages.length > 1 && (
+              <Area title="Site map" kind={`${pages.length} screens`} icon={<Waypoints />} tocId="area:map" className="self-start">
+                <SiteMap pages={pages} scenarios={scenarios} wdims={wdims} linkExtra={linkExtra} onJump={onJump} />
+              </Area>
+            )}
 
-          {/* ---- Boards: supporting material, outside the contract ---- */}
-          {(standaloneBoards.length > 0 || (manifest.requirements?.length ?? 0) > 0) && (
-            <Area title="Boards" kind="supporting material" icon={<MapIcon />} tocId="area:boards" className="self-start">
-              <div className="flex flex-wrap items-start gap-10">
-                {(manifest.requirements?.length ?? 0) > 0 && (
-                  <div data-toc="board:coverage">
-                    <CoverageBoard wireframe={wireframe} linkExtra={wCarry} wdims={wdims} />
+            {/* ---- Boards: supporting material, outside the contract. Chips; one opens in place. ---- */}
+            {universe.boards.length > 0 && (
+              <Area title="Boards" kind="supporting material" icon={<MapIcon />} tocId="area:boards" className="self-start">
+                <div className="flex flex-wrap items-start gap-2.5" style={{ maxWidth: 640 }}>
+                  {universe.boards.map((id) => {
+                    const b = standaloneBoards.find((x) => x.id === id)
+                    const open = isOpen(disc, "boards", id)
+                    const Icon = !b ? CheckCircle2 : b.kind === "image" ? ImageIcon : b.kind === "text" ? FileText : Waypoints
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        className="ps-board-chip"
+                        aria-expanded={open}
+                        disabled={editMode}
+                        title={b?.description ?? (open ? "Fold this board" : "Show this board")}
+                        onClick={() => toggle("boards", id, !open)}
+                      >
+                        <Icon />
+                        <span className="truncate">{b?.title ?? "Requirement coverage"}</span>
+                        <ChevronRight className="ps-board-chip-chev" />
+                      </button>
+                    )
+                  })}
+                </div>
+                {universe.boards.some((id) => isOpen(disc, "boards", id)) && (
+                  <div className="flex flex-wrap items-start gap-10 mt-10">
+                    {hasCoverage && isOpen(disc, "boards", "coverage") && (
+                      <div data-toc="board:coverage">
+                        <CoverageBoard wireframe={wireframe} linkExtra={wCarry} wdims={wdims} />
+                      </div>
+                    )}
+                    {standaloneBoards.filter((b) => isOpen(disc, "boards", b.id)).map((b) => (
+                      <div key={b.id} data-toc={`board:${b.id}`}>
+                        <BoardCard board={b} />
+                      </div>
+                    ))}
                   </div>
                 )}
-                {standaloneBoards.map((b) => (
-                  <div key={b.id} data-toc={`board:${b.id}`}>
-                    <BoardCard board={b} />
-                  </div>
+              </Area>
+            )}
+
+            {/* ---- Scenarios: one area, lanes stacked, each folded to a line until opened ---- */}
+            <Area title="Scenarios" kind={`${scenarios.length} walkthrough${scenarios.length === 1 ? "" : "s"}`} icon={<BookOpen />} tocId="area:scenarios" className="self-start">
+              <div className="flex flex-col gap-6">
+                {scenarios.map((sc) => (
+                  <ScenarioLane
+                    key={sc.id}
+                    sc={sc}
+                    wdims={wdims}
+                    linkExtra={linkExtra}
+                    open={isOpen(disc, "lanes", sc.id)}
+                    onToggle={editMode ? undefined : (o) => toggle("lanes", sc.id, o)}
+                  />
                 ))}
               </div>
             </Area>
-          )}
+          </div>
 
-          {/* ---- Scenarios: one wide area, lanes stacked ---- */}
-          <Area title="Scenarios" kind={`${scenarios.length} walkthrough${scenarios.length === 1 ? "" : "s"}`} icon={<BookOpen />} tocId="area:scenarios" className="self-start">
-            <div className="flex flex-col gap-8">
-              {scenarios.map((sc) => (
-                <ScenarioLane key={sc.id} sc={sc} wdims={wdims} linkExtra={linkExtra} />
-              ))}
-            </div>
-          </Area>
-
-          {/* ---- Pages: one area per page, clustered by section ---- */}
-          {sections.map((section) => (
-            <div key={section.group ?? "ungrouped"} className="flex flex-col gap-5">
-              {section.group && (
-                <div data-ps-ui>
-                  <span className="ps-group-h">{section.group}</span>
+          {/* ---- Screens: one area per screen, clustered by section; sections wrap at the shelf width ---- */}
+          <div className="flex flex-wrap items-start" style={{ columnGap: 72, rowGap: 64, maxWidth: shelfW }}>
+            {screenSections.map((section) => (
+              <div key={section.key} className="flex flex-col gap-5">
+                {section.label && (
+                  <div data-ps-ui>
+                    <span className="ps-group-h" style={{ maxWidth: `calc(${sectionW(section.pages)}px / var(--ps-inv-big, 1))` }}>{section.label}</span>
+                  </div>
+                )}
+                <div className="flex flex-col items-start" style={{ gap: AREA_GAP }}>
+                  {renderScreens(section.pages, section.kind)}
                 </div>
-              )}
-              <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
-                {section.pages.map((page) => (
-                  <Area key={page.id} title={<EditableText path={["pages", page.id, "label"]} value={page.label} />} kind="page" icon={<Layers />} tocId={`page:${page.id}`}>
-                    <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} figures={pageFigures(page.id)} />
-                  </Area>
-                ))}
               </div>
-            </div>
-          ))}
-
-          {/* ---- Components ---- */}
-          {components.length > 0 && (
-            <div className="flex flex-wrap items-start gap-10" style={{ maxWidth: 4200 }}>
-              {components.map((page) => (
-                <Area key={page.id} title={<EditableText path={["pages", page.id, "label"]} value={page.label} />} kind="component" icon={<Boxes />} tocId={`page:${page.id}`}>
-                  <PageGroup page={page} showNotes={showNotes} wireframe={wireframe} wdims={wdims} linkExtra={linkExtra} figures={pageFigures(page.id)} />
-                </Area>
-              ))}
-            </div>
-          )}
+            ))}
+          </div>
 
         </div>
         <div className={cn("ps ps-board-root ps-map-layer", editMode && "is-editing", wireframe && "proto-wireframe")} data-map-layer>
@@ -790,7 +1206,7 @@ export function CanvasPage() {
             )}
           </div>
           <MockNotice className="absolute top-[58px] left-6 z-20" />
-          <CanvasToc className="absolute top-[84px] left-4 z-20" onJump={jumpTo} wdims={wdims} showMap={showMap} />
+          <CanvasToc className="absolute top-[84px] left-4 z-20" onJump={onJump} wdims={wdims} showMap={showMap} />
 
           <div className="ps ps-glass absolute top-4 right-4 z-20 rounded-2xl px-1.5 py-1 flex items-center gap-0.5" data-ps-ui>
             {writable && (
@@ -815,6 +1231,17 @@ export function CanvasPage() {
                 <PsDivider />
               </>
             )}
+            <PsButton
+              active={disc.all}
+              disabled={editMode}
+              aria-pressed={disc.all}
+              tip={editMode ? "Edit mode shows every state" : disc.all ? "Back to the overview: one card per screen" : "Show every state, flow step and board"}
+              keys={["A"]}
+              tipBelow
+              onClick={toggleAll}
+            >
+              <GalleryHorizontalEnd /> All states
+            </PsButton>
             <PsButton active={showNotes} tip="Annotation pins and pointing notes" keys={["N"]} tipBelow onClick={() => setFlag("notes", !showNotes)}>
               <StickyNote /> Notes
             </PsButton>
@@ -867,8 +1294,8 @@ export function CanvasPage() {
           <ShortcutsSheet
             items={[
               ...(writable ? ([["Edit the map's notes", "E"]] as Array<[string, string]>) : []),
-              ["Notes", "N"], ["Leave a comment", "M"], ["Wireframe", "W"], ["Inspect", "I"], ["Live frames", "L"], ["Theme", "T"],
-              ["Zoom in / out", "+ −"], ["100% / fit everything", "1 2"], ["Reset view", "0"], ["Fit an area", "double-click"],
+              ["All states / overview", "A"], ["Notes", "N"], ["Leave a comment", "M"], ["Wireframe", "W"], ["Inspect", "I"], ["Live frames", "L"], ["Theme", "T"],
+              ["Zoom in / out", "+ −"], ["100% / fit everything", "1 2"], ["Reset view", "0"], ["Fit an area (and open a screen)", "double-click"],
               ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"],
             ]}
           />

@@ -30,7 +30,7 @@ test("states render as a wrapping row: no placeholders, named states labelled, a
     index["submit-expense?_state=done"] = { ...(Object.values(index)[0] as object), hash: "a-new-hash" }
     await route.fulfill({ json: index })
   })
-  await page.goto("/stavy/?view=map")
+  await page.goto("/stavy/?view=map&x=submit-expense")
   const area = page.locator('[data-toc="page:submit-expense"]')
   await expect(area).toHaveCount(1)
   await expect(area.locator("[data-instance]")).toHaveCount(4)
@@ -49,7 +49,7 @@ test("states render as a wrapping row: no placeholders, named states labelled, a
 })
 
 test("a long row wraps at six cards", async ({ page }) => {
-  await page.goto("/stavy/?view=map")
+  await page.goto("/stavy/?view=map&x=expense-detail")
   const cards = page.locator('[data-toc="page:expense-detail"] [data-instance]')
   await expect.poll(() => cards.count()).toBeGreaterThan(6)
   // Cards sharing a parent row: no row holds more than six. Polled, because the
@@ -63,16 +63,98 @@ test("a long row wraps at six cards", async ({ page }) => {
   await expect.poll(async () => { const c = await rows(); return c.length > 1 && Math.max(...c) <= 6 }, { timeout: 15_000 }).toBe(true)
 })
 
-test("a flow collapses and expands", async ({ page }) => {
+test("a flow starts folded to its first and last step, and opens and folds again", async ({ page }) => {
   await page.goto("/stavy/?view=map")
   const lane = page.locator('[data-toc="scenario:employee-submits"]')
-  await expect(lane.locator("[data-instance]")).toHaveCount(8)
-  await lane.locator(".ps-lane-toggle").dispatchEvent("click")
+  await expect(lane.getByText("8 steps")).toBeAttached()
   await expect(lane.locator("[data-instance]")).toHaveCount(0)
+  await expect(lane.locator(".ps-lane-peek .ps-lane-thumb")).toHaveCount(2)
+  await expect(lane.locator(".ps-lane-peek")).toContainText("6 more")
   await lane.locator(".ps-lane-toggle").dispatchEvent("click")
   await expect(lane.locator("[data-instance]")).toHaveCount(8)
+  await expect(page).toHaveURL(/[?&]fl=employee-submits(&|$)/)
   // Steps carry their title under the thumbnail.
   await expect(lane.locator("div.leading-snug", { hasText: "Start a new expense" })).toBeAttached()
+  await lane.locator(".ps-lane-toggle").dispatchEvent("click")
+  await expect(lane.locator("[data-instance]")).toHaveCount(0)
+  await expect(page).not.toHaveURL(/[?&]fl=/)
+})
+
+// The map is an overview: one card per screen, every state one step away.
+const screenCards = (page: Page) => page.locator('[data-toc^="page:"] [data-instance]')
+
+test("the overview shows one card per screen, with its state count on it", async ({ page }) => {
+  await page.goto("/stavy/?view=map")
+  await page.locator('[data-toc="page:expense-detail"]').waitFor()
+  const screens = await page.locator('section[data-toc^="page:"]').count()
+  expect(screens).toBeGreaterThan(4)
+  await expect(screenCards(page)).toHaveCount(screens)
+  const detail = page.locator('[data-toc="page:expense-detail"]')
+  await expect(detail.locator("[data-instance]")).toHaveCount(1)
+  await expect(detail.locator(".ps-disclose")).toHaveText("7 states")
+  // A screen with one state and nothing else to show has no control.
+  await expect(page.locator('[data-toc="page:policy"] .ps-disclose')).toHaveCount(0)
+  // Boards are chips until one is opened.
+  await expect(page.locator('[data-toc="area:boards"] .ps-board-chip')).toHaveCount(4)
+  await expect(page.locator('[data-toc="board:ia"]')).toHaveCount(0)
+})
+
+test("the state count opens a screen in place, and folds it again", async ({ page }) => {
+  await page.goto("/stavy/?view=map")
+  const detail = page.locator('[data-toc="page:expense-detail"]')
+  await detail.locator(".ps-disclose").click()
+  await expect(detail.locator("[data-instance]")).toHaveCount(7)
+  await expect(page).toHaveURL(/[?&]x=expense-detail(&|$)/)
+  // Open, the screen shows its anatomy too.
+  await expect(detail.getByText("Anatomy", { exact: true })).toBeAttached()
+  await detail.locator(".ps-disclose").click()
+  await expect(detail.locator("[data-instance]")).toHaveCount(1)
+  await expect(page).not.toHaveURL(/[?&]x=/)
+})
+
+test("double-clicking a folded screen's title opens it", async ({ page }) => {
+  await page.goto("/stavy/?view=map")
+  const area = page.locator('[data-toc="page:dashboard"]')
+  await area.locator(".ps-area-title").dispatchEvent("dblclick")
+  await expect(area.locator("[data-instance]")).toHaveCount(4)
+})
+
+test("All states (A) shows everything, and back", async ({ page }) => {
+  await page.goto("/stavy/?view=map")
+  await page.locator('[data-toc="page:expense-detail"]').waitFor()
+  await expect(screenCards(page)).toHaveCount(await page.locator('section[data-toc^="page:"]').count())
+  await page.keyboard.press("a")
+  await expect(page).toHaveURL(/[?&]states=all(&|$)/)
+  await expect(page.locator('[data-toc="page:expense-detail"] [data-instance]')).toHaveCount(7)
+  await expect(page.locator('[data-toc="scenario:employee-submits"] [data-instance]')).toHaveCount(8)
+  await expect(page.locator('[data-toc="board:ia"]')).toHaveCount(1)
+  // Folding one screen keeps the rest open, spelled out in the link.
+  await page.locator('[data-toc="page:expense-detail"] .ps-disclose').click()
+  await expect(page.locator('[data-toc="page:expense-detail"] [data-instance]')).toHaveCount(1)
+  await expect(page.locator('[data-toc="page:dashboard"] [data-instance]')).toHaveCount(4)
+  await expect(page).not.toHaveURL(/states=all/)
+  await page.getByRole("button", { name: "All states" }).click()
+  await expect(page).toHaveURL(/[?&]states=all(&|$)/)
+  await page.getByRole("button", { name: "All states" }).click()
+  await expect(page).not.toHaveURL(/[?&](states|x|fl|bx)=/)
+  await expect(page.locator('[data-toc="page:dashboard"] [data-instance]')).toHaveCount(1)
+})
+
+test("a link to one state opens its screen and lands on the card", async ({ page }) => {
+  // Dims may be partial; the rest come from the screen's defaults, as in the player.
+  await page.goto(`/stavy/?${new URLSearchParams({ view: "map", at: "expense-detail?role=finance&lifecycle=approved" })}`)
+  const card = page.locator('[data-toc="page:expense-detail"] [data-instance*="lifecycle=approved"][data-instance*="role=finance"]')
+  await expect(card).toHaveCount(1)
+  await expect(page).toHaveURL(/[?&]x=expense-detail(&|$)/)
+  await expect(page).not.toHaveURL(/[?&]at=/)
+  await expect(card).toBeInViewport()
+})
+
+test("the contents open a board folded to a chip", async ({ page }) => {
+  await page.goto("/stavy/?view=map")
+  await page.locator(".ps-toc-item", { hasText: "Information architecture" }).click()
+  await expect(page.locator('[data-toc="board:ia"][data-flash]')).toHaveCount(1)
+  await expect(page).toHaveURL(/[?&]bx=ia(&|$)/)
 })
 
 test("with the dev endpoint, a card without a snapshot can be captured and all snapshots refreshed", async ({ page }) => {
