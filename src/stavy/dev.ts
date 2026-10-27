@@ -34,25 +34,38 @@ function api(path: string) {
 }
 
 let polling = false
+/** Once the endpoint has answered, a failed check is a blip (a busy or restarting dev server), not static hosting. */
+let seen = false
 /** Start polling the endpoint (once). Every rev change notifies subscribers. */
 export function startDevPolling(intervalMs = 1500) {
   if (polling) return
   polling = true
+  let misses = 0
   const tick = async () => {
+    let next: Health | null = null
     try {
       const r = await fetch(api("health"), { cache: "no-store" })
-      const next = r.ok ? ((await r.json()) as Health) : null
-      const changed = JSON.stringify(next) !== JSON.stringify(health)
-      health = next?.ok ? next : null
-      if (changed) emit()
-      // Static hosting answers 404 (or index.html): stop asking.
-      if (!health) return
+      next = r.ok ? ((await r.json().catch(() => null)) as Health | null) : null
     } catch {
-      health = null
-      emit()
-      return
+      next = null
     }
-    setTimeout(tick, intervalMs)
+    if (next?.ok) {
+      seen = true
+      misses = 0
+      const changed = JSON.stringify(next) !== JSON.stringify(health)
+      health = next
+      if (changed) emit()
+    } else {
+      // Static hosting answers 404 (or index.html) from the start: stop asking.
+      if (!seen) return
+      // Keep the last known state through a couple of misses, so writes don't
+      // quietly fall back to the browser while the server is only busy.
+      if (++misses >= 3 && health) {
+        health = null
+        emit()
+      }
+    }
+    setTimeout(tick, next?.ok ? intervalMs : Math.min(10_000, intervalMs * 2 ** Math.min(misses, 3)))
   }
   void tick()
 }
