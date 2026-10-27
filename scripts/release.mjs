@@ -102,6 +102,9 @@ const files = [
   "skill/PROTOTYPING.md",
   "docs/inspect-adapter.template.js",
 ]
+// Everything init copies into a repo must be in the package too: take the
+// installer's own list, so a new script can't be left out of a release.
+for (const src of Object.values(copiedFiles())) if (!src.startsWith("dist-viewer") && !files.includes(src)) files.push(src)
 for (const f of files) {
   if (!existsSync(join(root, f))) die(`missing ${f}`)
   mkdirSync(dirname(join(stage, f)), { recursive: true })
