@@ -9,6 +9,22 @@ anything, they have to do.
 
 **What you get**
 
+- **The map is an overview.** One card per screen with "N states"; open a
+  screen (double-click its title, or the control) or press A for all states.
+  Flows start folded to their first and last step. Jumping to a state opens
+  its screen. Open screens and flows are in the URL (`x=`, `fl=`,
+  `states=all`).
+- **Boards on the map link to the board.** The Boards area lists your
+  boards as links; diagrams that live only on the map are their own row.
+- **Pointing stickies replace Notes.** A map sticky can point at a screen's
+  state or an element in it (`screen`, `state`/`dims`, `target`) and draws a
+  line there. Stickies without a position sit inside their screen's tile.
+  The Notes button is gone.
+- **Edit mode** on the map shows only Done, Add, undo/redo and zoom.
+- **Smoother player.** Switching state keeps the current one on screen until
+  the next has loaded (no black flash). Back (and C) returns to the board,
+  doc or Home you opened the screen from. In the bottom bar, the eye toggle
+  sits in the bar and nothing overlaps the buttons.
 - **Crops and doc embeds are inspectable.** A board item cropped to a
   component (or opened with `do`, or at another viewport) used to be a
   screenshot only. With Inspect on, hovering it now mounts the real app,
@@ -44,8 +60,12 @@ anything, they have to do.
   instead. They now always open `changelog.md` / `decisions.md`, and a
   missing doc says so instead of showing the app's HTML.
 
-**What you do:** nothing. Long text already on your boards shows up as
-validate warnings; ask Claude to move it into a doc.
+**What you do:**
+- If `stavy:validate` says `notes[]` is retired, run
+  `npm run stavy:migrate -- --write` (commit first) to turn them into
+  pointing stickies on the map.
+- Long text already on your boards shows up as validate warnings; ask Claude
+  to move it into a doc.
 
 ## 0.4.0 — 2026-10-21 (alpha)
 
