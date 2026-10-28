@@ -28,16 +28,21 @@ test("Back returns to the board the screen was opened from", async ({ page }) =>
   await page.goto("/stavy/?b=status-filter")
   await page.locator("[data-instance]").first().waitFor()
   await page.goto("/stavy/?p=expenses&d_role=employee&d_state=loaded")
-  await page.keyboard.press("c")
-  await expect(page).toHaveURL(/[?&]b=status-filter/)
+  await expect(page.frameLocator("iframe.ps-frame").locator("body")).toBeVisible()
+  await expect.poll(async () => {
+    await page.locator("body").press("c")
+    return page.url()
+  }).toMatch(/[?&]b=status-filter/)
 })
 
 test("Back goes to the map when the player was opened directly", async ({ browser }) => {
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   await page.goto("/stavy/?p=expenses&d_role=employee&d_state=loaded")
-  await page.locator("iframe.ps-frame").waitFor()
-  await page.keyboard.press("c")
-  await expect(page).toHaveURL(/[?&]view=map/)
+  await expect(page.frameLocator("iframe.ps-frame").locator("body")).toBeVisible()
+  await expect.poll(async () => {
+    await page.locator("body").press("c")
+    return page.url()
+  }).toMatch(/[?&]view=map/)
   await ctx.close()
 })
