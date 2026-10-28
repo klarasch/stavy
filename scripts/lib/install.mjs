@@ -120,6 +120,8 @@ export function copiedFiles() {
     "scripts/stavy/lib/collect.mjs": "scripts/lib/collect.mjs",
     "scripts/stavy/lib/patch.mjs": "scripts/lib/patch.mjs", // the dev plugin imports it
     "scripts/stavy/lib/jsonEdit.mjs": "scripts/lib/jsonEdit.mjs", // patch.mjs imports it
+    "scripts/stavy/capture-worker.mjs": "scripts/capture-worker.mjs", // the dev plugin starts it
+    "scripts/stavy/lib/capture.mjs": "scripts/lib/capture.mjs", // scan and the worker import it
     "scripts/stavy/lib/refresh.mjs": "scripts/lib/refresh.mjs", // the dev plugin imports it
     "scripts/stavy/lib/format.mjs": "scripts/lib/format.mjs", // format.mjs imports it
     "scripts/stavy/format.mjs": "scripts/format.mjs",

@@ -60,10 +60,13 @@ the local layer (`.stavy/SKILL.local.md`, `.stavy/RULES.local.md`;
    It applies to `vite dev` only; `vite build` is unchanged. It lets the viewer
    save boards, notes and comments to files in your repo, serves the snapshots
    cache, and re-captures states on demand. Without it the viewer is read-only.
-   When your app's source changes it also re-captures the states in the
-   background, the cards on screen first. Turn that off with
-   `stavy({ …, autoRefresh: false })`, or skip more folders with
-   `autoRefresh: { ignore: ["src/mocks"] }`.
+   When your app's source changes it also re-captures the cards on screen
+   (only while the viewer is open); other cards are captured when they scroll
+   into view. It keeps one Chromium open for this while the dev server runs
+   and drops it after 5 idle minutes. Options: `autoRefresh: false` turns it
+   off; `autoRefresh: { scope: "all" }` also refreshes every other state in the
+   background; `debounceMs` (default 2000) is the quiet time after the last
+   save; `ignore: ["src/mocks"]` skips more folders.
 2. **Register what exists.** `npm run dev`, open
    `http://localhost:5173/stavy/index.html`. In `public/stavy.json`, add one
    `pages[]` entry per screen you want on the map, with the URL it already

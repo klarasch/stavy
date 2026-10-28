@@ -885,15 +885,25 @@ A workspace SHOULD ship:
   hook that lets a freshly loaded state be held from its first timer (§1.4).
   Without it the viewer is read-only; the viewer and scan work either way.
   **Auto-refresh:** when the app's source changes (not Stavy's content,
-  snapshots, manifest, tests or docs), it waits for a quiet ~800 ms and
-  re-captures in the background, one scan process at a time: the cards the
-  viewer reports on screen first (`POST /__stavy/visible`), then every other
-  captured state in small chunks; a change during a scan starts the order
-  over. The scan writes `index.json` after each capture (merged into a fresh
-  read, replaced atomically), so cards update one by one; an identical
-  re-capture keeps its file and `at`, and `checkedAt` records the look. While
-  a refresh is pending, a card captured before the change shows a small
-  "updating" mark. `stavy({ autoRefresh: false })` turns it off.
+  snapshots, manifest, tests or docs), it records `sourceChangedAt` (in
+  `/__stavy/health`); a state whose capture predates it is out of date. After
+  a quiet `debounceMs` (default 2000) it re-captures only the out-of-date
+  cards the viewer reports on screen (`POST /__stavy/visible`, repeated every
+  few seconds while the tab is shown and not at all when it is hidden). A card
+  that scrolls into view later is captured when the next report names it. If
+  no report arrived in the last ~10 s nobody is looking and nothing is
+  captured. Captures run one job at a time in a single long-lived worker
+  process (`capture-worker.mjs`, one Chromium, same capture code as `scan.mjs`)
+  that quits with the dev server or after ~5 idle minutes and restarts on
+  demand; a newer request coalesces with a waiting one. The worker writes
+  `index.json` after each capture (merged into a fresh read, replaced
+  atomically), so cards update one by one; an identical re-capture keeps its
+  file and `at`, and `checkedAt` records the look. While a refresh is pending,
+  a card captured before the change shows a small "updating" mark. A scan
+  asked for (`POST /__stavy/scan`, a card's refresh button) always runs.
+  `autoRefresh: { scope: "all" }` also refreshes every other captured state in
+  small background chunks while a viewer is open; `autoRefresh: false` turns
+  it off; without Playwright + Chromium it turns itself off with one log line.
   **Small diffs:** writes keep files reviewable. Boards and `map.json` are
   written in one fixed layout (`scripts/lib/format.mjs`: board keys one per
   line, items expanded one key per line, arrows and a section's items one per
