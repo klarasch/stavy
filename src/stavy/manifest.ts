@@ -38,7 +38,7 @@ export const viewerBase: string = isFile ? path : viewerDir
 /** Path prefix the prototype is served under: the parent of the viewer (override: manifest `viewer.app`). */
 export let appBase: string = viewerDir.replace(/\/[^/]*$/, "")
 /** viewerBase + the separator before a query string. */
-const viewerHref = isFile ? viewerBase : `${viewerBase}/`
+export const viewerHref = isFile ? viewerBase : `${viewerBase}/`
 
 export let manifest: Manifest = {
   version: "0.2",

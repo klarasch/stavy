@@ -645,6 +645,9 @@
 /* the player: one frame filling the viewport under the floating chrome */
 .ps-player { position: absolute; inset: 0; }
 .ps-player > .ps-frame { width: 100%; height: 100%; }
+/* The frame a state loads into while the shown one stays: laid out the same, never seen or hit. */
+.ps-player > .ps-frame-back { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border: 0; display: block; background: #fff; visibility: hidden; pointer-events: none; }
+.ps-player[data-inspect-scaled] > .ps-frame-back { transform-origin: 0 0; }
 /* A requested state settling behind its own snapshot (PageView loadState). */
 .ps-frame-veil { position: absolute; inset: 0; background: var(--ps-canvas-bg); pointer-events: none; overflow: hidden; }
 .ps-frame-veil > img { display: block; width: 100%; height: auto; }

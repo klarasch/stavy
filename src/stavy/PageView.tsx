@@ -36,6 +36,7 @@ import type { ToolbarAnchor } from "./types"
 import { CommentLayer } from "./comments/CommentLayer"
 import { CommentsPanel } from "./comments/CommentsPanel"
 import { useComments, placeOf, dimsEqual as commentDimsEqual } from "./comments/store"
+import { playerOrigin } from "./origin"
 import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt, loadFrame, settleFrame } from "./frame"
 
 /** Docked, full-width bottom bar unless the manifest sets `viewer.toolbar`. */
@@ -62,7 +63,19 @@ export function PageView() {
   const pageId = sp.get("p") ?? ""
   const navigate = useNavigate()
   const { hidden, theme, setTheme, setHidden } = useChrome()
+  // Two frames, one shown: a requested state loads in the back frame while the
+  // current one stays on screen, and they swap once it has settled — no blank
+  // (black, in dark mode) gap between states. `iframe` is always the shown one.
+  const frames = useRef<[HTMLIFrameElement | null, HTMLIFrameElement | null]>([null, null])
+  const [front, setFront] = useState<0 | 1>(0)
   const [iframe, setIframe] = useState<HTMLIFrameElement | null>(null)
+  const frontRef = useCallback((el: HTMLIFrameElement | null) => {
+    frames.current[0] = el
+    if (el) setIframe((cur) => cur ?? el)
+  }, [])
+  const backRef = useCallback((el: HTMLIFrameElement | null) => {
+    frames.current[1] = el
+  }, [])
   const [shield, setShield] = useState<HTMLDivElement | null>(null)
   const [inspectSlot, setInspectSlot] = useState<HTMLDivElement | null>(null)
   const [viewportEl, setViewportEl] = useState<HTMLDivElement | null>(null)
@@ -150,23 +163,37 @@ export function PageView() {
       // The snapshot only stands in when it was captured at this width — at any
       // other width the live layout differs and the swap would visibly jump.
       const cover = page && entry && !entry.missing?.length && Math.abs(entry.width - w) <= 4 ? snapshotUrl(page, dims) : null
-      setVeil({ src: cover })
+      // Something is already on screen: load behind it and swap when ready.
+      // The very first load has nothing to keep, so it is veiled instead.
+      const shown = frameHref(frame)
+      const backIdx = (frames.current[0] === frame ? 1 : 0) as 0 | 1
+      const back = shown && shown !== "about:blank" ? frames.current[backIdx] : null
+      const target = back ?? frame
+      if (!back) setVeil({ src: cover })
       const t0 = performance.now()
       const onLoad = () => {
-        frame.removeEventListener("load", onLoad)
+        target.removeEventListener("load", onLoad)
         const t1 = performance.now()
-        void settleFrame(frame).then(() => {
+        void settleFrame(target).then(() => {
           if (loadSeq.current !== seq) return
+          if (back) {
+            setFront(backIdx)
+            setIframe(back)
+            // Free the old document once the swap has painted.
+            setTimeout(() => {
+              if (loadSeq.current === seq) loadFrame(frame, "about:blank")
+            }, 300)
+          }
           setVeil(null)
           // `?debug=1`: where a slow state switch spends its time.
           if (new URLSearchParams(window.location.search).get("debug") === "1")
             console.info(`[stavy] ${href}: shown after ${Math.round(performance.now() - t0)} ms (app load ${Math.round(t1 - t0)} ms, settle ${Math.round(performance.now() - t1)} ms)`)
         })
       }
-      frame.addEventListener("load", onLoad)
+      target.addEventListener("load", onLoad)
       // Never leave a veil up if the load event is lost.
       setTimeout(() => loadSeq.current === seq && setVeil(null), 6000)
-      loadFrame(frame, href)
+      loadFrame(target, href)
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [page, dims]
@@ -238,6 +265,8 @@ export function PageView() {
   const cycleAnnot = () => setParam("a", annotMode === null ? "hover" : annotMode === "hover" ? "all" : null)
   const pageScenarios = manifest.scenarios.filter((s) => s.steps.some((st) => st.page === page.id))
   const exitUrl = pageUrl(page.id, dims, carry)
+  // Back goes where the player was opened from (a board, a doc, Home), else the map.
+  const origin = playerOrigin(canvasUrl({ ...wCarry, ...(wireOn ? { w: "1" } : {}) }))
 
   /** Tour: go to step `idx` by changing `ts` alone; the step supplies its own dims, the frame is left as the app made it. */
   const advanceTourInPlace = (idx: number) => {
@@ -331,7 +360,7 @@ export function PageView() {
     w: () => setParam("w", wireOn ? null : "1"),
     m: () => setPlacing((p) => !p),
     d: () => setDimPanel((o) => !o),
-    c: () => navigate(canvasUrl({ ...wCarry, ...(wireOn ? { w: "1" } : {}) })),
+    c: () => navigate(playerOrigin(canvasUrl({ ...wCarry, ...(wireOn ? { w: "1" } : {}) })).href),
     t: () => setTheme(cycleTheme(theme)),
     Escape: () => {
       if (placing) setPlacing(false)
@@ -385,7 +414,9 @@ export function PageView() {
           {/* No `src` prop: the effect above loads every requested state itself
               (loadFrame — a fresh document, so the app boots into exactly that
               state) and veils the frame until it has settled. */}
-          <iframe ref={setIframe} className="ps-frame" title={page.label} style={frameStyle} />
+          {/* Only the shown frame is `.ps-frame` (tests and generated flow tests find the prototype by it). */}
+          <iframe ref={frontRef} className={front === 0 ? "ps-frame" : "ps-frame-back"} title={front === 0 ? page.label : undefined} style={frameStyle} tabIndex={front === 0 ? undefined : -1} />
+          <iframe ref={backRef} className={front === 1 ? "ps-frame" : "ps-frame-back"} title={front === 1 ? page.label : undefined} style={frameStyle} tabIndex={front === 1 ? undefined : -1} />
           {veil && (
             <div className="ps-frame-veil" aria-hidden>
               {veil.src && <img src={veil.src} alt="" />}
@@ -448,7 +479,7 @@ export function PageView() {
               {isBar ? <PictureInPicture2 /> : <PanelBottom />}
             </PsButton>
             {/* Where am I */}
-            <PsButton tip="Back to canvas" keys={["C"]} onClick={() => navigate(canvasUrl({ ...wCarry, ...(wireOn ? { w: "1" } : {}) }))}>
+            <PsButton tip={`Back to ${origin.label}`} keys={["C"]} onClick={() => navigate(origin.href)}>
               <ChevronLeft />
               <Layers style={{ color: "var(--ps-accent)" }} />
             </PsButton>
@@ -572,7 +603,7 @@ export function PageView() {
           onClose={() => setParam("comments", null)} onAdd={() => { setParam("comments", null); setPlacing(true) }} />}
       <ShortcutsSheet
         items={[
-          ["Annotations: hidden → on hover → all", "N"], ["Inspect", "I"], ["Wireframe", "W"], ["Leave a comment", "M"], ["Dimensions panel", "D"], ["Back to canvas", "C"],
+          ["Annotations: hidden → on hover → all", "N"], ["Inspect", "I"], ["Wireframe", "W"], ["Leave a comment", "M"], ["Dimensions panel", "D"], ["Back to where you came from", "C"],
           ["Tour: next / previous", "→ ←"], ["Exit tour / close", "Esc"], ["Theme", "T"], ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"],
         ]}
       />

@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react"
-import { Route, Routes, useSearchParams } from "react-router-dom"
+import { lazy, Suspense, useEffect } from "react"
+import { Route, Routes, useLocation, useSearchParams } from "react-router-dom"
 import { CanvasPage } from "./canvas/CanvasPage"
 import { PageView } from "./PageView"
 import { ChromeProvider, EyeToggle } from "./chrome"
@@ -7,6 +7,7 @@ import { CommentsProvider } from "./comments/store"
 import { useManifestSync } from "./dev"
 import { contentIndex } from "./manifest"
 import { LiveSnapshots } from "./snapshots"
+import { rememberOrigin } from "./origin"
 
 const hasContent = () => Object.keys(contentIndex).length > 0
 
@@ -24,7 +25,13 @@ const Blank = () => <div className="h-screen" style={{ background: "var(--ps-can
  */
 function Root() {
   const [sp] = useSearchParams()
-  if (sp.get("p")) return <PageView />
+  const { search } = useLocation()
+  const inPlayer = !!sp.get("p")
+  // Remember the last view that isn't the player: its Back returns there.
+  useEffect(() => {
+    if (!inPlayer) rememberOrigin(search)
+  }, [inPlayer, search])
+  if (inPlayer) return <PageView />
   // Keyed by board id: switching boards starts a fresh view (its own viewport, history).
   if (sp.get("b"))
     return (
