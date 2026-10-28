@@ -23,11 +23,13 @@ anything, they have to do.
   long Markdown in narrow board columns. Doc links with a `#heading` scroll
   to that heading.
 - **Code changes show up on their own.** With the dev plugin running, saving
-  a file in the app re-captures the cards on screen first (a small spinner
-  marks a card that's updating), then the rest in the background. Cards
-  update one by one as each capture lands. Needs Playwright + Chromium, like
-  `stavy:scan`; turn it off with `stavy({ autoRefresh: false })` in
-  `vite.config.ts`.
+  a file in the app re-captures the cards on screen (a small spinner marks a
+  card that's updating) once you stop typing for ~2 s. Other cards are only
+  marked out of date and are captured when they scroll into view; nothing is
+  captured while no viewer tab is open. One long-lived Chromium does the work,
+  not one per save. `autoRefresh: { scope: "all" }` also refreshes every other
+  state in the background. Needs Playwright + Chromium, like `stavy:scan`; turn
+  it off with `stavy({ autoRefresh: false })` in `vite.config.ts`.
 - **Small diffs.** Renaming or re-labelling in the viewer changes only that
   line of `stavy.json`; board and map edits keep the file's layout.
   `npm run stavy:format` lays existing boards out the same way (once, then

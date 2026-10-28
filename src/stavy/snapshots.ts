@@ -95,12 +95,16 @@ export function useUpdating(entry: SnapshotEntry | undefined): boolean {
 }
 
 const VISIBLE_THROTTLE_MS = 1000
+/** Re-send an unchanged list this often: the server treats silence (10 s) as "nobody is looking". */
+const VISIBLE_HEARTBEAT_MS = 4000
 
 /**
  * Report the `[data-instance]` cards on screen to the dev server, nearest the
- * middle first, so a refresh captures what you look at before the rest. One
- * IntersectionObserver for the whole viewer; cards are found by attribute, so
- * the map, boards and docs need no wiring. Mount once.
+ * middle first, so the server re-captures what you look at, and only that. It
+ * repeats the list while the tab is shown and stops when the tab is hidden, so
+ * a closed or backgrounded viewer costs no captures. One IntersectionObserver
+ * for the whole viewer; cards are found by attribute, so the map, boards and
+ * docs need no wiring. Mount once.
  */
 export function useVisibleCardsReport() {
   const dev = useDev()
@@ -112,8 +116,9 @@ export function useVisibleCardsReport() {
     let sent = ""
     let timer: ReturnType<typeof setTimeout> | null = null
     let last = 0
-    const send = () => {
+    const send = (force = false) => {
       timer = null
+      if (document.hidden) return
       last = Date.now()
       const cx = innerWidth / 2
       const cy = innerHeight / 2
@@ -123,12 +128,12 @@ export function useVisibleCardsReport() {
       }
       const keys = [...new Set([...shown].filter((el) => el.isConnected).sort((a, b) => dist(a) - dist(b)).map((el) => el.getAttribute("data-instance") ?? ""))].filter(Boolean)
       const body = keys.join("\n")
-      if (body === sent) return
+      if (body === sent && !force) return
       sent = body
       postVisible(keys).catch(() => {})
     }
     const schedule = () => {
-      if (timer) return
+      if (timer || document.hidden) return
       timer = setTimeout(send, Math.max(0, VISIBLE_THROTTLE_MS - (Date.now() - last)))
     }
     const io = new IntersectionObserver((entries) => {
@@ -146,7 +151,14 @@ export function useVisibleCardsReport() {
     })
     mo.observe(document.body, { childList: true, subtree: true })
     sync()
+    const beat = setInterval(() => send(true), VISIBLE_HEARTBEAT_MS)
+    const onVisibility = () => {
+      if (!document.hidden) send(true)
+    }
+    document.addEventListener("visibilitychange", onVisibility)
     return () => {
+      clearInterval(beat)
+      document.removeEventListener("visibilitychange", onVisibility)
       mo.disconnect()
       io.disconnect()
       if (timer) clearTimeout(timer)

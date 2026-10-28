@@ -13,7 +13,8 @@
 //   DELETE /__stavy/content/<path>  remove one
 //   POST   /__stavy/scan            { keys?: string[], all?: boolean } → re-capture those states in the background
 //   GET    /__stavy/scan            the running / last scan
-//   POST   /__stavy/visible         { keys: string[] } the cards the viewer has on screen: refreshed first
+//   POST   /__stavy/visible         { keys: string[] } the cards the viewer has on screen (a heartbeat
+//                                   too): out-of-date ones are re-captured; none for 10 s = nobody looking
 //   PATCH  /__stavy/manifest        { path, value } → set ONE text field of stavy.json (titles, labels, notes;
 //                                   see scripts/lib/patch.mjs for the allowed paths). Read fresh, set, write
 //                                   back only the bytes of that value, so the diff is one line.
@@ -21,10 +22,15 @@
 // and, when stavy.json is not inside public/, serves /stavy.json and
 // /stavy-content/** from where they are.
 //
-// Auto-refresh: when the app's source changes, it re-captures the states in
-// the background (scripts/lib/refresh.mjs): the cards on screen first, then
-// the rest. The scan writes its index after each capture, so cards update one
-// by one. `stavy({ autoRefresh: false })` turns it off.
+// Auto-refresh: when the app's source changes, it only notes when
+// (sourceChangedAt). While a viewer is open it re-captures the cards on screen
+// once the source has been quiet for a couple of seconds; other cards are
+// out of date and get captured when they scroll into view (the viewer's
+// visible report). No viewer open, nothing is captured. Captures run in one
+// long-lived worker with its own Chromium (scripts/capture-worker.mjs), one job
+// at a time, writing the index after each capture so cards update one by one.
+// `stavy({ autoRefresh: { scope: "all" } })` also refreshes every other captured
+// state in the background; `stavy({ autoRefresh: false })` turns it off.
 //
 // It never rewrites stavy.json wholesale or touches app code: the only change
 // it makes to the screen registry is the single text field PATCH names, read
@@ -51,14 +57,17 @@ const TYPES = {
 
 /**
  * @param {{ root?: string, manifest?: string, snapshots?: string, scanScript?: string, url?: string,
- *           autoRefresh?: boolean | { debounceMs?: number, ignore?: (string | RegExp)[] } }} [opts]
+ *           autoRefresh?: boolean | { scope?: "visible" | "all", debounceMs?: number, ignore?: (string | RegExp)[] } }} [opts]
  *   root       folder holding stavy.json (default: public/ if public/stavy.json exists, else the project root)
  *   manifest   path to stavy.json (default: <root>/stavy.json)
  *   snapshots  folder scan writes snapshots to (default: <root>/snapshots)
- *   scanScript path to scan.mjs (default: scripts/stavy/scan.mjs, else scripts/scan.mjs)
+ *   scanScript path to scan.mjs (default: scripts/stavy/scan.mjs, else scripts/scan.mjs); the
+ *              capture worker is capture-worker.mjs beside it
  *   url        the dev server's own URL for scans (default: derived from the server)
- *   autoRefresh re-capture after the app's source changes (default: on). `ignore`: more paths
- *              (relative to the project, or RegExps) whose changes don't count as app changes
+ *   autoRefresh re-capture after the app's source changes (default: on, cards on screen only).
+ *              `scope: "all"` also re-captures every other captured state; `debounceMs` (default 2000)
+ *              is the quiet time after the last change; `ignore`: more paths (relative to the project,
+ *              or RegExps) whose changes don't count as app changes
  */
 export default function stavy(opts = {}) {
   const cwd = process.cwd()
@@ -68,6 +77,7 @@ export default function stavy(opts = {}) {
   const snapshotsDir = resolve(opts.snapshots ?? join(dirname(manifestPath), "snapshots"))
   const snapshotsServedByPublic = snapshotsDir.startsWith(resolve(cwd, "public") + sep)
   const scanScript = resolve(opts.scanScript ?? (existsSync(join(cwd, "scripts/stavy/scan.mjs")) ? "scripts/stavy/scan.mjs" : "scripts/scan.mjs"))
+  const workerScript = join(dirname(scanScript), "capture-worker.mjs")
   const servedByPublic = dirname(manifestPath).startsWith(resolve(cwd, "public"))
 
   let rev = Date.now()
@@ -103,43 +113,97 @@ export default function stavy(opts = {}) {
     return p === contentDir || p.startsWith(contentDir + sep) ? p : null
   }
 
-  // One scan process at a time; the refresher decides what goes next.
+  // One capture worker (a child process with its own Chromium) for the life of
+  // the dev server; the refresher decides which job goes next. The worker quits
+  // when idle or when we do, and starts again on demand. A crash of Chromium
+  // takes down the worker, never the dev server.
   let logger = console
-  const spawnScan = (keys, { background }) =>
-    new Promise((done) => {
-      const args = [scanScript, manifestPath, "--url", serverUrl ?? "http://localhost:5173", "--out", snapshotsDir]
-      if (keys === "all") args.push("--all")
-      else args.push("--keys", keys.join(","))
-      if (background) args.push("--workers", "2")
-      scan = { running: true, keys, startedAt: new Date().toISOString(), log: "" }
-      const child = spawn(process.execPath, args, { cwd, env: process.env })
-      const take = (d) => {
-        scan.log = (scan.log + d.toString()).slice(-8000)
-        bump() // the scan writes its index after each capture: let the viewer look
-      }
-      child.stdout.on("data", take)
-      child.stderr.on("data", take)
-      child.on("error", () => {})
-      child.on("close", (code) => {
-        scan = { ...scan, running: false, ok: code === 0, finishedAt: new Date().toISOString() }
-        bump()
-        // No browser to scan with: stop refreshing on every save, say so once.
-        if (code !== 0 && auto && !auto.off && /Cannot find (package|module) 'playwright'|Executable doesn't exist/.test(scan.log)) {
-          auto.off = true
-          logger.warn("[stavy] auto-refresh off: the scan needs Playwright + Chromium (npx playwright install chromium)")
-        }
-        done(code)
-      })
-    })
-  /** Every state the snapshot index holds, in its order. */
-  const capturedKeys = () => {
+  let worker = null // { child, jobs: Map<id, (code) => void> }
+  let jobId = 0
+  const stopWorker = () => {
+    const w = worker
+    worker = null
     try {
-      return Object.keys(JSON.parse(readFileSync(join(snapshotsDir, "index.json"), "utf8")))
+      w?.child.stdin.end()
+      w?.child.kill()
     } catch {
-      return []
+      /* already gone */
     }
   }
-  const refresher = createRefresher({ run: spawnScan, capturedKeys, debounceMs: auto?.debounceMs ?? 800 })
+  const startWorker = () => {
+    const child = spawn(process.execPath, [workerScript], { cwd, env: process.env, stdio: ["pipe", "pipe", "pipe"] })
+    const w = { child, jobs: new Map(), buf: "" }
+    const line = (l) => {
+      const done = l.match(/^@@done (\d+) (-?\d+)/)
+      if (done) return w.jobs.get(Number(done[1]))?.(Number(done[2]))
+      const gone = l.match(/^@@unavailable (.*)/)
+      if (gone) {
+        scan.log += l + "\n"
+        // No browser to capture with: stop refreshing on every save, say so once.
+        if (auto && !auto.off) {
+          auto.off = true
+          logger.warn("[stavy] auto-refresh off: capturing needs Playwright + Chromium (npx playwright install chromium)")
+        }
+        return
+      }
+      if (l.startsWith("@@")) return
+      scan.log = (scan.log + l + "\n").slice(-8000)
+    }
+    child.stdout.on("data", (d) => {
+      w.buf += d.toString()
+      const parts = w.buf.split("\n")
+      w.buf = parts.pop()
+      parts.forEach(line)
+      bump() // the scan writes its index after each capture: let the viewer look
+    })
+    child.stderr.on("data", (d) => (scan.log = (scan.log + d.toString()).slice(-8000)))
+    child.on("error", () => {})
+    child.stdin.on("error", () => {}) // the worker died: its close handler ends the job
+    child.on("close", () => {
+      if (worker === w) worker = null
+      for (const finish of [...w.jobs.values()]) finish(1) // died mid-job
+    })
+    return w
+  }
+  const runJob = (keys, { background }) =>
+    new Promise((done) => {
+      scan = { running: true, keys, startedAt: new Date().toISOString(), log: "" }
+      const w = (worker ??= startWorker())
+      const id = ++jobId
+      w.jobs.set(id, (code) => {
+        w.jobs.delete(id)
+        scan = { ...scan, running: false, ok: code === 0, finishedAt: new Date().toISOString() }
+        bump()
+        done(code)
+      })
+      const job = { id, manifestPath, url: serverUrl ?? "http://localhost:5173", out: snapshotsDir }
+      if (keys === "all") job.all = true
+      else job.keys = keys.join(",")
+      if (background) job.workers = 2
+      try {
+        w.child.stdin.write(JSON.stringify(job) + "\n")
+      } catch {
+        w.jobs.get(id)?.(1)
+      }
+    })
+  /** The snapshot index as it is on disk. */
+  const readIndex = () => {
+    try {
+      return JSON.parse(readFileSync(join(snapshotsDir, "index.json"), "utf8"))
+    } catch {
+      return {}
+    }
+  }
+  const refresher = createRefresher({
+    run: runJob,
+    capturedKeys: () => Object.keys(readIndex()),
+    capturedAt: (k) => {
+      const e = readIndex()[k]
+      return e ? e.checkedAt ?? e.at : null
+    },
+    scope: auto?.scope === "all" ? "all" : "visible",
+    debounceMs: auto?.debounceMs ?? 2000,
+  })
 
   /**
    * What "ready" records: the date, who (git user.name), and each covered
@@ -226,6 +290,8 @@ export default function stavy(opts = {}) {
     },
     configureServer(server) {
       logger = server.config.logger ?? console
+      server.httpServer?.once("close", stopWorker)
+      process.once("exit", stopWorker)
       if (auto) watchSource(server)
       for (const dir of [contentDir, snapshotsDir, dirname(manifestPath)]) {
         try {
