@@ -12,9 +12,19 @@ import type { PanZoomHandle } from "./PanZoom"
 /** Area boxes in canvas coordinates, keyed by their `data-toc` ("page:x", "area:map", …). */
 export type Areas = Record<string, Box>
 
+/** Key prefix of a screen's sticky slot in `Areas` (not an area itself). */
+export const SLOT = "slot:"
+
+/** The real areas only (no sticky slots): what notes anchor to and arrows end at. */
+export function realAreas(areas: Areas): Areas {
+  return Object.fromEntries(Object.entries(areas).filter(([k]) => !k.startsWith(SLOT)))
+}
+
 /** Gap between an area and an anchored item written without x/y. */
 const BESIDE = 48
 const STACK = 260
+/** Must match CanvasPage's NOTE_SLOT_H. */
+const SLOT_STEP = 150
 
 /** Measure every map area, again whenever the canvas content resizes. */
 export function useMapAreas(contentEl: HTMLDivElement | null, pz: RefObject<PanZoomHandle | null>, rev: unknown): Areas {
@@ -31,14 +41,17 @@ export function useMapAreas(contentEl: HTMLDivElement | null, pz: RefObject<PanZ
         // The scale actually on screen (mid-animation too), not the one the view is heading to.
         const k = contentEl.offsetWidth ? c.width / contentEl.offsetWidth : pz.current?.get().k || 1
         const next: Areas = {}
+        const box = (r: DOMRect) => ({
+          x: Math.round((r.left - c.left) / k),
+          y: Math.round((r.top - c.top) / k),
+          w: Math.round(r.width / k),
+          h: Math.round(r.height / k),
+        })
         for (const el of root.querySelectorAll<HTMLElement>("section.ps-area[data-toc]")) {
-          const r = el.getBoundingClientRect()
-          next[el.dataset.toc!] = {
-            x: Math.round((r.left - c.left) / k),
-            y: Math.round((r.top - c.top) / k),
-            w: Math.round(r.width / k),
-            h: Math.round(r.height / k),
-          }
+          next[el.dataset.toc!] = box(el.getBoundingClientRect())
+          // The room a screen keeps for its unplaced stickies (see CanvasPage noteSlots).
+          const slot = el.querySelector<HTMLElement>(":scope > * [data-note-slot], :scope [data-note-slot]")
+          if (slot) next[`${SLOT}${el.dataset.toc}`] = box(slot.getBoundingClientRect())
         }
         setAreas((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next))
       }, 16)
@@ -81,6 +94,8 @@ export function nearestArea(areas: Areas, x: number, y: number): string | null {
  */
 export function mapSpace(areas: Areas): BoardSpace {
   let aside: BoardItem[] = []
+  // Where unplaced items were put for display: saved back without x/y unless moved.
+  let auto = new Map<string, { x: number; y: number; anchor: string; w?: number }>()
   const ready = Object.keys(areas).length > 0
   return {
     toView(items) {
@@ -90,6 +105,7 @@ export function mapSpace(areas: Areas): BoardSpace {
         aside = items
         return []
       }
+      auto = new Map()
       const stacked: Record<string, number> = {}
       const out: BoardItem[] = []
       for (const raw of items) {
@@ -106,7 +122,12 @@ export function mapSpace(areas: Areas): BoardSpace {
         const { anchor: _a, ...rest } = it
         if (it.x == null || it.y == null) {
           const n = (stacked[it.anchor] = (stacked[it.anchor] ?? -1) + 1)
-          out.push({ ...rest, x: a.x + a.w + BESIDE, y: a.y + n * STACK } as BoardItem)
+          const slot = areas[`${SLOT}${it.anchor}`]
+          // In the screen's own slot when it keeps one, else beside the area.
+          const pos = slot ? { x: slot.x, y: slot.y + n * SLOT_STEP } : { x: a.x + a.w + BESIDE, y: a.y + n * STACK }
+          const w = slot && rest.w == null ? Math.min(240, slot.w) : undefined
+          auto.set(it.id, { ...pos, anchor: it.anchor, w })
+          out.push({ ...rest, ...pos, ...(w != null ? { w } : {}) } as BoardItem)
         } else out.push({ ...rest, x: a.x + it.x, y: a.y + it.y } as BoardItem)
       }
       return out
@@ -115,7 +136,15 @@ export function mapSpace(areas: Areas): BoardSpace {
       const out = items.map((raw) => {
         const it = raw as Anchored
         if (it.type === "arrow" || it.x == null || it.y == null) return raw
-        const id = nearestArea(areas, it.x, it.y)
+        const placed = auto.get(it.id)
+        if (placed && Math.abs(placed.x - it.x) < 1 && Math.abs(placed.y - it.y) < 1) {
+          // Never moved: keep it unplaced (it follows its screen's slot).
+          const { x: _x, y: _y, w, ...rest } = it as Anchored & { w?: number }
+          void _x
+          void _y
+          return { ...rest, ...(w != null && w !== placed.w ? { w } : {}), anchor: placed.anchor } as BoardItem
+        }
+        const id = nearestArea(realAreas(areas), it.x, it.y)
         if (!id) return raw
         const a = areas[id]
         return { ...it, anchor: id, x: Math.round(it.x - a.x), y: Math.round(it.y - a.y) } as BoardItem

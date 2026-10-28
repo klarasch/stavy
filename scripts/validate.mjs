@@ -355,7 +355,8 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     for (const id of p.scenarios) if (!scenarioIndex.has(id)) err(`prototype "${p.id}": unknown scenario "${id}"`)
   }
 
-  // ---- canvas notes
+  // ---- canvas notes (retired: map stickies in stavy-content/map.json do this now)
+  if (m.notes?.length) warn(`notes[] in stavy.json is retired: run \`npm run stavy:migrate -- --write\` to turn its ${m.notes.length} note(s) into stickies on the map that point at the same targets`)
   for (const n of m.notes ?? []) {
     const page = pageIndex.get(n.page)
     if (!page) {

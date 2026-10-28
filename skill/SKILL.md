@@ -213,23 +213,29 @@ How to compose:
 ## Notes on the map
 
 The map lays itself out from `stavy.json`; `stavy-content/map.json` adds free
-items on top (a board file: notes, Markdown, images, arrows). Each top-level
-item names the area it belongs to, and `x`/`y` are relative to that area's
-top-left, so it moves with its screen when the map changes. A screen with a
-note anchored to it is always shown open (all states), so place notes against
-the open screen:
+items on top (a board file: stickies, Markdown, images, arrows). Each top-level
+item names the area it belongs to (`anchor`):
 
 ```json
 { "title": "Map", "items": [
   { "id": "empty-q", "type": "note", "text": "Does the empty state ship in v1?", "anchor": "page:dashboard" },
-  { "id": "to-dash", "type": "arrow", "from": "empty-q", "to": "page:dashboard", "style": "dashed" }
+  { "id": "actions", "type": "note", "text": "The crux of PRD-118 §3.", "anchor": "page:expense-detail",
+    "screen": "expense-detail", "state": "submitted", "target": "ApprovalActions" }
 ] }
 ```
 
-`anchor` is `page:<screen id>`, `area:map`, `area:boards` or `area:scenarios`.
-Without `x`/`y` the item sits beside its area. An arrow may end at an area.
-Use it for questions and caveats that belong to a screen; anything longer
-goes on a board.
+- `anchor` is `page:<screen id>`, `area:map`, `area:boards` or `area:scenarios`.
+- **Leave out `x`/`y`.** A sticky without them sits in a slot inside its
+  screen's tile, under the card, and follows it however the map is laid out.
+  Only add `x`/`y` (relative to the area's top-left) when the person placed
+  it; a placed sticky keeps its screen open.
+- **To point at something**, add `screen` (and `state` or `dims`, and
+  optionally `target`): the map draws a line from the sticky to that card or
+  element.
+- One sentence per sticky: a question, a caveat, a decision. Anything longer
+  goes in a doc.
+- `notes[]` in `stavy.json` is retired: `npm run stavy:migrate -- --write`
+  turns it into pointing stickies.
 
 ## Reference (field names)
 

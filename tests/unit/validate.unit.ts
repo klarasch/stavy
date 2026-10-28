@@ -66,7 +66,6 @@ function baseManifest() {
     ],
     prototypes: [{ id: "demo-proto", label: "Demo Proto", pages: ["simple-page", "organism-page"], scenarios: ["demo-scenario"] }],
     requirements: [{ id: "REQ-1", title: "Some requirement" }],
-    notes: [{ id: "note-1", text: "hi", page: "simple-page", dims: { role: "user" }, target: "SubmitButton" }],
     boards: [{ id: "board-1", title: "Board", kind: "text", source: "some text" }],
   }
 }
@@ -379,17 +378,26 @@ describe("validate: prototypes", () => {
   })
 })
 
-describe("validate: canvas notes", () => {
+const NOTE = { id: "note-1", text: "hi", page: "simple-page", dims: { role: "user" }, target: "SubmitButton" }
+
+describe("validate: canvas notes (retired)", () => {
+  it("warns that notes[] is retired and points at stavy:migrate", async () => {
+    const { warnings } = await run((m) => {
+      m.notes = [{ ...NOTE }]
+    })
+    expect(warnings.some((w) => w.includes("notes[] in stavy.json is retired") && w.includes("stavy:migrate"))).toBe(true)
+  })
+
   it("errors when a note references an unknown page", async () => {
     const { errors } = await run((m) => {
-      m.notes[0].page = "missing-page"
+      m.notes = [{ ...NOTE, page: "missing-page" }]
     })
     expect(errors.some((e) => e.includes('note "note-1": unknown page "missing-page"'))).toBe(true)
   })
 
   it("warns when a note points at an instance that is not pinned", async () => {
     const { warnings } = await run((m) => {
-      m.notes[0].dims = { role: "admin" } // only role=user is pinned
+      m.notes = [{ ...NOTE, dims: { role: "admin" } }] // only role=user is pinned
     })
     expect(warnings.some((w) => w.includes('note "note-1": points at an instance that is not pinned'))).toBe(true)
   })

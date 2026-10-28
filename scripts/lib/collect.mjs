@@ -90,7 +90,15 @@ export function collectStates(manifest, boards = [], opts = {}) {
   for (const { id: boardId, board } of boards) {
     for (const it of walkItems(board?.items)) {
       const where = `board ${boardId}/${it.id ?? it.type}`
-      if (it.type === "screen") {
+      if (it.type === "note" && typeof it.screen === "string") {
+        // A map sticky pointing at an element: measure it in that state so the line lands on it.
+        const p = pageIndex.get(it.screen)
+        if (!p) {
+          warnings.push(`${where}: unknown screen "${it.screen}"`)
+          continue
+        }
+        want(p, { ...(it.dims ?? {}), ...(it.state ? { [STATE_DIM]: it.state } : {}) }, where, { required: [it.target] })
+      } else if (it.type === "screen") {
         const p = pageIndex.get(it.screen)
         if (!p) {
           warnings.push(`${where}: unknown screen "${it.screen}"`)

@@ -496,6 +496,13 @@ export interface NoteItem extends ItemBase {
   text: string
   color?: "yellow" | "blue" | "green" | "pink" | "purple" | "gray"
   author?: string
+  /** On the map: the screen this sticky points at (a line to its card) … */
+  screen?: string
+  /** … at this named state or these dims (default: the screen's first) … */
+  state?: string
+  dims?: Record<string, string>
+  /** … and at this element in it (a target id or selector). */
+  target?: string
 }
 
 /** A titled frame grouping other items; children are laid out inside it unless they carry x/y. */

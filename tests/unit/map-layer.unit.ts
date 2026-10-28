@@ -35,6 +35,23 @@ describe("map layer anchoring", () => {
     expect(v[1].y).toBeGreaterThan(v[0].y)
   })
 
+  it("drops an unplaced sticky into its screen's slot, and saves it back unplaced unless moved", () => {
+    const withSlot = { ...areas, "slot:page:a": { x: 120, y: 330, w: 360, h: 150 } }
+    const item = { id: "n", type: "note", text: "x", anchor: "page:a", screen: "a" } as BoardItem
+    const space = mapSpace(withSlot)
+    const [v] = space.toView([item]) as Array<BoardItem & { x: number; y: number; w: number }>
+    expect(v).toMatchObject({ x: 120, y: 330, w: 240 })
+    expect(space.fromView([v])[0]).toEqual(item)
+    const [moved] = space.fromView([{ ...v, x: v.x + 30 }])
+    expect(moved).toMatchObject({ anchor: "page:a", x: 50, y: 230 })
+  })
+
+  it("never anchors to a sticky slot", () => {
+    expect(nearestArea({ "slot:page:a": { x: 0, y: 0, w: 10, h: 10 }, "page:b": { x: 500, y: 500, w: 10, h: 10 } }, 1, 1)).toBe("slot:page:a")
+    const space = mapSpace({ "slot:page:a": { x: 0, y: 0, w: 10, h: 10 }, "page:b": { x: 500, y: 500, w: 10, h: 10 } })
+    expect(space.fromView([{ id: "n", type: "note", text: "x", x: 1, y: 1 } as BoardItem])[0]).toMatchObject({ anchor: "page:b" })
+  })
+
   it("keeps items whose area is off the map and writes them back untouched", () => {
     const hidden = { id: "h", type: "note", text: "h", anchor: "page:gone", x: 1, y: 2 } as BoardItem
     const space = mapSpace(areas)

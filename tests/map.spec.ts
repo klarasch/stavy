@@ -94,8 +94,9 @@ test("the overview shows one card per screen, with its state count on it", async
   await expect(detail.locator(".ps-disclose")).toHaveText("7 states")
   // A screen with one state and nothing else to show has no control.
   await expect(page.locator('[data-toc="page:policy"] .ps-disclose')).toHaveCount(0)
-  // Boards are chips until one is opened.
-  await expect(page.locator('[data-toc="area:boards"] .ps-board-chip')).toHaveCount(4)
+  // The workspace's boards are links to the board; diagrams are chips until one is opened.
+  await expect(page.locator('[data-toc="area:boards"] [data-board-link]')).toHaveCount(2)
+  await expect(page.locator('[data-toc="area:boards"] button.ps-board-chip')).toHaveCount(4)
   await expect(page.locator('[data-toc="board:ia"]')).toHaveCount(0)
 })
 
@@ -185,4 +186,22 @@ test("board and map arrows are drawn, not clipped by their 1px svg", async ({ pa
   const path = page.locator("path.ps-board-arrow").first()
   const box = await path.boundingBox()
   expect((box?.width ?? 0) + (box?.height ?? 0)).toBeGreaterThan(10)
+})
+
+test("a board link on the map opens the board itself", async ({ page }) => {
+  await page.goto("/stavy/?view=map")
+  await page.locator('[data-board-link="approval-story"]').click()
+  await expect(page).toHaveURL(/[?&]b=approval-story/)
+})
+
+test("edit mode keeps only the editing tools in the toolbar", async ({ page }) => {
+  await page.goto("/stavy/?view=map&e=1")
+  await expect(page.getByRole("button", { name: /Done/ })).toBeVisible()
+  await expect(page.getByRole("button", { name: /All states/ })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: /Wireframe/ })).toHaveCount(0)
+})
+
+test("a map sticky that points at an element draws a line to it", async ({ page }) => {
+  await page.goto("/stavy/?view=map")
+  await expect(page.locator('[data-map-pointers] [data-pointer="n-actions"]')).toHaveCount(1)
 })

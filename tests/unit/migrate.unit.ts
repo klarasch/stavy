@@ -25,23 +25,36 @@ const legacy = () =>
     notes: [{ id: "n1", text: "Check this", page: "list", dims: { role: "admin" }, target: "Header", placement: "right" }],
   }) as any
 
+describe("migrate: stavy.json keeps its layout", () => {
+  it("removes only the boards and notes keys from the file as written", async () => {
+    const { manifestText } = await import("../../scripts/migrate.mjs")
+    const text = '{\n  "product": { "name": "X" },\n  "pages": [ { "id": "a", "url": "/a" } ],\n  "notes": [ { "id": "n", "text": "t", "page": "a" } ]\n}\n'
+    const before = JSON.parse(text)
+    const { notes: _n, ...after } = before
+    void _n
+    const out = manifestText(text, before, after)
+    expect(out).toContain('"pages": [ { "id": "a", "url": "/a" } ]')
+    expect(JSON.parse(out)).toEqual(after)
+  })
+})
+
 describe("migrate: legacy boards and notes", () => {
   it("maps each board kind to its item type", () => {
     const m = legacy()
     expect(boardToItem(m.boards[0])).toEqual({ id: "ia", title: "IA", note: "map", w: 600, type: "mermaid", code: "graph TD; A-->B" })
     expect(boardToItem(m.boards[1])).toMatchObject({ type: "image", src: "/figures/x.png", alt: "Figure", page: "list", callouts: [{ x: 0.1, y: 0.2, title: "One" }] })
     expect(boardToItem(m.boards[2])).toEqual({ id: "txt", title: "Text", type: "markdown", md: "# Hello" })
-    expect(noteToItem(m.notes[0])).toEqual({ id: "n1", type: "note", text: "Check this", screen: "list", dims: { role: "admin" }, target: "Header", placement: "right" })
+    expect(noteToItem(m.notes[0])).toEqual({ id: "n1", type: "note", text: "Check this", anchor: "page:list", screen: "list", dims: { role: "admin" }, target: "Header" })
   })
 
-  it("builds the legacy board, registers it, and removes boards[] and notes[]", () => {
+  it("builds the legacy board, puts notes on the map, and removes boards[] and notes[]", () => {
     const r = migrate(legacy())
     expect(r.board.items.map((i: any) => [i.id, i.type])).toEqual([
       ["ia", "mermaid"],
       ["fig", "image"],
       ["txt", "markdown"],
-      ["n1", "note"],
     ])
+    expect(r.map.items).toEqual([{ id: "n1", type: "note", text: "Check this", anchor: "page:list", screen: "list", dims: { role: "admin" }, target: "Header" }])
     expect(r.index).toEqual({ boards: [{ id: "legacy", title: r.board.title, description: expect.any(String) }], docs: [] })
     expect(r.manifest.boards).toBeUndefined()
     expect(r.manifest.notes).toBeUndefined()
@@ -57,9 +70,10 @@ describe("migrate: legacy boards and notes", () => {
 
   it("is idempotent: a second run on the result changes nothing", () => {
     const first = migrate(legacy())
-    const second = migrate(first.manifest, { board: first.board, index: first.index })
+    const second = migrate(first.manifest, { board: first.board, index: first.index, map: first.map })
     expect(second.changed).toBe(false)
-    expect(second.board.items).toHaveLength(4)
+    expect(second.board.items).toHaveLength(3)
+    expect(second.map.items).toHaveLength(1)
     expect(second.index.boards).toHaveLength(1)
   })
 
@@ -102,7 +116,7 @@ describe("migrate --states", () => {
       ["admin-loaded", undefined],
       ["admin-loaded", undefined],
     ])
-    const note = r.board.items.find((i: any) => i.id === "n1")
+    const note = r.map.items.find((i: any) => i.id === "n1")
     expect(note.state).toBe("admin-loaded")
     expect(note.dims).toBeUndefined()
   })

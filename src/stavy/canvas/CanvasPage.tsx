@@ -1,8 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
-  ArrowRight, ChevronRight, RotateCcw, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler, StickyNote, Boxes, Crosshair, Map as MapIcon, MessageCircle, Play, Waypoints,
-  Pencil, Undo2, Redo2, GalleryHorizontalEnd, FileText, Image as ImageIcon, CheckCircle2,
+  ArrowRight, ChevronRight, RotateCcw, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler,  Boxes, Crosshair, Map as MapIcon, MessageCircle, Play, Waypoints,
+  Pencil, Undo2, Redo2, GalleryHorizontalEnd, FileText, Image as ImageIcon, CheckCircle2, ArrowUpRight, Presentation,
 } from "../icons"
 import { cn } from "../cn"
 import {
@@ -17,6 +17,7 @@ import { cardHit } from "./cardHit"
 import { CanvasInspectContext, CanvasViewportContext, type CanvasInspect, type CanvasViewport } from "./visibility"
 import { InstanceCard } from "./InstanceCard"
 import { CanvasNotes } from "./CanvasNotes"
+import { MapPointers, pointingItems } from "./MapPointers"
 import { AnatomyCard } from "./AnatomyCard"
 import { CanvasToc } from "./CanvasToc"
 import { SiteMap } from "./SiteMap"
@@ -32,10 +33,11 @@ import { EditableText } from "../EditableText"
 import { StatusControl } from "../status"
 import { useDev, patchManifest } from "../dev"
 import { useBoardEditor } from "../boards/editor"
+import { useContentIndex } from "../boards/store"
 import { AddPalette } from "../boards/Palette"
 import { mapSpace, useMapAreas } from "./mapLayer"
 import { readDisclosure, isOpen, setOpen, setAll, overviewDims, stateCount, runsOf, shelfWidth, shelfColumns, type DisclosureKind, type ShelfItem, type Universe } from "./disclosure"
-import { useManifestRev } from "../manifest"
+import { useManifestRev, viewerHref } from "../manifest"
 import { PsButton, PsDivider, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "../chrome"
 import type { BoardDef, BoardFile, PageDef, Scenario } from "../types"
 
@@ -194,6 +196,9 @@ function FoldToggle({ page, wdims, open, onToggle, keptOpen }: {
     </button>
   )
 }
+
+/** Height kept in a screen's area per unplaced sticky (mapLayer drops it there). */
+const NOTE_SLOT_H = 150
 
 const PageGroup = memo(function PageGroup({
   page, showNotes, wireframe, wdims, linkExtra, figures, open, fold,
@@ -658,6 +663,7 @@ const MAP_LAYER_EMPTY: BoardFile = { title: "Map", items: [] }
 export function CanvasPage() {
   const manifestRev = useManifestRev() // re-render when a title or note was edited
   const [sp, setSp] = useSearchParams()
+  const navigate = useNavigate()
   const { hidden } = useChrome()
   const [t, setT] = useState<Transform>(() => parseView(sp.get("v")) ?? INITIAL)
   const pz = useRef<PanZoomHandle>(null)
@@ -695,7 +701,9 @@ export function CanvasPage() {
   const wdims = useMemo(() => workspaceDimsFromParams(sp), [wKey])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const wCarry = useMemo(() => workspaceCarry(sp), [wKey])
-  const showNotes = sp.get("notes") === "1"
+  // Annotation pins on map cards are gone with the Notes button: a screen's Anatomy
+  // card shows them, and so does the player (N). Map stickies are always on.
+  const showNotes = false
   const showMap = sp.get("map") !== "0"
   const wireframe = sp.get("w") === "1"
   const inspect = sp.get("i") === "1"
@@ -746,6 +754,7 @@ export function CanvasPage() {
   const fmtZoom = (k: number) => (k >= 1 ? `${k.toFixed(1)}×` : `${Math.round(k * 100)}%`)
   const zoomBy = (f: number) => pz.current?.zoomBy(f, true)
   const getScale = useCallback(() => pz.current?.get().k ?? initialT.current.k, [])
+  const pointing = useMemo(() => pointingItems(layer.stored?.items), [layer.stored])
   const onLive = useCallback((lt: Transform) => {
     if (zoomLabel.current) zoomLabel.current.textContent = fmtZoom(lt.k)
     for (const fn of vpListeners.current) fn()
@@ -754,7 +763,6 @@ export function CanvasPage() {
   useHotkeys({
     a: () => toggleAll(),
     m: () => setPlacing((p) => !p),
-    n: () => setFlag("notes", !showNotes),
     w: () => setFlag("w", !wireframe),
     i: () => setFlag("i", !inspect),
     l: () => setFlag("live", !liveMode),
@@ -800,6 +808,8 @@ export function CanvasPage() {
 
   /* ---------------- progressive disclosure (disclosure.ts) ---------------- */
 
+  // The workspace's own boards (stavy-content/boards, listed in index.json): linked, not repeated here.
+  const workspaceBoards = useContentIndex().boards ?? []
   const universe: Universe = {
     screens: screens.map((p) => p.id),
     lanes: scenarios.map((s) => s.id),
@@ -808,10 +818,20 @@ export function CanvasPage() {
   const disc = readDisclosure(sp)
   // Notes are authored against the full map, so edit mode shows everything.
   if (editMode) disc.all = true
-  // A map note anchored to a screen keeps it open: the note was placed
-  // relative to the open screen and would land on other cards otherwise.
+  // A map note placed at a position on a screen's area keeps it open: it was
+  // placed relative to the open screen and would land on other cards otherwise.
+  // A note without x/y sits beside its area and follows it either way.
+  // Stickies without a position, per screen: each gets a slot inside its screen's area.
+  const noteSlots: Record<string, number> = {}
+  for (const it of layer.stored?.items ?? []) {
+    const { anchor: a, x, y } = it as { anchor?: string; x?: number; y?: number }
+    if (a?.startsWith("page:") && x == null && y == null) noteSlots[a.slice(5)] = (noteSlots[a.slice(5)] ?? 0) + 1
+  }
   const noted = new Set(
-    (layer.stored?.items ?? []).flatMap((it) => { const a = (it as { anchor?: string }).anchor; return a?.startsWith("page:") ? [a.slice(5)] : [] })
+    (layer.stored?.items ?? []).flatMap((it) => {
+      const { anchor: a, x, y } = it as { anchor?: string; x?: number; y?: number }
+      return a?.startsWith("page:") && (x != null || y != null) ? [a.slice(5)] : []
+    })
   )
   const screenOpen = (id: string) => isOpen(disc, "screens", id) || noted.has(id)
   const keptOpenWhy = (id: string) =>
@@ -1009,6 +1029,8 @@ export function CanvasPage() {
                 />
               }
             />
+            {/* Room in the screen's own area for its stickies that have no position yet. */}
+            {(noteSlots[page.id] ?? 0) > 0 && <div data-note-slot className="ps-note-slot" style={{ height: noteSlots[page.id] * NOTE_SLOT_H }} />}
           </Area>
         )
       })
@@ -1064,9 +1086,34 @@ export function CanvasPage() {
               </Area>
             )}
 
-            {/* ---- Boards: supporting material, outside the contract. Chips; one opens in place. ---- */}
-            {universe.boards.length > 0 && (
-              <Area title="Boards" kind="supporting material" icon={<MapIcon />} tocId="area:boards" className="self-start">
+            {/* ---- Boards: the workspace's boards as links (they have their own view),
+                 then diagrams and the coverage table, which live only here and open in place. ---- */}
+            {(workspaceBoards.length > 0 || universe.boards.length > 0) && (
+              <Area title="Boards" kind={`${workspaceBoards.length} board${workspaceBoards.length === 1 ? "" : "s"}`} icon={<MapIcon />} tocId="area:boards" className="self-start">
+                {workspaceBoards.length > 0 && (
+                  <div className="flex flex-wrap items-start gap-2.5" style={{ maxWidth: 640 }}>
+                    {workspaceBoards.map((b) => (
+                      <a
+                        key={b.id}
+                        href={`${viewerHref}?b=${encodeURIComponent(b.id)}`}
+                        className="ps-board-chip"
+                        data-board-link={b.id}
+                        title={b.description ?? `Open the board “${b.title}”`}
+                        onClick={(e) => {
+                          if (e.metaKey || e.ctrlKey || e.shiftKey) return
+                          e.preventDefault()
+                          navigate(`${viewerHref}?b=${encodeURIComponent(b.id)}`)
+                        }}
+                      >
+                        <Presentation />
+                        <span className="truncate">{b.title}</span>
+                        <ArrowUpRight className="ps-board-chip-chev" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {universe.boards.length > 0 && workspaceBoards.length > 0 && <div className="ps-board-sub">On the map</div>}
+                {universe.boards.length > 0 && (
                 <div className="flex flex-wrap items-start gap-2.5" style={{ maxWidth: 640 }}>
                   {universe.boards.map((id) => {
                     const b = standaloneBoards.find((x) => x.id === id)
@@ -1089,6 +1136,7 @@ export function CanvasPage() {
                     )
                   })}
                 </div>
+                )}
                 {universe.boards.some((id) => isOpen(disc, "boards", id)) && (
                   <div className="flex flex-wrap items-start gap-10 mt-10">
                     {hasCoverage && isOpen(disc, "boards", "coverage") && (
@@ -1144,9 +1192,11 @@ export function CanvasPage() {
         <div className={cn("ps ps-board-root ps-map-layer", editMode && "is-editing", wireframe && "proto-wireframe")} data-map-layer>
           {layer.layer}
         </div>
-        {contentEl && showNotes && manifest.notes && manifest.notes.length > 0 && (
+        {/* Old stavy.json notes still show until `stavy:migrate` turns them into map stickies. */}
+        {contentEl && manifest.notes && manifest.notes.length > 0 && (
           <CanvasNotes notes={manifest.notes} root={contentEl} getScale={getScale} />
         )}
+        {contentEl && pointing.length > 0 && <MapPointers items={pointing} root={contentEl} getScale={getScale} />}
         {contentEl?.parentElement && inspect && !hidden && (
           <Inspector host={contentEl.parentElement} hit={hit} onClose={() => setFlag("i", false)} onPinChange={setHold} />
         )}
@@ -1200,8 +1250,8 @@ export function CanvasPage() {
           <div className="ps ps-glass absolute top-4 right-4 z-20 rounded-2xl px-1.5 py-1 flex items-center gap-0.5" data-ps-ui>
             {writable && (
               <>
-                <PsButton active={editMode} tip="Add and arrange notes, text and images on the map" keys={["E"]} tipBelow onClick={() => setFlag("e", !editMode)}>
-                  <Pencil /> Edit
+                <PsButton active={editMode} tip={editMode ? "Done editing" : "Add and arrange notes, text and images on the map"} keys={["E"]} tipBelow onClick={() => setFlag("e", !editMode)}>
+                  <Pencil /> {editMode ? "Done" : "Edit"}
                 </PsButton>
                 {editMode && (
                   <>
@@ -1217,9 +1267,12 @@ export function CanvasPage() {
                     </span>
                   </>
                 )}
-                <PsDivider />
+                {!editMode && <PsDivider />}
               </>
             )}
+            {/* In edit mode the toolbar is for editing: view options come back on Done. */}
+            {!editMode && (
+              <>
             <PsButton
               active={disc.all}
               disabled={editMode}
@@ -1230,9 +1283,6 @@ export function CanvasPage() {
               onClick={toggleAll}
             >
               <GalleryHorizontalEnd /> All states
-            </PsButton>
-            <PsButton active={showNotes} tip="Annotation pins and pointing notes" keys={["N"]} tipBelow onClick={() => setFlag("notes", !showNotes)}>
-              <StickyNote /> Notes
             </PsButton>
             <PsButton active={wireframe} tip="Wireframe rendering" keys={["W"]} tipBelow onClick={() => setFlag("w", !wireframe)}>
               <PencilRuler /> Wireframe
@@ -1251,6 +1301,8 @@ export function CanvasPage() {
               <PsButton icon aria-label="Refresh all snapshots" tip={scanAll.busy ? "Capturing every snapshot…" : "Refresh all snapshots"} tipBelow disabled={scanAll.busy} onClick={scanAll.start}>
                 {scanAll.busy ? <span className="ps-spinner" /> : <RotateCcw />}
               </PsButton>
+            )}
+              </>
             )}
             <PsDivider />
             <PsButton icon tip="Zoom out" keys={["−"]} tipBelow onClick={() => zoomBy(1 / 1.5)}>
@@ -1283,7 +1335,7 @@ export function CanvasPage() {
           <ShortcutsSheet
             items={[
               ...(writable ? ([["Edit the map's notes", "E"]] as Array<[string, string]>) : []),
-              ["All states / overview", "A"], ["Notes", "N"], ["Leave a comment", "M"], ["Wireframe", "W"], ["Inspect", "I"], ["Live frames", "L"], ["Theme", "T"],
+              ["All states / overview", "A"], ["Leave a comment", "M"], ["Wireframe", "W"], ["Inspect", "I"], ["Live frames", "L"], ["Theme", "T"],
               ["Zoom in / out", "+ −"], ["100% / fit everything", "1 2"], ["Reset view", "0"], ["Fit an area (and open a screen)", "double-click"],
               ["Hide / show UI", "⌘ \\ ⇧ H"], ["This sheet", "?"],
             ]}

@@ -298,7 +298,12 @@ scenario may end where it began.) A validator SHOULD warn when a multi-step
 scenario never leaves one page, which is what that mistake looks like in the
 manifest.
 
-### 1.5 Canvas notes ("pointing notes")
+### 1.5 Canvas notes ("pointing notes") — retired
+
+> Retired in favour of map stickies (`stavy-content/map.json` note items with
+> `screen` / `state` or `dims` / `target`, which draw the same leader line).
+> Viewers still show `notes[]` until it is migrated; `stavy:validate` warns and
+> `stavy:migrate --write` converts it. The original definition follows.
 
 Free-standing notes placed on the canvas next to a page instance, with a
 leader line to the instance or to a specific target inside it:

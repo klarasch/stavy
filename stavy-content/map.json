@@ -1,0 +1,47 @@
+{
+  "title": "Map",
+  "items": [
+    {
+      "id": "n-actions",
+      "type": "note",
+      "text": "The decision buttons are the crux of PRD-118 §3. Reject and Request-changes branch into the variants further right on this row.",
+      "anchor": "page:expense-detail",
+      "screen": "expense-detail",
+      "dims": { "role": "manager", "lifecycle": "submitted" },
+      "target": "ApprovalActions"
+    },
+    {
+      "id": "n-empty",
+      "type": "note",
+      "text": "First-run: one calm CTA, no stats. Resist adding onboarding chrome here until the submit flow is validated.",
+      "anchor": "page:dashboard",
+      "screen": "dashboard",
+      "dims": { "role": "employee", "state": "empty" }
+    },
+    {
+      "id": "n-receipt",
+      "type": "note",
+      "text": "Upload is deliberately mocked — static first. Real file handling only if a scenario needs to demonstrate it.",
+      "anchor": "page:submit-expense",
+      "screen": "submit-expense",
+      "dims": { "step": "receipt" },
+      "target": "ReceiptDropzone"
+    },
+    {
+      "id": "n-error",
+      "type": "note",
+      "text": "Error copy agreed with support. Keep the retry; don't add a status page link yet.",
+      "anchor": "page:expenses",
+      "screen": "expenses",
+      "dims": { "role": "employee", "state": "error" }
+    },
+    {
+      "id": "n-organism",
+      "type": "note",
+      "text": "Registered as its own component so the decision matrix can be signed off without the page around it. Same contract, smaller frame.",
+      "anchor": "page:approval-actions",
+      "screen": "approval-actions",
+      "dims": { "role": "manager", "lifecycle": "submitted" }
+    }
+  ]
+}

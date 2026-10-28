@@ -984,59 +984,6 @@
       ]
     }
   ],
-  "notes": [
-    {
-      "id": "n-actions",
-      "page": "expense-detail",
-      "dims": {
-        "role": "manager",
-        "lifecycle": "submitted"
-      },
-      "target": "ApprovalActions",
-      "placement": "top",
-      "text": "The decision buttons are the crux of PRD-118 §3. Reject and Request-changes branch into the variants further right on this row."
-    },
-    {
-      "id": "n-empty",
-      "page": "dashboard",
-      "dims": {
-        "role": "employee",
-        "state": "empty"
-      },
-      "placement": "top",
-      "text": "First-run: one calm CTA, no stats. Resist adding onboarding chrome here until the submit flow is validated."
-    },
-    {
-      "id": "n-receipt",
-      "page": "submit-expense",
-      "dims": {
-        "step": "receipt"
-      },
-      "target": "ReceiptDropzone",
-      "placement": "top",
-      "text": "Upload is deliberately mocked — static first. Real file handling only if a scenario needs to demonstrate it."
-    },
-    {
-      "id": "n-error",
-      "page": "expenses",
-      "dims": {
-        "role": "employee",
-        "state": "error"
-      },
-      "placement": "right",
-      "text": "Error copy agreed with support. Keep the retry; don't add a status page link yet."
-    },
-    {
-      "id": "n-organism",
-      "page": "approval-actions",
-      "dims": {
-        "role": "manager",
-        "lifecycle": "submitted"
-      },
-      "placement": "top",
-      "text": "Registered as its own component so the decision matrix can be signed off without the page around it. Same contract, smaller frame."
-    }
-  ],
   "boards": [
     {
       "id": "ia",

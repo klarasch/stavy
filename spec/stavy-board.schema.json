@@ -118,7 +118,13 @@
           "if": { "properties": { "type": { "const": "note" } }, "required": ["type"] },
           "then": {
             "required": ["text"],
-            "properties": { "text": { "type": "string" }, "color": { "enum": ["yellow", "blue", "green", "pink", "purple", "gray"] }, "author": { "type": "string" } }
+            "properties": {
+              "text": { "type": "string" }, "color": { "enum": ["yellow", "blue", "green", "pink", "purple", "gray"] }, "author": { "type": "string" },
+              "screen": { "type": "string", "description": "Map only: the screen this sticky points at (draws a line to its card)." },
+              "state": { "type": "string" },
+              "dims": { "type": "object", "additionalProperties": { "type": "string" } },
+              "target": { "type": "string", "description": "An element in that screen to point at (target id or CSS selector)." }
+            }
           }
         },
         {
