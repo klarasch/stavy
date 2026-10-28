@@ -78,7 +78,9 @@ test("a note on the map is saved to map.json, anchored to the area it sits on, a
     await expect(editor).toBeFocused()
     await editor.fill("Ask PM: is the empty state needed for v1?")
     await editor.press("Meta+Enter")
-    await expect(page.locator("[data-map-layer] [data-item-type=note]")).toContainText("Ask PM")
+    const mine = page.locator("[data-map-layer] [data-item-type=note]", { hasText: "Ask PM" })
+    await expect(mine).toHaveCount(1)
+    const existing = had ? (JSON.parse(had).items ?? []) : []
 
     // The file may be mid-write when read: treat unparsable as not there yet.
     const items = () => {
@@ -88,8 +90,11 @@ test("a note on the map is saved to map.json, anchored to the area it sits on, a
         return 0
       }
     }
-    await expect.poll(items, { timeout: 5000 }).toBe(1)
-    const note = JSON.parse(readFileSync(file, "utf8")).items[0]
+    await expect.poll(items, { timeout: 5000 }).toBe(existing.length + 1)
+    const saved = JSON.parse(readFileSync(file, "utf8")).items
+    const note = saved.find((i: { text?: string }) => i.text?.includes("Ask PM"))
+    // Stickies that were never moved are saved back as they were: no x/y added.
+    for (const b of existing) expect(saved.find((i: { id: string }) => i.id === b.id)).toEqual(b)
     expect(note.type).toBe("note")
     expect(note.text).toContain("Ask PM")
     expect(note.anchor).toMatch(/^(page|area):/)
@@ -97,7 +102,7 @@ test("a note on the map is saved to map.json, anchored to the area it sits on, a
 
     // After a reload the note is drawn next to the same area.
     const anchorBox = async () => page.locator(`[data-toc="${note.anchor}"]`).boundingBox()
-    const noteBox = async () => page.locator("[data-map-layer] [data-item-type=note]").boundingBox()
+    const noteBox = async () => mine.boundingBox()
     // Read positions once they've settled (the map re-measures its areas just after a save).
     const settled = async () => {
       let last = ""
@@ -112,7 +117,7 @@ test("a note on the map is saved to map.json, anchored to the area it sits on, a
     }
     const before = await settled()
     await page.reload()
-    await expect(page.locator("[data-map-layer] [data-item-type=note]")).toBeVisible()
+    await expect(mine).toBeVisible()
     await page.locator(".ps-toc").getByText("Dashboard", { exact: true }).click()
     await page.waitForTimeout(600)
     const after = await settled()
