@@ -317,7 +317,7 @@ export function MockNotice({ className }: { className?: string }) {
           Mock only<span className="ps-notice-long"> — not a real product</span>
         </span>
       </span>
-      <span className="ps-notice-hint flex items-center gap-1.5" style={{ color: "var(--ps-faint)" }}>
+      <span className="ps-notice-hint flex items-center gap-1.5">
         <Keys keys={HIDE_KEY_LABEL} />
         <span>or</span>
         <Keys keys={HIDE_KEY_ALT} />
@@ -334,7 +334,7 @@ export function EyeToggle() {
     <button
       className="ps-eye"
       data-hidden={hidden ? "true" : undefined}
-      title={`${hidden ? "Show" : "Hide"} Stavy UI`}
+      title={`${hidden ? "Show" : "Hide"} Stavy UI (${HIDE_KEY_LABEL.join("")} or ${HIDE_KEY_ALT.join("")})`}
       onClick={() => setHidden(!hidden)}
     >
       {hidden ? <EyeOff /> : <Eye />}
