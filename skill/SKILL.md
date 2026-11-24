@@ -13,6 +13,11 @@ URL; the viewer shows them as cards and opens the real app in a player. Read
 
 ## While iterating
 
+- **Start from "Where things live"** in `STAVY.md`: paths to screens and
+  routes, fixtures and scenes, the app shell, the kit, and what to ignore.
+  Go straight there instead of searching. If the section is missing or
+  wrong, write it once you've found them (`reference/recipes.md`, first
+  recipe).
 - **Static first, for new work only.** A new screen or state starts as real
   kit components with fixed data. It gains behaviour when a named interaction
   needs it. Screens that already work keep their behaviour.

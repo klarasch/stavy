@@ -4,6 +4,26 @@ Short answers to the common tasks. Each one is complete: you shouldn't need
 Stavy's scripts, schema or viewer bundle to do it. Field details are in
 `fields.md`; open it only if a recipe points there.
 
+## Write the repo's "Where things live"
+
+Every session starts by finding the same files. Write them down once, so
+the next session opens them directly. In `.stavy/RULES.local.md` (create it
+if needed), add or fix this section, then run `npm run stavy:update` so it
+lands in `STAVY.md`:
+
+```markdown
+## Where things live
+
+- Screens and routes: `src/app/routes/` (router: `src/app/router.tsx`)
+- Fixtures and scenes: `src/mocks/fixtures.ts`; scenes registered in `src/mocks/scenes.ts`
+- App shell (nav, layout): `src/app/Shell.tsx`
+- Kit: `@acme/ui`, docs in `node_modules/@acme/ui/README.md`
+- Ignore: `docs/`, `src/generated/`, `stavy-content/decisions.md`
+```
+
+Paths only, about ten lines. Correct a line when you find it's wrong;
+don't add explanations.
+
 ## See what a screen has, without reading the whole manifest
 
 ```bash

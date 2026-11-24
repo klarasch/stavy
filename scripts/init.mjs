@@ -409,6 +409,7 @@ Done (Stavy ${short}). Nothing under src/ was touched. Next:
      to your dev server's port in package.json if it isn't 5173.
      npm run stavy:validate → manifest, boards and references; only a state that won't load is an error
   6. Add "@STAVY.md" to your CLAUDE.md so agents follow the rules and use the skill to compose boards and docs.
+     Then list where screens, fixtures and the kit live in ${RULES_LOCAL} under "## Where things live" (see the skill's recipes).
   7. Commit, ${LOCK} included. To update later: pull Stavy, then npm run stavy:update.
 Docs: docs/STAVY-SPEC.md · docs/STAVY-UPDATING.md · skill: .claude/skills/${p.skill}/SKILL.md`)
 }

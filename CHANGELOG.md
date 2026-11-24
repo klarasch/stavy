@@ -47,6 +47,11 @@ anything, they have to do.
   screen's states) in a few lines each, so agents don't read Stavy's scripts
   or viewer bundle. The skill's Cost section became Budget: register then
   stop, check in after about six states, one builder per feature.
+- **"Where things live".** Agents start from a short list of paths in
+  `STAVY.md` (screens, fixtures and scenes, shell, kit, what to ignore)
+  instead of searching the repo each session. The first agent to find them
+  writes the list in `.stavy/RULES.local.md` (recipe in
+  `reference/recipes.md`).
 - **`npm run stavy:ls [screen]`.** Lists screens with fidelity, number of
   states, group and URL; with a screen id, its states' URLs and scan keys,
   dimensions and flows. `--json` for either. Agents use it instead of
