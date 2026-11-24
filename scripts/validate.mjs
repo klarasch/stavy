@@ -2,11 +2,10 @@
 // Stavy check — validates the manifest (shape, cross-references, the URL
 // contract), reads the last scan's results (public/snapshots/index.json) to
 // report targets that were missing in the rendered prototype, optionally
-// checks scenario refs against requirement documents, and prints a coverage
-// summary. Whether targets *exist* is the scan's job (scripts/scan.mjs) —
+// and prints a coverage summary. Whether targets *exist* is the scan's job (scripts/scan.mjs) —
 // the viewer never reads the prototype's source.
 //
-//   node scripts/validate.mjs [stavy.json] [--refs docs/PRD-118.md ...] [--coverage] [--snapshots <dir>] [--require-schema] [--strict]
+//   node scripts/validate.mjs [stavy.json] [--coverage] [--snapshots <dir>] [--require-schema] [--strict]
 //
 // Exit code 1 on errors; warnings never fail the run. Loose by design (SPEC §0): the
 // errors are what would break the viewer (an unparsable file, a page that cannot be
@@ -24,7 +23,7 @@ import { loadBoards, walkItems, defaultSnapshotsDir } from "./lib/collect.mjs"
 // process: takes the parsed manifest object and the directory it lives in
 // (paths inside the manifest are resolved relative to that), returns the
 // errors/warnings that the CLI otherwise prints and exits on. Any console
-// output the original script produced inline (the --refs summary line) is
+// output the original script produced inline is
 // still produced here, in the same place, so CLI output stays byte-identical.
 // Versions that install cleanly through locked-down/corporate registries: a
 // newer ajv pulls in `fast-uri`, which some artifactories refuse (see
@@ -152,11 +151,14 @@ function validateContent(m, root, { err, warn, validateBoard }) {
   }
 }
 
-export async function validate(m, root, flags = { refs: [], coverage: false }) {
+export async function validate(m, root, flags = { coverage: false }) {
   const errors = []
   const warnings = []
   const err = (s) => errors.push(s)
   const warn = (s) => warnings.push(s)
+
+  // ---- requirements[] was removed; the schema still tolerates the field (unknown extras are allowed)
+  if ("requirements" in m) warn("requirements[] is no longer used and can be removed")
 
   // ---- name: Home is named after the feature this workspace covers, not the repo
   {
@@ -296,8 +298,6 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   // ---- scenarios
   for (const sc of m.scenarios) {
     const w = `scenario "${sc.id}"`
-    // Only workspaces that track requirements care which one a flow demonstrates.
-    if (!sc.refs?.length && m.requirements?.length) warn(`${w}: no refs — what requirement does it demonstrate?`)
     sc.steps.forEach((st, i) => {
       const page = pageIndex.get(st.page)
       if (!page) return err(`${w} step ${i + 1}: unknown page "${st.page}"`)
@@ -433,36 +433,6 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
     })
   }
 
-  // ---- requirements ↔ scenario refs (the in-manifest contract)
-  if (m.requirements?.length) {
-    const cited = new Set(m.scenarios.flatMap((s) => s.refs ?? []))
-    for (const r of m.requirements) if (!cited.has(r.id)) warn(`requirement "${r.id}" (${r.title}) is not demonstrated by any scenario`)
-    const known = new Set(m.requirements.map((r) => r.id))
-    for (const sc of m.scenarios) for (const ref of sc.refs ?? []) if (!known.has(ref)) warn(`scenario "${sc.id}" cites "${ref}", which is not in requirements[]`)
-  }
-
-  // ---- refs against requirement documents (the PM ↔ design ↔ eng contract)
-  if (flags.refs.length) {
-    const docs = flags.refs.map((f) => ({ f, text: readFileSync(resolve(f), "utf8") }))
-    const allRefs = new Map() // ref -> scenarios
-    for (const sc of m.scenarios) for (const r of sc.refs ?? []) allRefs.set(r, [...(allRefs.get(r) ?? []), sc.id])
-    for (const [ref, scs] of allRefs) {
-      const id = ref.split(/\s+/)[0]
-      const section = ref.match(/§[\d.]+/)?.[0]
-      const hit = docs.find((d) => d.text.includes(id) && (!section || d.text.includes(section)))
-      if (!hit) err(`ref "${ref}" (scenarios: ${scs.join(", ")}) not found in ${flags.refs.join(", ")}`)
-    }
-    // sections in the docs that no scenario demonstrates
-    for (const d of docs) {
-      for (const mm of d.text.matchAll(/^##+\s+(§[\d.]+)\s+(.+)$/gm)) {
-        const sec = mm[1]
-        const covered = [...allRefs.keys()].some((r) => r.includes(sec))
-        if (!covered) warn(`${d.f}: section ${sec} "${mm[2].trim()}" is not demonstrated by any scenario`)
-      }
-    }
-    console.log(`refs: ${allRefs.size} reference(s) checked against ${docs.length} document(s)`)
-  }
-
   // ---- coverage summary
   if (flags.coverage) {
     console.log("\ncoverage (pinned instances / declared variant space):")
@@ -478,14 +448,27 @@ export async function validate(m, root, flags = { refs: [], coverage: false }) {
   return { errors, warnings, schemaChecked }
 }
 
+/**
+ * How much behaviour the screens carry, e.g. "fidelity: 11 static · 3 navigable · 1 not set".
+ * Printed on every run so a screen quietly growing from static to interactive shows up.
+ */
+export function fidelitySummary(pages = []) {
+  const order = ["static", "navigable", "interactive"]
+  const counts = new Map()
+  for (const p of pages) {
+    const k = order.includes(p.fidelity) ? p.fidelity : "not set"
+    counts.set(k, (counts.get(k) ?? 0) + 1)
+  }
+  const parts = [...order, "not set"].filter((k) => counts.get(k)).map((k) => `${counts.get(k)} ${k}`)
+  return `fidelity: ${parts.length ? parts.join(" · ") : "no screens"}`
+}
+
 async function main() {
   const argv = process.argv.slice(2)
-  const flags = { refs: [], coverage: false, snapshots: null, requireSchema: false, strict: false }
+  const flags = { coverage: false, snapshots: null, requireSchema: false, strict: false }
   const positional = []
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--refs") {
-      while (argv[i + 1] && !argv[i + 1].startsWith("--")) flags.refs.push(argv[++i])
-    } else if (argv[i] === "--coverage") flags.coverage = true
+    if (argv[i] === "--coverage") flags.coverage = true
     else if (argv[i] === "--require-schema") flags.requireSchema = true
     else if (argv[i] === "--strict") flags.strict = true
     else if (argv[i] === "--snapshots") flags.snapshots = resolve(argv[++i])
@@ -502,8 +485,9 @@ async function main() {
   // purpose, per README feedback item 4)
   for (const w of warnings) console.log(`  warn  ${w}`)
   for (const e of errors) console.log(`  ERROR ${e}`)
+  console.log(`\n${fidelitySummary(m.pages)}`)
   console.log(
-    `\nstavy: ${m.pages.length} pages · ${m.scenarios.length} scenarios · ${(m.notes ?? []).length} notes — ${errors.length} error(s), ${warnings.length} warning(s)${schemaChecked ? "" : " · SCHEMA NOT CHECKED"}`
+    `stavy: ${m.pages.length} pages · ${m.scenarios.length} scenarios · ${(m.notes ?? []).length} notes — ${errors.length} error(s), ${warnings.length} warning(s)${schemaChecked ? "" : " · SCHEMA NOT CHECKED"}`
   )
   process.exit(errors.length ? 1 : 0)
 }

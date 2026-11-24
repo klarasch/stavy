@@ -21,9 +21,9 @@
 //                 build. Fast and needs no browser; the pictures are as fresh as your last scan.
 // Any other flags go to scan (e.g. --workers 6, --strict).
 import { createServer } from "node:http"
-import { createReadStream, existsSync, statSync, cpSync, rmSync } from "node:fs"
+import { createReadStream, existsSync, statSync, cpSync, rmSync, mkdirSync, writeFileSync } from "node:fs"
 import { extname, join, resolve, sep, dirname } from "node:path"
-import { spawnSync, spawn } from "node:child_process"
+import { spawnSync, spawn, execFileSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
 const argv = process.argv.slice(2)
@@ -51,6 +51,24 @@ const manifest = join(dist, "stavy.json")
 if (!existsSync(manifest)) {
   console.error(`publish: ${manifest} not found — is --dist right, and does the build copy public/ (stavy.json, stavy/, stavy-content/)?`)
   process.exit(1)
+}
+
+// Stamp the build with the commit and branch it was made from, so a comment
+// made on the published viewer records the version it was made on.
+{
+  const git = (...args) => {
+    try {
+      return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
+    } catch {
+      return ""
+    }
+  }
+  const commit = git("rev-parse", "--short", "HEAD")
+  const branch = git("rev-parse", "--abbrev-ref", "HEAD")
+  const stamp = { ...(commit ? { commit } : {}), ...(branch && branch !== "HEAD" ? { branch } : {}), builtAt: new Date().toISOString() }
+  mkdirSync(join(dist, "stavy-content"), { recursive: true })
+  writeFileSync(join(dist, "stavy-content", "build.json"), JSON.stringify(stamp, null, 2) + "\n")
+  say(commit ? `stamped the build with ${commit}${stamp.branch ? ` (${stamp.branch})` : ""}` : "not a git repo: the build carries no commit")
 }
 
 if (fromCache) {

@@ -4,7 +4,7 @@ import type { Comment } from "./store"
 /* ------------------------------------------------------------------ */
 /* Where comments are kept (docs/COMMENTS.md).                          */
 /*                                                                      */
-/*   "file"   stavy-content/comments.json through the dev endpoint      */
+/*   "file"   stavy-content/rounds/*.json through the dev endpoint      */
 /*   "local"  this browser (localStorage), shared as a link or .md      */
 /*   { module: "/stavy-comments.js" }  a same-origin ES module that     */
 /*            exports async list(), save(comment), update(id, patch)    */

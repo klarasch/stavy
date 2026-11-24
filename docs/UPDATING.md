@@ -19,7 +19,8 @@ hashes in `.stavy/lock.json`:
 ```
 public/stavy/                     the built viewer (or public/<dir>/ with --dir)
 scripts/stavy/                    validate, scan, gen-tests, the schema
-.claude/skills/stavy/SKILL.md     the agent skill, composed (§2)
+.claude/skills/stavy/SKILL.md     the agent skill (a short core), composed (§2)
+.claude/skills/stavy/reference/   reference files the skill loads on demand (boards, docs, handover, fields)
 STAVY.md                          the rules for agents, composed (§2)
 docs/STAVY-SPEC.md                the spec
 docs/STAVY-UPDATING.md            this page
@@ -35,6 +36,11 @@ a viewer.inspect.module file      your design system's inspect adapter
 package.json                      the stavy:* scripts are added once, when absent
 everything else in the repo
 ```
+
+The skill is a short core plus reference files, loaded on demand: the agent
+reads `reference/*.md` only when asked for a board, a doc, a handover or exact
+field names. The reference files are replaced on every update; put your own
+conventions in `.stavy/SKILL.local.md`.
 
 `.stavy/lock.json` is written by `init`. Commit it with each update and don't edit it.
 

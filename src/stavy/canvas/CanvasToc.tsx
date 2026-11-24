@@ -64,14 +64,9 @@ export function CanvasToc({
               ))}
             </div>
           ))}
-          {(standaloneBoards.length > 0 || (manifest.requirements?.length ?? 0) > 0) && (
+          {standaloneBoards.length > 0 && (
             <>
               <div className="ps-toc-h">Boards</div>
-              {(manifest.requirements?.length ?? 0) > 0 && (
-                <button className="ps-toc-item" onClick={() => onJump("board:coverage")}>
-                  <span className="truncate">Requirement coverage</span>
-                </button>
-              )}
               {standaloneBoards.map((b) => (
                 <button key={b.id} className="ps-toc-item" onClick={() => onJump(`board:${b.id}`)} title={b.title}>
                   <span className="truncate">{b.title}</span>

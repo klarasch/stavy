@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { ChevronDown, ChevronUp } from "../icons"
-import { targetElementOf, targetsById } from "../manifest"
-import { docFracBox, elementAt, hostRect, hostRectOfFrac, onFrameChange, type HostRect } from "../frame"
+import { appBase, dimsEqual as stateDimsEqual, matchAppUrl, resolveDims, targetElementOf, targetsById } from "../manifest"
+import { docFracBox, elementAt, frameHref, hostRect, hostRectOfFrac, onFrameChange, type HostRect } from "../frame"
 import { describeElement, normText, type AnchorEl, type ElementAnchor } from "./anchor"
 import { useComments, dimsEqual, placeOf, locateInDoc, initials, type Comment } from "./store"
 import { Composer, Thread, clampCard } from "./Thread"
@@ -33,6 +33,31 @@ export function anchorFor(el: Element): ElementAnchor {
   })
 }
 
+/** An app URL without the origin and the app's base: how a comment remembers a place that is not a registered state. */
+export function appRelative(href: string): string {
+  try {
+    const u = new URL(href, location.origin)
+    const path = appBase && u.pathname.startsWith(appBase) ? u.pathname.slice(appBase.length) || "/" : u.pathname
+    return path + u.search + u.hash
+  } catch {
+    return href
+  }
+}
+
+/**
+ * The state that is on screen in the frame right now, which is not always the
+ * one the player was opened on: the reviewer may have clicked through the app.
+ * A registered state is named; anything else is remembered by its URL, with
+ * the player's state as where the reviewer came from.
+ */
+export function stateOnScreen(href: string | null, pageId: string, dims: Record<string, string>): { page: string; dims: Record<string, string>; url?: string } {
+  if (!href) return { page: pageId, dims }
+  const m = matchAppUrl(href)
+  if (!m) return { page: pageId, dims, url: appRelative(href) }
+  if (m.page.id === pageId && stateDimsEqual(m.dims, dims)) return { page: pageId, dims }
+  return { page: m.page.id, dims: resolveDims(m.page, m.dims) }
+}
+
 /** The element and its ancestors up to (not including) the body: what "select parent" walks. */
 function chainOf(el: Element): Element[] {
   const out: Element[] = []
@@ -55,6 +80,7 @@ export function CommentLayer({
   doc,
   pageId,
   dims,
+  offMap,
   placing,
   onPlaced,
   openId,
@@ -64,6 +90,8 @@ export function CommentLayer({
   doc: Document | null
   pageId: string
   dims: Record<string, string>
+  /** The app URL in the frame when it is not a registered state (the app navigated on its own), else null */
+  offMap?: string | null
   placing: boolean
   onPlaced: () => void
   openId: string | null
@@ -75,9 +103,10 @@ export function CommentLayer({
   const [draft, setDraft] = useState<{ chain: Element[]; depth: number; cx: number; cy: number } | null>(null)
   const dimsKey = JSON.stringify(dims)
   const mine = useMemo(
-    () => comments.filter((c) => placeOf(c) === "page" && c.page === pageId && dimsEqual(c.dims, dims)),
+    // A comment made off the map shows only where it was made; the state's own comments only on the state.
+    () => comments.filter((c) => placeOf(c) === "page" && c.page === pageId && dimsEqual(c.dims, dims) && (c.url ?? null) === (offMap ?? null)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [comments, pageId, dimsKey]
+    [comments, pageId, dimsKey, offMap]
   )
   const root = doc?.body ?? null
 
@@ -146,7 +175,8 @@ export function CommentLayer({
     const r = hostRect(chosen, iframe)
     const pct = (v: number, size: number) => Math.round((size ? (v / size) * 100 : 50) * 100) / 100
     const a = anchorFor(chosen)
-    add({ page: pageId, dims, ...a, x: pct(draft.cx - r.left, r.width), y: pct(draft.cy - r.top, r.height), body, author })
+    // Where the comment is: what the frame shows now, not what the player was opened on.
+    add({ ...stateOnScreen(frameHref(iframe), pageId, dims), ...a, x: pct(draft.cx - r.left, r.width), y: pct(draft.cy - r.top, r.height), body, author })
     setDraft(null)
     onPlaced()
   }

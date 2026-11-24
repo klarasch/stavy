@@ -17,3 +17,21 @@ a prototype. Edit it freely, or delete it.
   answer? Build the states those need, not every state the app could have.
 - **Say what's fake.** If something looks real but isn't (a payment, an
   email), note it on the board or in the doc.
+
+## Fixtures
+
+Recommendations, not rules. How a repo does this (a module, JSON files, a
+seed script) is its own choice.
+
+- **One shared set of base data**, reused by every screen. Take it from the
+  app's own data layer where one exists, so the prototype and the app agree
+  on shapes.
+- **A scene is a named patch over the base data**, not a new dataset. "Empty
+  contacts" is the base with the list cleared; "bulk conflict" is the base
+  with three rows changed.
+- **Fixed clock and seeded ids**, so a state looks the same every time it is
+  captured.
+- **Include the awkward cases**: long names, empty lists, one item, too many
+  items.
+- **Say what is faked**, in the log line and in the doc or board that shows
+  it.

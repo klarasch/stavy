@@ -19,7 +19,7 @@ import { execFileSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { changelogSection, copiedFiles, knownHashes, unreleasedSection } from "./lib/install.mjs"
+import { changelogSection, copiedFiles, knownHashes, referenceFiles, unreleasedSection } from "./lib/install.mjs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const argv = process.argv.slice(2)
@@ -105,6 +105,7 @@ const files = [
 // Everything init copies into a repo must be in the package too: take the
 // installer's own list, so a new script can't be left out of a release.
 for (const src of Object.values(copiedFiles())) if (!src.startsWith("dist-viewer") && !files.includes(src)) files.push(src)
+for (const f of referenceFiles(root)) files.push(`skill/reference/${f}`)
 for (const f of files) {
   if (!existsSync(join(root, f))) die(`missing ${f}`)
   mkdirSync(dirname(join(stage, f)), { recursive: true })
@@ -113,7 +114,7 @@ for (const f of files) {
 // Every version each installed file has had since Stavy became an overlay, so a
 // repo installed by any older init can be checked exactly without git.
 const OVERLAY_ROOT = "0933a6d"
-const known = knownHashes({ src: root, paths: [...new Set([...Object.values(copiedFiles()), "skill/SKILL.md", "skill/RULES.md"])], since: OVERLAY_ROOT })
+const known = knownHashes({ src: root, paths: [...new Set([...Object.values(copiedFiles()), "skill/SKILL.md", "skill/RULES.md", ...referenceFiles(root).map((f) => `skill/reference/${f}`)])], since: OVERLAY_ROOT })
 writeFileSync(join(stage, "known-hashes.json"), JSON.stringify(known) + "\n")
 
 const release = { name: "stavy", version, commit, date: new Date().toISOString().slice(0, 10), ...(nightly ? { channel: "nightly" } : {}) }

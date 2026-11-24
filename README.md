@@ -105,8 +105,6 @@ node stavy/scripts/init.mjs ../my-prototype-repo
   element's classes (copyable), type/spacing tokens, and *where each color
   comes from* (the class that sets it, the ancestor it inherits from, the
   token variable behind it).
-- **Requirement coverage** — `requirements[]` + scenario `refs` render as a
-  board: demonstrated vs. gaps; the validator cross-checks the PRD text.
 - **Generated, not written** — changelog between manifest versions, a
   handoff sheet per page, and Playwright specs from scenarios.
 - **Comments without a server** — leave comments on any element in the
@@ -202,14 +200,13 @@ mode) or label placeholders instead of snapshots.
 | `docs/UPDATING.md` | Taking updates in an adopting repo: ownership, the local layer, the lock |
 | `CHANGELOG.md` | What changed per release, written for adopters (`init` prints the new sections) |
 | `scripts/release.mjs` | `npm run release` — packs `release/stavy.tgz` and self-tests it; CI runs it on a `v*` tag |
-| `scripts/validate.mjs` | `npm run validate` — manifest ↔ schema/cross-ref validation, `--refs` PRD check, coverage summary |
+| `scripts/validate.mjs` | `npm run validate` — manifest ↔ schema/cross-ref validation, coverage summary |
 | `scripts/scan.mjs` | `npm run scan` — the contract check (targets exist) + canvas snapshots, via Playwright |
 | `scripts/changelog.mjs` | `npm run changelog [ref]` — Markdown diff of the manifest for PRs |
 | `scripts/handoff.mjs` | `npm run handoff` — a handoff sheet per page/component |
 | `scripts/gen-tests.mjs` | `npm run test:scenarios` — Playwright specs generated from scenarios |
 | `scripts/strings.mjs` | `npm run strings` — copy review document (Markdown + CSV) from the catalog |
 | `scripts/init.mjs` | `node scripts/init.mjs ../other-repo` — installs or updates the built viewer + skill in any repo (logic in `scripts/lib/install.mjs`) |
-| `docs/PRD-118.md` | Mock PRD the `--refs` check runs against |
 | `src/stavy/` | Reference viewer (canvas, player, tours, annotations, inspector) |
 | `vite.viewer.config.ts` | Builds `src/stavy/` alone as the redistributable `dist-viewer/` |
 | `src/demo/` | Demo product **Orbit** — expenses & approvals (employee / manager / finance) |

@@ -237,10 +237,12 @@ comments **in the browser** (local-first), so a static host needs nothing:
    on a board or the map, or a paragraph of a doc (or select text in a doc
    and press **Comment**). Name once; reply, resolve. See
    [`COMMENTS.md`](COMMENTS.md) for anchors and storage adapters.
-2. **Comments → Copy link.** The link carries every comment as a compressed
-   payload in the URL hash — paste it in Slack. **Copy as Markdown** produces
-   a digest with a deep link per comment (page, dims, target).
-3. Others send *their* link back; **Import → Unpack** merges by comment id.
+2. **Comments → Send feedback.** One link carries the reviewer's round as a
+   compressed payload in the URL hash; paste it in chat. **Digest .md** is
+   the same feedback as Markdown, with a deep link per comment.
+3. The designer opens the link in their dev viewer and presses **Import**:
+   the round is written to `stavy-content/rounds/` and committed with the
+   repo.
 
 A comment compresses to roughly 60 characters, so one link carries a few
 hundred before URL limits matter; the Markdown digest is the fallback.
@@ -257,8 +259,7 @@ instead of searching the repo.
 - **PMs**: Home (links to the PRD and tickets, the changelog, the decision
   log), boards that answer one question each, and comments on anything. Their
   input is the PRD or a conversation; the skill turns it into flows and boards.
-  If the manifest lists `requirements[]`, the coverage board shows which
-  flows cover them.
+  Scenarios can cite the PRD section or ticket they realise in `refs`.
 - **Engineers / QA**: the scan log (which state, which selector), `npm run
   stavy:tests` (Playwright specs from scenarios, against the app's own URLs),
   the inspector (component + props, classes, tokens, the state's URL, a

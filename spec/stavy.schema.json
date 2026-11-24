@@ -60,6 +60,10 @@
           "type": "string",
           "description": "Where the prototype app is served, as an origin or path prefix (e.g. \"http://localhost:5173\" or \"/app\"). Default: the viewer's own origin at its parent path. Must be same-origin for inspect, tours and pins."
         },
+        "stateSwitch": {
+          "enum": ["reload", "push"],
+          "description": "How the player moves between states. \"reload\" (default): a fresh document load per state, always correct. \"push\": history.pushState + popstate inside the live frame, instant. Use \"push\" only when the app's router re-reads every dimension from the URL on popstate; state the app reads only at boot needs \"reload\"."
+        },
         "targetAttrs": {
           "type": "array",
           "items": {
@@ -693,31 +697,6 @@
                 "type": "number"
               }
             }
-          }
-        }
-      }
-    },
-    "requirements": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "id",
-          "title"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "title": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "priority": {
-            "type": "string"
           }
         }
       }

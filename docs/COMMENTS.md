@@ -13,8 +13,53 @@ shows something, with or without a server.
 
 **One panel** (the speech-bubble button) lists every comment, with
 **Here** (this page state, board or doc) vs **Everywhere**, and
-open / resolved / all. Clicking a comment takes you to its place and opens
-its thread; replies and resolve work the same everywhere.
+open / addressed / resolved / all. Clicking a comment takes you to its place
+and opens its thread; replies and resolve work the same everywhere.
+
+## Review rounds
+
+Comments are kept as rounds: `stavy-content/rounds/<date>-<author>.json`,
+one file per author per day.
+
+```jsonc
+{ "version": 1, "id": "2026-11-14-dana", "author": "Dana", "date": "2026-11-14",
+  "commit": "3061a96", "branch": "rbac",          // what was reviewed
+  "comments": [ { "id": "…", "body": "…", "createdAt": "…", /* where it is anchored */ } ],
+  "events":   [ { "id": "…", "thread": "<comment id>", "type": "reply", "body": "…", "at": "…" } ] }
+```
+
+- Nobody edits another person's file. A reply or a status change is an
+  event in the acting person's own round, and names the thread. Event types:
+  `reply`, `status` (`open`, `addressed` with `commit`, `closed`), `edit`,
+  `remove`.
+- A comment is **open**, then **addressed** by whoever made the change (with
+  the commit), then **closed** by its author. `resolved` means closed.
+- The viewer shows the merge of all rounds. It writes one change at a time
+  and never a whole list, so a save can not drop comments it has not loaded.
+  Deleting your own unanswered comment removes it; deleting anyone else's
+  hides it (a `remove` event) and leaves their file alone.
+- Never edit round files by hand. After a fix:
+  `npm run stavy:address -- <id> "<one sentence>" [--as "<name>"]` records
+  the status, the reply and the current commit in your own round and adds a
+  log line. `--list` prints the open comments.
+- `rounds/index.json` lists the files, so a static host can load them. It
+  is regenerated on every write.
+- A `comments.json` from before rounds is moved into rounds by the dev
+  viewer on first load, or by `npm run stavy:migrate -- --write`. It is
+  removed only after every comment and reply is found in the rounds.
+
+### Sending feedback without git
+
+A reviewer on a published build comments, then presses **Send feedback**:
+one link is copied (and **Digest .md** downloads the same feedback as
+Markdown to read). The designer opens the link in their dev viewer, which
+offers "Import round: 5 comments from Dana" and writes the round file.
+`stavy:publish` writes `stavy-content/build.json` with the build's branch and
+commit; each comment made there records them.
+
+A player comment records the state on screen when it is made. If the app had
+navigated to a URL that is not a registered state, the comment keeps that
+`url` (with the state the reviewer came from) and its pin shows only there.
 
 ## Anchors
 
@@ -49,15 +94,13 @@ in the text.
 }
 ```
 
-- **`"file"`**: `stavy-content/comments.json` through the dev endpoint, a
-  file the team and agents can read, commit and review. Edits to the file
-  show up live. Needs the writable dev endpoint; without it the viewer falls
+- **`"file"`**: round files in `stavy-content/rounds/` through the dev
+  endpoint, which the team and agents can read, commit and review. Changes
+  on disk show up live. Needs the writable dev endpoint; without it the viewer falls
   back to `"local"`.
-- **`"local"`**: this browser (localStorage), shared with **Link** (every
-  comment in a compressed URL hash) or **.md** (a Slack/PR-ready digest with
-  a link per comment); **Import** unpacks a colleague's link. If the
-  published build ships a `stavy-content/comments.json`, its comments are
-  shown too (each taken in once, so deleting one locally sticks).
+- **`"local"`**: this browser (localStorage) until the reviewer presses
+  **Send feedback**; **Import** takes in a colleague's link. Rounds shipped
+  with the published build are shown too and are never changed.
 - **`{ "module": "<url>" }`**: a same-origin ES module, so comments can go to
   any backend you already have. No Stavy server is involved.
 
@@ -76,7 +119,7 @@ export async function list() {
 export async function save(comment) {             // a new comment (or one imported from a link)
   await fetch(API, { method: "POST", body: JSON.stringify(comment) })
 }
-export async function update(id, patch) {         // { resolved }, { replies }, …
+export async function update(id, patch) {         // { status, resolved, replies, addressedIn }, …
   await fetch(`${API}/${id}`, { method: "PATCH", body: JSON.stringify(patch) })
 }
 export async function remove(id) {                // optional
@@ -102,10 +145,13 @@ interface Comment {
   body: string
   author: string
   createdAt: number
-  resolved: boolean
+  status: "open" | "addressed" | "closed"
+  addressedIn?: string          // commit
+  resolved: boolean             // status === "closed"
   replies: { id: string; author: string; body: string; createdAt: number }[]
+  commit?: string; branch?: string   // the build it was made on
   // player
-  page?: string; dims?: Record<string, string>
+  page?: string; dims?: Record<string, string>; url?: string
   target?: string; nth?: number; path?: number[]; snippet?: string
   box?: { x: number; y: number; w: number; h: number }
   // board / map ("@map")

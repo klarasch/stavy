@@ -94,6 +94,17 @@ export function composeSkill(upstream, local) {
   ].join("\n")
 }
 
+/** A reference file (skill/reference/*.md), marked as generated like the skill. */
+export function composeReference(text, file) {
+  return [MARK(`skill/reference/${file}`), "", text.replace(/^\s+/, "")].join("\n")
+}
+
+/** The names of the skill's reference files, installed beside SKILL.md. */
+export function referenceFiles(src) {
+  const dir = join(src, "skill/reference")
+  return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".md")).sort() : []
+}
+
 /** STAVY.md: upstream's rules, then the repo's own. */
 export function composeRules(upstream, local) {
   const out = [MARK(local ? `Stavy's skill/RULES.md + ${RULES_LOCAL}` : "skill/RULES.md"), "", upstream.trimEnd(), ""]
@@ -126,6 +137,11 @@ export function copiedFiles() {
     "scripts/stavy/lib/format.mjs": "scripts/lib/format.mjs", // format.mjs imports it
     "scripts/stavy/format.mjs": "scripts/format.mjs",
     "scripts/stavy/lib/gate.mjs": "scripts/lib/gate.mjs", // scan and the dev plugin import it
+    "scripts/stavy/lib/rounds.mjs": "scripts/lib/rounds.mjs", // review rounds: the dev plugin, address and migrate import it
+    "scripts/stavy/lib/rounds-fs.mjs": "scripts/lib/rounds-fs.mjs",
+    "scripts/stavy/log.mjs": "scripts/log.mjs",
+    "scripts/stavy/address.mjs": "scripts/address.mjs",
+    "scripts/stavy/ls.mjs": "scripts/ls.mjs",
     "scripts/stavy/vite-plugin.mjs": "scripts/vite-plugin.mjs",
     "scripts/stavy/migrate.mjs": "scripts/migrate.mjs",
     "scripts/stavy/publish.mjs": "scripts/publish.mjs",
@@ -158,6 +174,11 @@ export function plan({ src, target, dist, dir, version }) {
     `.claude/skills/${name}/SKILL.md`,
     Buffer.from(composeSkill(readFileSync(join(src, "skill/SKILL.md"), "utf8"), skillLocal)),
   )
+  for (const f of referenceFiles(src))
+    files.set(
+      `.claude/skills/${name}/reference/${f}`,
+      Buffer.from(composeReference(readFileSync(join(src, "skill/reference", f), "utf8"), f)),
+    )
   files.set("STAVY.md", Buffer.from(composeRules(readFileSync(join(src, "skill/RULES.md"), "utf8"), rulesLocal)))
   return { files, groups, skill: name, local: { skill: !!skillLocal, rules: !!rulesLocal } }
 }
@@ -206,6 +227,10 @@ export function detectEdits({ target, lock, want, dir, legacyShow, known }) {
     ? readFileSync(join(target, `public/${dir}/VERSION`), "utf8").trim()
     : null
   const sources = { ...copiedFiles(), "STAVY.md": "skill/RULES.md", ".claude/skills/stavy/SKILL.md": "skill/SKILL.md" }
+  for (const rel of want.keys()) {
+    const m = rel.match(/^\.claude\/skills\/[^/]+\/reference\/([^/]+\.md)$/)
+    if (m) sources[rel] = `skill/reference/${m[1]}`
+  }
   for (const [rel, buf] of want) {
     if (rel.startsWith(`public/${dir}/`)) continue
     const p = join(target, rel)

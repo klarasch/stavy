@@ -16,6 +16,11 @@
 // `notes[]` (the map's old pointing notes) become stickies on the map itself,
 // stavy-content/map.json, anchored to their screen and still pointing at what they
 // pointed at (page/dims/target kept as screen/dims/target).
+// stavy-content/comments.json (0.4 and earlier: one list of comments) becomes
+// review rounds, stavy-content/rounds/<date>-<author>.json: one file per author
+// per day, replies as events in the replier's own round. The old file is removed
+// only after every comment and reply is found in the rounds (it stays in git).
+// The dev viewer does the same on first load.
 // They are removed from stavy.json only with --write. Re-running is safe: items that are
 // already there are not added twice.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -24,6 +29,8 @@ import { pathToFileURL } from "node:url"
 import { CONTENT_DIR, resolveDims, statePath } from "./lib/model.mjs"
 import { formatBoard } from "./lib/format.mjs"
 import { removeAt } from "./lib/jsonEdit.mjs"
+import { LEGACY_FILE, ROUNDS_DIR, legacyToRounds } from "./lib/rounds.mjs"
+import { migrateLegacy } from "./lib/rounds-fs.mjs"
 
 export const LEGACY_BOARD = "legacy"
 
@@ -173,8 +180,34 @@ function main() {
   const mapPath = join(contentDir, "map.json")
   const result = migrate(manifest, { board: readJson(boardPath), index: readJson(indexPath), map: readJson(mapPath), statesPage })
 
+  // comments.json → review rounds
+  const legacyComments = join(contentDir, LEGACY_FILE)
+  if (existsSync(legacyComments)) {
+    if (write) {
+      const r = migrateLegacy(contentDir)
+      if (r?.ok) console.log(`migrate: ✓ ${r.comments} comment(s) from ${LEGACY_FILE} moved into ${CONTENT_DIR}/${ROUNDS_DIR}/ (${r.rounds.map((id) => id + ".json").join(", ") || "already there"}); ${LEGACY_FILE} removed`)
+      else if (r) {
+        console.error(`migrate: ${r.error}`)
+        process.exitCode = 1
+      }
+    } else {
+      let n = 0
+      let files = []
+      try {
+        const raw = JSON.parse(readFileSync(legacyComments, "utf8"))
+        const list = Array.isArray(raw) ? raw : (raw.comments ?? [])
+        n = list.length
+        files = legacyToRounds(list).map((r) => r.id + ".json")
+      } catch {
+        /* reported with --write */
+      }
+      console.log(`migrate (dry run): · ${n} comment(s) in ${LEGACY_FILE} would move into ${CONTENT_DIR}/${ROUNDS_DIR}/ (${files.join(", ")})`)
+    }
+  }
+
   if (!result.changed) {
-    console.log("migrate: nothing to do — no legacy boards or notes in " + manifestPath)
+    if (!existsSync(legacyComments) || write) console.log("migrate: nothing else to do — no legacy boards or notes in " + manifestPath)
+    else console.log("\nNothing written. Re-run with --write to apply (commit first, so the change is reviewable).")
     return
   }
   console.log(`migrate${write ? "" : " (dry run)"}: ${manifestPath}`)

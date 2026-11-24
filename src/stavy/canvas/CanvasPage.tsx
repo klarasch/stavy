@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useNavigate, useSearchParams } from "react-router-dom"
 import {
   ArrowRight, ChevronRight, RotateCcw, Minus, Plus, Maximize2, Layers, BookOpen, MessageSquare, PencilRuler,  Boxes, Crosshair, Map as MapIcon, MessageCircle, Play, Waypoints,
-  Pencil, Undo2, Redo2, GalleryHorizontalEnd, FileText, Image as ImageIcon, CheckCircle2, ArrowUpRight, Presentation,
+  Pencil, Undo2, Redo2, GalleryHorizontalEnd, FileText, Image as ImageIcon, ArrowUpRight, Presentation,
 } from "../icons"
 import { cn } from "../cn"
 import {
@@ -22,7 +22,6 @@ import { AnatomyCard } from "./AnatomyCard"
 import { CanvasToc } from "./CanvasToc"
 import { SiteMap } from "./SiteMap"
 import { BoardCard } from "./BoardCard"
-import { CoverageBoard } from "./CoverageBoard"
 import { PageSwitcher } from "../boards/PageSwitcher"
 import { Inspector } from "../overlays/Inspector"
 import { CommentsPanel } from "../comments/CommentsPanel"
@@ -803,7 +802,6 @@ export function CanvasPage() {
   // Sections (SPEC §1.3): page areas cluster by `group`, ungrouped last.
   const sections = groupPages(pages)
   const scenarios = manifest.scenarios.filter((sc) => scenarioInWorkspace(sc, wdims))
-  const hasCoverage = (manifest.requirements?.length ?? 0) > 0
   const screens = [...sections.flatMap((s) => s.pages), ...components]
 
   /* ---------------- progressive disclosure (disclosure.ts) ---------------- */
@@ -813,7 +811,7 @@ export function CanvasPage() {
   const universe: Universe = {
     screens: screens.map((p) => p.id),
     lanes: scenarios.map((s) => s.id),
-    boards: [...(hasCoverage ? ["coverage"] : []), ...standaloneBoards.map((b) => b.id)],
+    boards: standaloneBoards.map((b) => b.id),
   }
   const disc = readDisclosure(sp)
   // Notes are authored against the full map, so edit mode shows everything.
@@ -1118,7 +1116,7 @@ export function CanvasPage() {
                   {universe.boards.map((id) => {
                     const b = standaloneBoards.find((x) => x.id === id)
                     const open = isOpen(disc, "boards", id)
-                    const Icon = !b ? CheckCircle2 : b.kind === "image" ? ImageIcon : b.kind === "text" ? FileText : Waypoints
+                    const Icon = !b ? FileText : b.kind === "image" ? ImageIcon : b.kind === "text" ? FileText : Waypoints
                     return (
                       <button
                         key={id}
@@ -1130,7 +1128,7 @@ export function CanvasPage() {
                         onClick={() => toggle("boards", id, !open)}
                       >
                         <Icon />
-                        <span className="truncate">{b?.title ?? "Requirement coverage"}</span>
+                        <span className="truncate">{b?.title ?? id}</span>
                         <ChevronRight className="ps-board-chip-chev" />
                       </button>
                     )
@@ -1139,11 +1137,6 @@ export function CanvasPage() {
                 )}
                 {universe.boards.some((id) => isOpen(disc, "boards", id)) && (
                   <div className="flex flex-wrap items-start gap-10 mt-10">
-                    {hasCoverage && isOpen(disc, "boards", "coverage") && (
-                      <div data-toc="board:coverage">
-                        <CoverageBoard wireframe={wireframe} linkExtra={wCarry} wdims={wdims} />
-                      </div>
-                    )}
                     {standaloneBoards.filter((b) => isOpen(disc, "boards", b.id)).map((b) => (
                       <div key={b.id} data-toc={`board:${b.id}`}>
                         <BoardCard board={b} />

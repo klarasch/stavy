@@ -33,7 +33,7 @@ const manifest = (): any => ({
   ],
   scenarios: [],
 })
-const run = (m: any = manifest()) => validate(m, root, { refs: [], coverage: false, snapshots: join(root, "snapshots") }) as Promise<{ errors: string[]; warnings: string[] }>
+const run = (m: any = manifest()) => validate(m, root, { coverage: false, snapshots: join(root, "snapshots") }) as Promise<{ errors: string[]; warnings: string[] }>
 
 describe("validate: named states", () => {
   it("accepts a page with states, no page url, layout, status and tags", async () => {

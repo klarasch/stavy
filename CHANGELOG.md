@@ -9,6 +9,55 @@ anything, they have to do.
 
 **What you get**
 
+- **Optional instant state switching.** `viewer.stateSwitch: "push"` switches states inside the live frame (history push + popstate) instead of reloading it. Opt in only if your app's router re-reads every dimension from the URL on popstate; default `"reload"` is unchanged.
+- **Review rounds replace `comments.json`.** Comments are kept in
+  `stavy-content/rounds/<date>-<author>.json`, one file per author per day,
+  with the commit reviewed. A reply or status change by someone else goes in
+  that person's own file, so nobody edits another person's file and merges
+  stay clean. Three states: open, addressed (with the commit), closed.
+- **Comments can no longer be lost by saving.** The viewer writes one change
+  at a time and never the whole list. "Delete all" is gone; deleting someone
+  else's comment hides it and leaves it in their file.
+- **Send feedback.** A reviewer on a published build presses Send feedback
+  and sends you one link (plus a Markdown digest to read). Opening the link
+  in your dev viewer offers "Import round: 5 comments from Dana" and writes
+  the round file. `stavy:publish` stamps the build with its branch and
+  commit, and each comment records them.
+- **Comments record the state on screen.** A comment made after clicking
+  through the app is saved against the state you are on, or against the URL
+  when it is not a registered state, not the state the player was opened on.
+- **Two scripts so agents do no bookkeeping.**
+  `npm run stavy:log -- "<what>" "<why>" [states]` appends a timed line to
+  `stavy-content/log/<date>.md`. `npm run stavy:address -- <id> "<sentence>"`
+  marks a comment addressed with the reply and commit (`--list` shows the
+  open ones, `--as "<name>"` signs as someone else).
+- **A much shorter skill.** The part loaded while iterating is about 550
+  words (was 3,200). Boards, docs, handover and field names are reference
+  files next to it, loaded only when asked for.
+- **New screens start static.** `STAVY.md` rule 2 is now two rules: don't
+  remove or simplify existing logic, and don't build logic Stavy doesn't
+  need. A new screen, dialog or state is a route plus a scene with fixture
+  data, and gains behaviour only when a flow or reviewer needs it. The old
+  wording led agents to build stores and handlers for review states.
+- **People review the pictures; agents check text** (new rule 10). Agents
+  run `stavy:scan -- --keys` once after their edits and read its output
+  instead of taking screenshots or writing their own browser scripts.
+- **Recipes.** `reference/recipes.md` answers the common how-tos (add a
+  state, scene, screen, dialog or dimension, capture an open menu, list a
+  screen's states) in a few lines each, so agents don't read Stavy's scripts
+  or viewer bundle. The skill's Cost section became Budget: register then
+  stop, check in after about six states, one builder per feature.
+- **`npm run stavy:ls [screen]`.** Lists screens with fidelity, number of
+  states, group and URL; with a screen id, its states' URLs and scan keys,
+  dimensions and flows. `--json` for either. Agents use it instead of
+  reading a large `stavy.json`.
+- **`stavy:validate` prints a fidelity line** on every run, such as
+  `fidelity: 11 static · 3 navigable · 1 not set`, so screens gaining
+  behaviour show up.
+- **Removed: PRD requirement checks.** `requirements[]`, `validate --refs`
+  and the requirement coverage board are gone. Scenario `refs` stay as plain
+  citations.
+
 - **The map is an overview.** One card per screen with "N states"; open a
   screen (double-click its title, or the control) or press A for all states.
   Flows start folded to their first and last step. Jumping to a state opens
@@ -61,6 +110,14 @@ anything, they have to do.
   missing doc says so instead of showing the app's HTML.
 
 **What you do:**
+- Commit, then start the dev viewer once (or run
+  `npm run stavy:migrate -- --write`): `stavy-content/comments.json` is moved
+  into `stavy-content/rounds/` and removed only after every comment and reply
+  is found there. Commit the new folder.
+- Remove `requirements` from `stavy.json` and `--refs …` from your validate
+  script if you used them (validate warns once, it does not fail).
+- A comments adapter module keeps working unchanged; comments now also carry
+  `status` and `addressedIn`.
 - If `stavy:validate` says `notes[]` is retired, run
   `npm run stavy:migrate -- --write` (commit first) to turn them into
   pointing stickies on the map.

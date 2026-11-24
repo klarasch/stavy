@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest"
 import { describeElement, relocate, snippetOf, snippetMatches, findBySnippet, SNIPPET_MAX, type AnchorEl, type AnchorLookups } from "../../src/stavy/comments/anchor"
-import { fromFile, toFile, normalize, placeOf, type Comment } from "../../src/stavy/comments/store"
+import { placeOf, type Comment } from "../../src/stavy/comments/store"
+// @ts-expect-error plain ES module shipped to adopters as-is
+import { legacyToRounds, mergeRounds } from "../../scripts/lib/rounds.mjs"
 
 /* A tiny element tree standing in for a DOM: attributes + text, nothing else. */
 interface Fake extends AnchorEl {
@@ -145,27 +147,27 @@ describe("describeElement → relocate", () => {
   })
 })
 
-describe("comment file round trip", () => {
-  const base = { body: "b", author: "a", createdAt: 1700000000000, resolved: false, replies: [] }
+describe("comments through rounds", () => {
+  const base = { body: "b", author: "a", createdAt: 1700000000000 }
+  const threads = (list: unknown[]) => mergeRounds(legacyToRounds(list)) as Comment[]
   it("keeps every kind of anchor and tells them apart", () => {
-    const list: Comment[] = [
+    const list = [
       { ...base, id: "p", page: "expenses", dims: { role: "manager" }, target: "Row", nth: 2, path: [1], snippet: "980", box: { x: 0, y: 0, w: 1, h: 1 }, x: 50, y: 50 },
-      { ...base, id: "b", board: "approval-story", item: "s1", x: 10, y: 20 },
-      { ...base, id: "m", board: "@map", x: 400, y: 300 },
-      { ...base, id: "d", doc: "approval-rules", heading: "Approval limits", quote: "Split into separate claims" },
+      { ...base, id: "b", board: "approval-story", item: "s1", x: 10, y: 20, createdAt: 1700000000001 },
+      { ...base, id: "m", board: "@map", x: 400, y: 300, createdAt: 1700000000002 },
+      { ...base, id: "d", doc: "approval-rules", heading: "Approval limits", quote: "Split into separate claims", createdAt: 1700000000003 },
     ]
-    const back = fromFile(toFile(list))
-    expect(back).toEqual(list)
+    const back = threads(list)
+    expect(back).toEqual(list.map((c) => ({ ...c, status: "open", resolved: false, replies: [], round: "2023-11-14-a" })))
     expect(back.map(placeOf)).toEqual(["page", "board", "map", "doc"])
   })
-  it("reads version-1 files (ISO dates, no anchor extras)", () => {
-    const v1 = JSON.stringify({ version: 1, comments: [{ id: "o", page: "x", dims: {}, target: "T", path: [0], x: 1, y: 2, body: "old", author: "", createdAt: "2026-01-02T10:00:00.000Z", resolved: false, replies: [] }] })
-    const [c] = fromFile(v1)
+  it("reads what an old comments.json or an adapter holds (ISO dates, missing fields)", () => {
+    const [c, z] = threads([
+      { id: "o", page: "x", dims: {}, target: "T", path: [0], x: 1, y: 2, body: "old", author: "", createdAt: "2026-01-02T10:00:00.000Z", resolved: false, replies: [] },
+      { id: "z", page: "x", body: "hi", createdAt: "2026-01-03T10:00:00.000Z" },
+    ])
     expect(c.createdAt).toBe(Date.parse("2026-01-02T10:00:00.000Z"))
     expect(placeOf(c)).toBe("page")
-  })
-  it("normalize fills what an adapter may leave out", () => {
-    const [c] = normalize([{ id: "z", page: "x", body: "hi" }])
-    expect(c).toMatchObject({ dims: {}, resolved: false, replies: [], author: "" })
+    expect(z).toMatchObject({ resolved: false, status: "open", replies: [], author: "anonymous" })
   })
 })

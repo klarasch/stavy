@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Check, RotateCcw, Trash2, X, CornerDownRight } from "../icons"
 import { PsButton } from "../chrome"
-import { initials, timeAgo, type Comment } from "./store"
+import { initials, timeAgo, useComments, type Comment } from "./store"
 
 /* The composer and the thread card, shared by every comment layer (player, boards, map, docs). */
 
@@ -169,6 +169,7 @@ export function Thread({
   onReply: (body: string) => void
   onAuthor: (a: string) => void
 }) {
+  const { setStatus } = useComments()
   return (
     <div
       className="ps ps-glass-strong ps-cthread absolute w-80 rounded-2xl p-3"
@@ -199,6 +200,14 @@ export function Thread({
         </blockquote>
       )}
       <p className="text-[12.5px] leading-relaxed whitespace-pre-wrap">{c.body}</p>
+      {c.status === "addressed" && (
+        <div className="mt-1.5">
+          <span className="ps-chip ps-chip-sm" data-ps-status="addressed" title="Whoever made the change marked this as addressed. Its author closes it.">
+            <Check className="size-3" /> Addressed{c.addressedIn ? <span className="ps-mono"> in {c.addressedIn}</span> : null}
+            {c.addressedBy ? ` by ${c.addressedBy}` : ""}
+          </span>
+        </div>
+      )}
       {c.replies.length > 0 && (
         <div className="mt-2 flex flex-col gap-1.5" style={{ borderLeft: "2px solid var(--ps-border)", paddingLeft: 10 }}>
           {c.replies.map((r) => (
@@ -239,10 +248,15 @@ export function Thread({
             </>
           ) : (
             <>
-              <Check /> Resolve
+              <Check /> {c.status === "addressed" ? "Close" : "Resolve"}
             </>
           )}
         </PsButton>
+        {c.status === "addressed" && (
+          <PsButton onClick={() => setStatus(c.id, "open")} title="Not fixed yet: back to open">
+            <RotateCcw /> Reopen
+          </PsButton>
+        )}
         <PsButton className="ml-auto" onClick={onDelete} title="Delete">
           <Trash2 />
         </PsButton>

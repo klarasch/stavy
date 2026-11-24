@@ -41,8 +41,7 @@ One JSON document, served by the prototype at `/stavy.json` (or wherever
   "scenarios":  [ ... ],
   "prototypes": [ ... ],
   "notes":      [ ... ],
-  "boards":     [ ... ],
-  "requirements": [ ... ]
+  "boards":     [ ... ]
 }
 ```
 
@@ -263,11 +262,9 @@ click?".
 }
 ```
 
-`refs` (optional `string[]`) links the scenario to the requirements it
-realises — PRD sections, tickets, acceptance criteria. This is what makes the
-manifest a checkable contract between PM, design, and engineering: every
-requirement should be reachable through at least one scenario; every scenario
-should cite what it's for.
+`refs` (optional `string[]`) cites what the scenario realises — PRD sections,
+tickets, acceptance criteria. They are plain citations: shown with the
+scenario, not checked against anything.
 
 **How a step is reached (`via`).** `"url"` (the default): the player loads the
 step's registered state fresh, unless the app is already there, so every step
@@ -324,20 +321,12 @@ travel with the page wherever it's shown; canvas notes are *about the
 review* — design rationale, open questions, scope remarks — and live on the
 overview. Both are drawn from the snapshot index (§3), not measured live.
 
-### 1.6 Requirements (the PM's half of the contract)
+### 1.6 Requirements — retired
 
-```jsonc
-{ "id": "PRD-118 §3", "title": "Managers approve, reject, or request changes",
-  "source": "docs/PRD-118.md §3", "priority": "must" }
-```
-
-`requirements[]` lists what the prototype must demonstrate; scenarios cite
-them in `refs` by exact id. A viewer SHOULD render a coverage board
-(requirement → scenarios → states, gaps highlighted); a validator SHOULD warn
-for requirements no scenario cites and refs no requirement declares, and MAY
-cross-check a requirements document's text (`validate --refs`). Requirements
-are typically generated from the PRD by the agent; PMs review the board
-rather than editing the manifest.
+> The top-level `requirements[]` field and its coverage board were removed.
+> A manifest that still has the field is accepted; `stavy:validate` warns that
+> it is no longer used and can be removed. Scenario `refs` (§1.4) remain as
+> plain citations.
 
 ### 1.7 Manifest boards (supporting material — outside the contract)
 
@@ -398,7 +387,8 @@ stavy-content/
   boards/<id>.json    one board per file
   docs/<id>.md        Markdown docs
   assets/             images and SVGs
-  comments.json       comments left in the viewer (dev server)
+  rounds/             review comments, one file per author per day (docs/COMMENTS.md)
+  log/<date>.md       one line per change (npm run stavy:log)
 ```
 
 A board answers one question for one audience. Its file is
@@ -485,6 +475,15 @@ only the pixel density of the resulting image. Changing `viewport` without
 re-running `npm run stavy:scan` leaves the canvas showing the old capture scaled to
 fit — `npm run stavy:validate` warns when a snapshot's captured size no longer
 matches the page's current viewport (§3b).
+
+**`viewer.stateSwitch` — how the player changes state.** `"reload"` (default)
+loads each requested state as a fresh document behind the shown frame and swaps
+when it has settled: always correct, even for prototypes that read their state
+once at boot. `"push"` pushes the new URL into the live frame's history and
+dispatches `popstate` — no reload, no swap, near-instant. Choose `"push"` only
+when the app's router re-reads every dimension from the URL on `popstate`; any
+boot-only state needs `"reload"`. The first load and cross-origin frames always
+reload.
 
 **`viewer.inspect` — describing the design system to the inspector.** The
 inspector reads the frame's live CSSOM, so a value's token comes out of the
@@ -872,14 +871,13 @@ A workspace SHOULD ship:
 - **`validate`** (`scripts/validate.mjs`, `npm run stavy:validate`) — static
   checks only, never reads the prototype's source: manifest shape against
   `spec/stavy.schema.json`, cross-references (templates, scenario pages,
-  requirement refs, note targets), the URL contract (§2.1, every declared
+  note targets), the URL contract (§2.1, every declared
   dimension is a placeholder and vice versa), and the last scan's `missing`
   targets. It also warns when a snapshot's captured `width`/`height` no longer
   matches the page's current viewport (the `viewport` knob or a page's `frame`
   changed since the last scan) — a real mismatch, not a failure: the canvas
   still shows the old capture scaled to fit. Also prints a coverage summary
-  (`--coverage`) and can cross-check scenario refs against a requirements
-  document's text (`--refs <doc>`).
+  (`--coverage`).
 - **The dev plugin** (`scripts/stavy/vite-plugin.mjs`) — a Vite plugin that
   applies to the dev server only and has no effect on `vite build`:
   `stavy({ root: "public", snapshots: ".stavy/snapshots" })`. It serves

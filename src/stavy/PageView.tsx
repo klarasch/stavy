@@ -27,17 +27,18 @@ import {
   STATE_DIM,
   snapshotEntry,
   snapshotUrl,
+  appBase,
 } from "./manifest"
 import { TourOverlay, stepUrl } from "./overlays/TourOverlay"
 import { AnnotationOverlay } from "./overlays/AnnotationOverlay"
 import { Inspector, useInspectDock, type FrameHit } from "./overlays/Inspector"
 import { PsButton, PsDivider, PsSelect, Chip, ThemeToggle, MockNotice, HelpButton, ShortcutsSheet, WorkspaceDims, useChrome, useHotkeys, cycleTheme } from "./chrome"
 import type { ToolbarAnchor } from "./types"
-import { CommentLayer } from "./comments/CommentLayer"
+import { CommentLayer, appRelative } from "./comments/CommentLayer"
 import { CommentsPanel } from "./comments/CommentsPanel"
 import { useComments, placeOf, dimsEqual as commentDimsEqual } from "./comments/store"
 import { playerOrigin } from "./origin"
-import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt, loadFrame, settleFrame } from "./frame"
+import { useFrameDocument, frameHref, setWireframe, bridgeFrameKeys, elementAt, loadFrame, navigateFrame, frameWin, settleFrame } from "./frame"
 
 /** Docked, full-width bottom bar unless the manifest sets `viewer.toolbar`. */
 const DEFAULT_ANCHOR: ToolbarAnchor = "bar-bottom"
@@ -92,7 +93,7 @@ export function PageView() {
   const [drag, setDrag] = useState<{ dx: number; dy: number; target: ToolbarAnchor } | null>(null)
   const [placing, setPlacing] = useState(false)
   const [drift, setDrift] = useState<string | null>(null)
-  const { countFor } = useComments()
+  const { countFor, comments: allComments } = useComments()
 
   // Tour identity resolved before the page: a deep link straight into a tour
   // step (SPEC §1.4) names its own page and dims, and that's the intent even
@@ -158,6 +159,28 @@ export function PageView() {
   const loadState = useCallback(
     (frame: HTMLIFrameElement, href: string) => {
       const seq = ++loadSeq.current
+      // Opt-in (`viewer.stateSwitch: "push"`): the shown frame already has a live
+      // same-origin document, so switch state inside it — history push + popstate,
+      // no back frame, no veil, no swap. Only for apps that re-read every
+      // dimension from the URL on popstate. First load and cross-origin: below.
+      if (manifest.viewer?.stateSwitch === "push") {
+        const shownNow = frameHref(frame)
+        let sameOrigin = false
+        try {
+          sameOrigin = !!shownNow && !!frameWin(frame) && new URL(href, shownNow).origin === new URL(shownNow).origin
+        } catch {
+          /* unreadable: take the reload path */
+        }
+        if (sameOrigin) {
+          const t0 = performance.now()
+          navigateFrame(frame, href)
+          void settleFrame(frame, { quiet: 60, max: 800 }).then(() => {
+            if (new URLSearchParams(window.location.search).get("debug") === "1")
+              console.info(`[stavy] ${href}: pushed in ${Math.round(performance.now() - t0)} ms`)
+          })
+          return
+        }
+      }
       const entry = page ? snapshotEntry(page, dims) : undefined
       const w = frame.clientWidth
       // The snapshot only stands in when it was captured at this width — at any
@@ -243,6 +266,23 @@ export function PageView() {
       iframe.removeEventListener("load", tick)
     }
   })
+
+  // A comment made where the app had wandered off the map is opened there: the
+  // frame goes to the URL it remembers (the state it came from is `desired`).
+  const openComment = openCommentId ? allComments.find((c) => c.id === openCommentId) : undefined
+  const openAt = openComment?.url && openComment.page === page?.id ? openComment.url : null
+  const wentTo = useRef<string | null>(null)
+  useEffect(() => {
+    if (!openAt) wentTo.current = null
+    if (!iframe || !openAt) return
+    // Once per opening: "reset" (or clicking on) leaves the reviewer where they went.
+    if (wentTo.current === openCommentId) return
+    wentTo.current = openCommentId
+    const cur = frameHref(iframe)
+    if (cur && appRelative(cur) === openAt) return
+    loadFrame(iframe, `${appBase}${openAt}`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iframe, openAt, openCommentId])
 
   useEffect(() => setWireframe(doc, wireOn), [doc, wireOn])
   useEffect(() => bridgeFrameKeys(doc), [doc])
@@ -423,7 +463,7 @@ export function PageView() {
             </div>
           )}
           {inspectOn && !hidden && <div ref={setShield} className="ps-shield" data-mode="inspect" />}
-          <CommentLayer iframe={iframe} doc={doc} pageId={page.id} dims={dims} placing={placing} onPlaced={() => setPlacing(false)} openId={openCommentId} onOpenChange={(id) => setParam("c", id)} />
+          <CommentLayer iframe={iframe} doc={doc} pageId={page.id} dims={dims} offMap={drift ? appRelative(drift) : null} placing={placing} onPlaced={() => setPlacing(false)} openId={openCommentId} onOpenChange={(id) => setParam("c", id)} />
         </div>
         {annotMode && page.annotations && <AnnotationOverlay annotations={page.annotations} iframe={iframe} doc={doc} mode={annotMode} />}
         {scenario && <TourOverlay scenario={scenario} stepIdx={tourStep} iframe={iframe} doc={doc} exitUrl={exitUrl} carry={carry} onAdvanceInPlace={advanceTourInPlace} onExitInPlace={exitTourInPlace} />}

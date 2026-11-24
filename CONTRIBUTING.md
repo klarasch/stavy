@@ -40,7 +40,7 @@ npx playwright install chromium
 npm run dev            # Orbit at http://localhost:5173, the viewer at http://localhost:5173/stavy/
 npm run scan           # against the dev server: snapshots + the target report → public/snapshots
 npm run validate       # manifest shape, cross-references, the URL contract, last scan's misses
-npm run check          # validate + coverage summary + PRD refs check
+npm run check          # validate + coverage summary
 npm test               # unit tests (vitest)
 npm run test:scenarios # generated Playwright specs from stavy.json + the viewer specs
 npm run build:viewer   # the redistributable viewer → dist-viewer/

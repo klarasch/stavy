@@ -249,20 +249,6 @@ export interface BoardDef {
   callouts?: BoardCallout[]
 }
 
-/**
- * A requirement the prototype must demonstrate (PRD section, ticket, acceptance
- * criterion). Scenarios cite them in `refs`; the coverage board shows which are
- * demonstrated and which are gaps. Usually generated from the PRD by the skill.
- */
-export interface RequirementDef {
-  id: string
-  title: string
-  /** Where it comes from: document + section, ticket URL… */
-  source?: string
-  /** Free-form: "must" | "should" | "later" — viewers group by it */
-  priority?: string
-}
-
 export type ToolbarAnchor = "bottom" | "top" | "bottom-left" | "bottom-right" | "top-left" | "top-right" | "bar-bottom" | "bar-top"
 
 /**
@@ -371,10 +357,18 @@ export interface ViewerDefaults {
    * still overrides this per page (mainly for components).
    */
   viewport?: { width: number; height: number; dpr?: number }
+  /**
+   * How the player moves between states of the prototype. "reload" (default): a
+   * fresh document load per state, behind the shown frame — always correct, a
+   * little slower. "push": history.pushState + popstate inside the live frame,
+   * instant; use it only when the app's router re-reads every dimension from
+   * the URL on popstate. Boot-only state needs "reload".
+   */
+  stateSwitch?: "reload" | "push"
   /** What the inspector should know about this workspace's design system. */
   inspect?: InspectSettings
   /**
-   * Where comments are kept (docs/COMMENTS.md): "file" (stavy-content/comments.json
+   * Where comments are kept (docs/COMMENTS.md): "file" (round files in stavy-content/rounds/
    * via the dev endpoint), "local" (this browser), or a same-origin ES module
    * exporting async list(), save(comment), update(id, patch). Default: "file"
    * when the dev endpoint is writable, else "local".
@@ -397,7 +391,6 @@ export interface Manifest {
   notes?: CanvasNote[]
   /** Legacy (0.2) boards: Mermaid / image / text, rendered in the map's Boards area. 0.3 boards live in `stavy-content/boards/`. */
   boards?: BoardDef[]
-  requirements?: RequirementDef[]
 }
 
 /* ------------------------------------------------------------------ */

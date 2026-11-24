@@ -16,7 +16,7 @@ function gitShow(ref) {
     return null
   }
 }
-const base = gitShow(baseArg ?? "origin/main") ?? gitShow("HEAD") ?? { dimensions: [], templates: [], pages: [], scenarios: [], prototypes: [], notes: [], boards: [], requirements: [] }
+const base = gitShow(baseArg ?? "origin/main") ?? gitShow("HEAD") ?? { dimensions: [], templates: [], pages: [], scenarios: [], prototypes: [], notes: [], boards: [] }
 const head = headArg && headArg !== "--working" ? gitShow(headArg) : JSON.parse(readFileSync("stavy.json", "utf8"))
 const baseLabel = baseArg ?? "origin/main"
 const headLabel = headArg && headArg !== "--working" ? headArg : "working tree"
@@ -96,7 +96,6 @@ total += section("Prototypes (slices)", base.prototypes, head.prototypes, (a, b)
   if (!same(a.scenarios, b.scenarios)) d.push(`scenarios ${a.scenarios.length} → ${b.scenarios.length}`)
   return d
 })
-total += section("Requirements", base.requirements, head.requirements, (a, b) => (a.title !== b.title ? ["title edited"] : []))
 total += section("Notes", base.notes, head.notes, (a, b) => (a.text !== b.text ? ["text edited"] : []), (x) => x.text.slice(0, 50) + (x.text.length > 50 ? "…" : ""))
 total += section("Boards", base.boards, head.boards, (a, b) => (a.source !== b.source ? ["content edited"] : []))
 

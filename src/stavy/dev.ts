@@ -16,6 +16,9 @@ type Health = {
   rev: number
   /** git user.name of whoever runs the dev server */
   user?: string | null
+  /** The commit and branch the dev server runs on */
+  commit?: string
+  branch?: string
   scan?: { running: boolean; ok?: boolean; finishedAt?: string }
   /** The dev server re-captures states after the app's source changes */
   autoRefresh?: boolean
@@ -110,6 +113,24 @@ export async function writeContent(rel: string, data: unknown): Promise<void> {
 export async function deleteContent(rel: string): Promise<void> {
   const r = await fetch(api(`content/${rel.replace(/^\/+/, "")}`), { method: "DELETE" })
   if (!r.ok) throw new Error(`delete ${rel} → ${r.status}`)
+}
+
+/** Every review round on disk (stavy-content/rounds/), or null when the endpoint did not answer. */
+export async function fetchRounds(): Promise<unknown[] | null> {
+  try {
+    const r = await fetch(api("rounds"), { cache: "no-store" })
+    if (!r.ok || !(r.headers.get("content-type") ?? "").includes("json")) return null
+    const body = await r.json()
+    return Array.isArray(body?.rounds) ? body.rounds : null
+  } catch {
+    return null
+  }
+}
+
+/** Apply comment operations to the rounds on disk (scripts/lib/rounds.mjs). The only way the viewer writes comments. */
+export async function postRoundOps(ops: unknown[]): Promise<void> {
+  const r = await fetch(api("rounds"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ops }) })
+  if (!r.ok) throw new Error(`save comments → ${r.status} ${await r.text()}`)
 }
 
 /** Ask for fresh snapshots of these states (instance keys), or of everything. */

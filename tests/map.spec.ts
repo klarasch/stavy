@@ -96,7 +96,7 @@ test("the overview shows one card per screen, with its state count on it", async
   await expect(page.locator('[data-toc="page:policy"] .ps-disclose')).toHaveCount(0)
   // The workspace's boards are links to the board; diagrams are chips until one is opened.
   await expect(page.locator('[data-toc="area:boards"] [data-board-link]')).toHaveCount(2)
-  await expect(page.locator('[data-toc="area:boards"] button.ps-board-chip')).toHaveCount(4)
+  await expect(page.locator('[data-toc="area:boards"] button.ps-board-chip')).toHaveCount(3)
   await expect(page.locator('[data-toc="board:ia"]')).toHaveCount(0)
 })
 

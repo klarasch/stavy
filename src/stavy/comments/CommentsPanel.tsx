@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { X, MessageCircle, Link as LinkIcon, FileText, Upload, Trash2, Check, Braces } from "../icons"
+import { X, MessageCircle, Link as LinkIcon, FileText, Upload, Check } from "../icons"
 import { PsButton, Kbd } from "../chrome"
-import { useComments, shareUrl, toMarkdown, decodePayload, describeAnchor, timeAgo, downloadText, commentHref, initials, type Comment } from "./store"
+import { useComments, shareUrl, toMarkdown, decodeRounds, describeAnchor, timeAgo, downloadText, commentHref, initials, type Comment } from "./store"
 import { manifest } from "../manifest"
-import { useDev } from "../dev"
 
 export interface CommentsHere {
   /** What "here" is, e.g. the page's or board's name */
@@ -15,8 +14,8 @@ export interface CommentsHere {
 }
 
 const STORAGE_NOTE = {
-  file: "Saved to stavy-content/comments.json",
-  local: "Kept in this browser: share with Link or .md",
+  file: "Saved as review rounds in stavy-content/rounds/",
+  local: "Kept in this browser until you send them: Send feedback",
   module: "Saved through the workspace's comments adapter",
 } as const
 
@@ -26,19 +25,19 @@ const STORAGE_NOTE = {
  * import actions. Clicking a comment takes you to its place and opens it.
  */
 export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: () => void; onAdd?: () => void; wireframe?: boolean; here?: CommentsHere }) {
-  const { comments, importMany, clearAll, author, setAuthor, mode } = useComments()
+  const { comments, importRounds, outgoing, author, setAuthor, mode } = useComments()
   const navigate = useNavigate()
-  const writable = !!useDev()?.writable
-  const [filter, setFilter] = useState<"open" | "resolved" | "all">("open")
+  const [filter, setFilter] = useState<"open" | "addressed" | "resolved" | "all">("open")
   const [scope, setScope] = useState<"here" | "everywhere">(() => (here && comments.some((c) => here.test(c)) ? "here" : "everywhere"))
   const [flash, setFlash] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [importText, setImportText] = useState("")
+  const [sent, setSent] = useState(false)
 
   const list = useMemo(
     () =>
       comments
-        .filter((c) => (filter === "all" ? true : filter === "open" ? !c.resolved : c.resolved))
+        .filter((c) => (filter === "all" ? true : filter === "resolved" ? c.resolved : c.status === filter))
         .filter((c) => !here || scope === "everywhere" || here.test(c))
         .sort((a, b) => b.createdAt - a.createdAt),
     [comments, filter, scope, here]
@@ -57,7 +56,10 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
       <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--ps-border)" }}>
         <MessageCircle className="size-4" style={{ color: "var(--ps-comment)" }} />
         <span className="text-[13px] font-semibold">Comments</span>
-        <span className="ps-sub">{comments.filter((c) => !c.resolved).length} open</span>
+        <span className="ps-sub">
+          {comments.filter((c) => c.status === "open").length} open
+          {comments.some((c) => c.status === "addressed") && ` · ${comments.filter((c) => c.status === "addressed").length} addressed`}
+        </span>
         <button className="ml-auto cursor-pointer" style={{ color: "var(--ps-faint)" }} onClick={onClose} title="Close">
           <X className="size-4" />
         </button>
@@ -65,7 +67,7 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
 
       <div className="px-4 py-2.5 flex items-center gap-1.5 flex-wrap" style={{ borderBottom: "1px solid var(--ps-border)" }}>
         <div className="ps-seg">
-          {(["open", "resolved", "all"] as const).map((f) => (
+          {(["open", "addressed", "resolved", "all"] as const).map((f) => (
             <button key={f} data-on={filter === f ? "true" : undefined} onClick={() => setFilter(f)} className="capitalize">
               {f}
             </button>
@@ -122,6 +124,7 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
                     <span className="font-semibold" style={{ color: "var(--ps-fg)" }}>{c.author || "anonymous"}</span>
                     {timeAgo(c.createdAt)}
                     {c.resolved && <Check className="size-3" style={{ color: "var(--ps-comment)" }} />}
+                    {c.status === "addressed" && <span data-ps-status="addressed">addressed{c.addressedIn ? ` in ${c.addressedIn}` : ""}</span>}
                   </span>
                   <span className="block text-[12.5px] leading-snug mt-0.5 line-clamp-2">{c.body}</span>
                   <span className="block text-[10.5px] mt-1 truncate" style={{ color: "var(--ps-faint)" }}>
@@ -138,60 +141,50 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
       <div className="px-3 py-2.5 flex flex-col gap-2" style={{ borderTop: "1px solid var(--ps-border)" }}>
         <div className="flex items-center gap-1">
           <PsButton
+            primary={mode === "local"}
             className="h-7"
+            tip="Copy one link with these comments to send to the designer; opening it offers to import them as a round"
             onClick={async () => {
-              const url = await shareUrl(comments)
-              // ~60 chars per comment compressed; Safari/Slack are comfortable below ~60k.
-              if (url.length > 60000) copy(await toMarkdown(comments), "Too many comments for one link — copied the Markdown digest instead")
-              else copy(url, "Link copied — paste it in Slack")
+              const url = await shareUrl(outgoing)
+              // Chat apps and Safari are comfortable below ~60k characters.
+              if (url.length > 60000) {
+                downloadText(`${manifest.product.name.toLowerCase()}-feedback-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ v: 1, rounds: outgoing }, null, 2), "application/json")
+                say("Too much for one link: downloaded a file to send instead (paste it into Import)")
+              } else {
+                await copy(url, "Link copied: send it to the designer")
+              }
+              setSent(true)
             }}
-            disabled={comments.length === 0}
+            disabled={outgoing.length === 0}
           >
-            <LinkIcon /> Link
+            <LinkIcon /> Send feedback
           </PsButton>
           <PsButton
             className="h-7"
-            tip="Download a Slack/PR-ready Markdown digest"
+            tip="Download the same feedback as a Markdown digest, for reading in chat or a ticket"
             onClick={async () => {
-              downloadText(`${manifest.product.name.toLowerCase()}-comments-${new Date().toISOString().slice(0, 10)}.md`, await toMarkdown(comments), "text/markdown")
-              say("Markdown downloaded")
+              downloadText(`${manifest.product.name.toLowerCase()}-feedback-${new Date().toISOString().slice(0, 10)}.md`, await toMarkdown(outgoing, comments), "text/markdown")
+              say("Digest downloaded")
             }}
-            disabled={comments.length === 0}
+            disabled={outgoing.length === 0}
           >
-            <FileText /> .md
+            <FileText /> Digest .md
           </PsButton>
-          <PsButton
-            className="h-7"
-            tip="Download as JSON — hand it to Claude as a to-do list, or archive it"
-            onClick={() => {
-              downloadText(`${manifest.product.name.toLowerCase()}-comments-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(comments, null, 2), "application/json")
-              say("JSON downloaded")
-            }}
-            disabled={comments.length === 0}
-          >
-            <Braces /> .json
-          </PsButton>
-          <PsButton className="h-7" active={importing} tip="Unpack a link or payload from a colleague" onClick={() => setImporting((v) => !v)}>
+          <PsButton className="h-7 ml-auto" active={importing} tip="Take in a feedback link or file from a reviewer" onClick={() => setImporting((v) => !v)}>
             <Upload /> Import
           </PsButton>
-          <PsButton
-            icon
-            className="h-7 ml-auto"
-            tip={writable ? "Delete all comments (removes them from comments.json)" : "Delete all comments in this browser"}
-            onClick={() => {
-              if (confirm(writable ? "Delete all comments from stavy-content/comments.json?" : "Delete all comments stored in this browser?")) clearAll()
-            }}
-            disabled={comments.length === 0}
-          >
-            <Trash2 />
-          </PsButton>
         </div>
+        {sent && mode === "local" && (
+          <div className="text-[11px]" style={{ color: "var(--ps-muted)" }} data-ps-sent>
+            The designer opens the link in their own viewer and imports your round. The digest is the same feedback to read.
+          </div>
+        )}
         {importing && (
           <div className="flex flex-col gap-1.5">
             <textarea
               className="ps-cinput"
               rows={2}
-              placeholder="Paste a share link or payload from Slack…"
+              placeholder="Paste a feedback link, or the contents of a feedback file…"
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
             />
@@ -201,12 +194,12 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
                 className="h-7"
                 onClick={async () => {
                   try {
-                    const n = importMany(await decodePayload(importText))
-                    say(`Imported ${n} new comment(s)`)
+                    const n = importRounds(await decodeRounds(importText))
+                    say(n ? `Imported ${n} new comment(s)` : "Nothing new in that round")
                     setImportText("")
                     setImporting(false)
                   } catch {
-                    say("That doesn't look like a comments payload")
+                    say("That doesn't look like Stavy feedback")
                   }
                 }}
               >

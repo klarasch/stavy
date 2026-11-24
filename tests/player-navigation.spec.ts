@@ -46,3 +46,33 @@ test("Back goes to the map when the player was opened directly", async ({ browse
   }).toMatch(/[?&]view=map/)
   await ctx.close()
 })
+
+// `viewer.stateSwitch: "push"` switches state inside the live document: no new
+// `load` event on the frame, and the frame still ends up on the asked-for state.
+test("stateSwitch push changes state without reloading the frame", async ({ page }) => {
+  await page.route("**/stavy.json", async (route) => {
+    const res = await route.fetch()
+    const m = await res.json()
+    m.viewer = { ...(m.viewer ?? {}), stateSwitch: "push" }
+    await route.fulfill({ response: res, json: m })
+  })
+  await page.goto("/stavy/?p=expenses&d_role=employee&d_state=loaded")
+  await expect(page.frameLocator("iframe.ps-frame").locator("body")).toBeVisible()
+  const frame = page.locator("iframe.ps-frame")
+  await expect.poll(() => frame.evaluate((f) => (f as HTMLIFrameElement).contentWindow?.location.href ?? "")).toMatch(/role=employee/)
+  // Wait out the first load's settle, then count loads from here on.
+  await page.waitForTimeout(600)
+  await frame.evaluate((f) => {
+    ;(window as any).__loads = 0
+    f.addEventListener("load", () => ((window as any).__loads += 1))
+  })
+  const url = new URL(page.url())
+  url.searchParams.set("d_role", "manager")
+  url.searchParams.set("d_state", "empty")
+  await page.evaluate((u) => history.pushState(null, "", u), url.toString())
+  await page.evaluate(() => window.dispatchEvent(new PopStateEvent("popstate")))
+  await expect.poll(() => frame.evaluate((f) => (f as HTMLIFrameElement).contentWindow?.location.href ?? "")).toMatch(/role=manager&state=empty/)
+  await page.waitForTimeout(600)
+  expect(await page.evaluate(() => (window as any).__loads)).toBe(0)
+  await expect(page.locator("iframe.ps-frame")).toHaveCount(1)
+})

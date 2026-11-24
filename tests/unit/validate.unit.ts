@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url"
 import { validate } from "../../scripts/validate.mjs"
 
 const root = fileURLToPath(new URL("./fixtures", import.meta.url))
-const reqDoc = fileURLToPath(new URL("./fixtures/req-doc.md", import.meta.url))
 const snapsOk = fileURLToPath(new URL("./fixtures/snapshots-ok", import.meta.url))
 const snapsMissing = fileURLToPath(new URL("./fixtures/snapshots-missing", import.meta.url))
 
@@ -65,7 +64,6 @@ function baseManifest() {
       },
     ],
     prototypes: [{ id: "demo-proto", label: "Demo Proto", pages: ["simple-page", "organism-page"], scenarios: ["demo-scenario"] }],
-    requirements: [{ id: "REQ-1", title: "Some requirement" }],
     boards: [{ id: "board-1", title: "Board", kind: "text", source: "some text" }],
   }
 }
@@ -76,7 +74,6 @@ interface ValidateResult {
 }
 
 interface Flags {
-  refs: string[]
   coverage: boolean
   snapshots?: string | null
   requireSchema?: boolean
@@ -87,7 +84,7 @@ interface Flags {
 async function run(mutate?: (m: ReturnType<typeof baseManifest>) => void, flags?: Flags): Promise<ValidateResult> {
   const m = baseManifest()
   mutate?.(m)
-  return (await validate(m as any, root, { snapshots: snapsOk, ...(flags ?? { refs: [], coverage: false }) })) as ValidateResult
+  return (await validate(m as any, root, { snapshots: snapsOk, ...(flags ?? { coverage: false }) })) as ValidateResult
 }
 
 describe("validate: the URL contract", () => {
@@ -140,15 +137,15 @@ describe("validate: the URL contract", () => {
 
 describe("validate: last scan results", () => {
   it("warns about targets the scan could not find, and errors with --strict", async () => {
-    const loose = await run(undefined, { refs: [], coverage: false, snapshots: snapsMissing })
+    const loose = await run(undefined, { coverage: false, snapshots: snapsMissing })
     expect(loose.warnings.some((e) => e.includes('scan: simple-page?role=user: target "SubmitButton" was not found'))).toBe(true)
     expect(loose.errors).toEqual([])
-    const strict = await run(undefined, { refs: [], coverage: false, snapshots: snapsMissing, strict: true } as any)
+    const strict = await run(undefined, { coverage: false, snapshots: snapsMissing, strict: true } as any)
     expect(strict.errors.some((e) => e.includes('target "SubmitButton" was not found'))).toBe(true)
   })
 
   it("warns when there is no scan yet", async () => {
-    const { warnings } = await run(undefined, { refs: [], coverage: false, snapshots: fileURLToPath(new URL("./fixtures/nowhere", import.meta.url)) })
+    const { warnings } = await run(undefined, { coverage: false, snapshots: fileURLToPath(new URL("./fixtures/nowhere", import.meta.url)) })
     expect(warnings.some((w) => w.includes("no") && w.includes("index.json yet"))).toBe(true)
   })
 
@@ -210,7 +207,7 @@ describe("validate: JSON schema", () => {
 
 describe("validate: schema check availability (README feedback item 4)", () => {
   it("warns loudly, as a warning (not an error), when ajv cannot be resolved", async () => {
-    const { errors, warnings } = await run(undefined, { refs: [], coverage: false, simulateNoAjv: true })
+    const { errors, warnings } = await run(undefined, { coverage: false, simulateNoAjv: true })
     expect(warnings.some((w) => w.includes("SCHEMA NOT CHECKED") && w.includes("ajv@8.12.0") && w.includes("ajv-formats@2.1.1"))).toBe(true)
     expect(errors.some((e) => e.startsWith("schema"))).toBe(false)
   })
@@ -221,13 +218,13 @@ describe("validate: schema check availability (README feedback item 4)", () => {
   })
 
   it("--require-schema turns the missing-ajv case into an error", async () => {
-    const { errors, warnings } = await run(undefined, { refs: [], coverage: false, simulateNoAjv: true, requireSchema: true })
+    const { errors, warnings } = await run(undefined, { coverage: false, simulateNoAjv: true, requireSchema: true })
     expect(errors.some((e) => e.includes("--require-schema") && e.includes("ajv/ajv-formats is not installed"))).toBe(true)
     expect(warnings.some((w) => w.includes("SCHEMA NOT CHECKED"))).toBe(false)
   })
 
   it("--require-schema does not error when ajv is actually available", async () => {
-    const { errors } = await run(undefined, { refs: [], coverage: false, requireSchema: true })
+    const { errors } = await run(undefined, { coverage: false, requireSchema: true })
     expect(errors.some((e) => e.includes("--require-schema"))).toBe(false)
   })
 })
@@ -270,7 +267,7 @@ describe("validate: pages", () => {
       delete m.pages[0].fidelity
     }
     expect((await run(noFidelity)).warnings.some((w) => w.includes("no fidelity rung declared"))).toBe(false)
-    const strict = await run(noFidelity, { refs: [], coverage: false, strict: true } as Flags)
+    const strict = await run(noFidelity, { coverage: false, strict: true } as Flags)
     expect(strict.warnings.some((w) => w.includes("no fidelity rung declared"))).toBe(true)
   })
 
@@ -312,14 +309,6 @@ describe("validate: scenarios", () => {
     expect(errors.some((e) => e.includes('"nonexistent-value" is not a declared value of dimension "role"'))).toBe(true)
   })
 
-  it("warns when a scenario has no refs", async () => {
-    const { warnings } = await run((m) => {
-      // @ts-expect-error deliberately invalid: refs is optional at runtime, not in this literal's inferred type
-      delete m.scenarios[0].refs
-    })
-    expect(warnings.some((w) => w.includes("no refs"))).toBe(true)
-  })
-
   it("with --strict, warns when every step of a multi-step scenario stays on one page", async () => {
     const oneScreen = (m: ReturnType<typeof baseManifest>) => {
       m.scenarios[0].steps = [
@@ -329,7 +318,7 @@ describe("validate: scenarios", () => {
     }
     const loose = await run(oneScreen)
     expect(loose.warnings.some((w) => w.includes("stays on page"))).toBe(false)
-    const strict = await run(oneScreen, { refs: [], coverage: false, strict: true } as Flags)
+    const strict = await run(oneScreen, { coverage: false, strict: true } as Flags)
     expect(strict.warnings.some((w) => w.includes("stays on page \"simple-page\" for all 2 steps"))).toBe(true)
   })
 
@@ -474,66 +463,20 @@ describe("validate: figures (boards anchored to a page)", () => {
   })
 })
 
-describe("validate: requirements <-> scenario refs", () => {
-  it("warns when a requirement is not demonstrated by any scenario", async () => {
-    const { warnings } = await run((m) => {
-      m.requirements!.push({ id: "REQ-2", title: "Unused" })
+describe("validate: legacy requirements[]", () => {
+  it("ignores the field with one warning and no error", async () => {
+    const { errors, warnings } = await run((m) => {
+      ;(m as any).requirements = [{ id: "REQ-1", title: "Some requirement" }]
     })
-    expect(warnings.some((w) => w.includes('requirement "REQ-2" (Unused) is not demonstrated by any scenario'))).toBe(true)
-  })
-
-  it("warns when a scenario cites a requirement id that isn't declared", async () => {
-    const { warnings } = await run((m) => {
-      m.scenarios[0].refs = ["REQ-999"]
-    })
-    expect(warnings.some((w) => w.includes('cites "REQ-999", which is not in requirements'))).toBe(true)
-  })
-})
-
-describe("validate: --refs cross-check against requirement documents", () => {
-  let logSpy: ReturnType<typeof vi.spyOn>
-  beforeEach(() => {
-    logSpy = vi.spyOn(console, "log").mockImplementation(() => {})
-  })
-  afterEach(() => {
-    logSpy.mockRestore()
-  })
-
-  it("finds a ref whose id and section both appear in the document", async () => {
-    const { errors } = await run(
-      (m) => {
-        m.scenarios[0].refs = ["REQ-1 §1.0"]
-      },
-      { refs: [reqDoc], coverage: false }
-    )
-    expect(errors.some((e) => e.includes('ref "REQ-1 §1.0"'))).toBe(false)
-  })
-
-  it("errors when a ref is not found in any referenced document", async () => {
-    const { errors } = await run(
-      (m) => {
-        m.scenarios[0].refs = ["REQ-2 §2.0"]
-      },
-      { refs: [reqDoc], coverage: false }
-    )
-    expect(errors.some((e) => e.includes('ref "REQ-2 §2.0"') && e.includes("not found in"))).toBe(true)
-  })
-
-  it("warns about a section in the document that no scenario demonstrates", async () => {
-    const { warnings } = await run(
-      (m) => {
-        m.scenarios[0].refs = ["REQ-1 §1.0"]
-      },
-      { refs: [reqDoc], coverage: false }
-    )
-    expect(warnings.some((w) => w.includes("§3.0") && w.includes("Uncovered Section"))).toBe(true)
+    expect(errors).toEqual([])
+    expect(warnings.filter((w) => w.includes("requirements[] is no longer used"))).toHaveLength(1)
   })
 })
 
 describe("validate: --coverage summary", () => {
   it("runs without throwing and doesn't add errors or warnings on its own", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {})
-    const { errors, warnings } = await run(undefined, { refs: [], coverage: true })
+    const { errors, warnings } = await run(undefined, { coverage: true })
     expect(errors).toEqual([])
     expect(warnings).toEqual([])
     expect(logSpy).toHaveBeenCalled()

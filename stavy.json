@@ -1041,37 +1041,5 @@
         }
       ]
     }
-  ],
-  "requirements": [
-    {
-      "id": "PRD-118 §2",
-      "title": "Employees submit expenses through a guided flow",
-      "source": "docs/PRD-118.md §2 Submission",
-      "priority": "must"
-    },
-    {
-      "id": "PRD-118 §3",
-      "title": "Managers approve, reject, or request changes from a queue",
-      "source": "docs/PRD-118.md §3 Approvals",
-      "priority": "must"
-    },
-    {
-      "id": "PRD-118 §4",
-      "title": "Finance marks approved expenses reimbursed; reimbursed is terminal",
-      "source": "docs/PRD-118.md §4 Reimbursement",
-      "priority": "must"
-    },
-    {
-      "id": "PRD-118 §5",
-      "title": "Employees can edit and resubmit a rejected expense",
-      "source": "docs/PRD-118.md §5 Resubmission",
-      "priority": "should"
-    },
-    {
-      "id": "JIRA-ORB-412",
-      "title": "Request-changes leaves a visible trail on the timeline",
-      "source": "https://jira.example.com/ORB-412",
-      "priority": "must"
-    }
   ]
 }

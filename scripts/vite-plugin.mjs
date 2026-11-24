@@ -18,6 +18,11 @@
 //   PATCH  /__stavy/manifest        { path, value } → set ONE text field of stavy.json (titles, labels, notes;
 //                                   see scripts/lib/patch.mjs for the allowed paths). Read fresh, set, write
 //                                   back only the bytes of that value, so the diff is one line.
+//   GET    /__stavy/rounds          { rounds } every review round (stavy-content/rounds/*.json); an old
+//                                   comments.json is moved into rounds first
+//   POST   /__stavy/rounds          { ops: [{ author, date, op }] } → apply comment / event / import operations
+//                                   to the rounds on disk (scripts/lib/rounds.mjs). The only way comments are
+//                                   written: content PUT/DELETE refuses rounds/ and comments.json.
 //   GET    /__stavy/git-log         ?limit=20[&path=…] → [{ hash, date, author, subject }], [] outside a repo
 // and, when stavy.json is not inside public/, serves /stavy.json and
 // /stavy-content/** from where they are.
@@ -42,6 +47,8 @@ import { patchManifestText } from "./lib/patch.mjs"
 import { createRefresher } from "./lib/refresh.mjs"
 import { normalizeManifest, instanceKey, resolveDims, STATE_DIM } from "./lib/model.mjs"
 import { FRAME_HOOK } from "./lib/gate.mjs"
+import { ROUNDS_DIR, LEGACY_FILE } from "./lib/rounds.mjs"
+import { applyOps, gitInfo, migrateLegacy, readRounds } from "./lib/rounds-fs.mjs"
 
 const MAX_BODY = 15 * 1024 * 1024
 const TYPES = {
@@ -243,6 +250,19 @@ export default function stavy(opts = {}) {
     return meta
   }
 
+  // The commit and branch the dev server runs on (asked at most every few seconds).
+  let git = { at: 0, info: {} }
+  const gitNow = () => {
+    if (Date.now() - git.at > 4000) git = { at: Date.now(), info: gitInfo(dirname(manifestPath)) }
+    return git.info
+  }
+  /** An old comments.json becomes rounds the first time anything asks for them. */
+  const migrateComments = () => {
+    const r = migrateLegacy(contentDir)
+    if (r?.ok) logger.info(`[stavy] moved ${r.comments} comment(s) from ${LEGACY_FILE} into ${r.rounds.length} round file(s) in stavy-content/${ROUNDS_DIR}/`)
+    else if (r) logger.warn(`[stavy] ${r.error}`)
+  }
+
   /**
    * Count a change as the app's when it isn't Stavy's own output or tooling:
    * content, snapshots, the manifest, build output, tests and docs don't.
@@ -369,6 +389,7 @@ export default function stavy(opts = {}) {
               writable: true,
               rev,
               user: gitUser(),
+              ...gitNow(),
               scan: { running: scan.running, ok: scan.ok, finishedAt: scan.finishedAt },
               autoRefresh: !!auto && !auto.off,
               refreshing: r.refreshing,
@@ -405,6 +426,19 @@ export default function stavy(opts = {}) {
             bump()
             return json(res, 200, { ok: true, rev })
           }
+          if (route === "rounds") {
+            if (req.method === "POST") {
+              const body = JSON.parse((await readBody(req)).toString() || "{}")
+              const ops = (Array.isArray(body.ops) ? body.ops : []).filter((o) => o && typeof o === "object" && o.op)
+              migrateComments()
+              const r = applyOps(contentDir, ops, gitNow())
+              bump()
+              return json(res, 200, { ok: true, rounds: r.rounds, written: r.written })
+            }
+            if (req.method !== "GET") return json(res, 405, { ok: false })
+            migrateComments()
+            return json(res, 200, { ok: true, rounds: readRounds(contentDir).rounds, ...gitNow() })
+          }
           if (route === "git-log") {
             if (req.method !== "GET") return json(res, 405, { ok: false })
             const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 20))
@@ -426,6 +460,10 @@ export default function stavy(opts = {}) {
           if (route.startsWith("content/")) {
             const file = contentPath(route.slice("content/".length))
             if (!file || file === contentDir) return json(res, 400, { ok: false, error: "path must be inside stavy-content/" })
+            // Comments are only ever changed one operation at a time (POST /__stavy/rounds), never as a whole file.
+            const relPath = relative(contentDir, file).split(sep).join("/")
+            if (relPath === LEGACY_FILE || relPath === ROUNDS_DIR || relPath.startsWith(ROUNDS_DIR + "/"))
+              return json(res, 400, { ok: false, error: "review rounds are written through /__stavy/rounds" })
             if (req.method === "DELETE") {
               if (existsSync(file)) rmSync(file)
               bump()

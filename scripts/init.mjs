@@ -289,6 +289,9 @@ const want = {
   "stavy:migrate": "node scripts/stavy/migrate.mjs public/stavy.json",
   "stavy:format": "node scripts/stavy/format.mjs public/stavy.json",
   "stavy:publish": "node scripts/stavy/publish.mjs",
+  "stavy:log": "node scripts/stavy/log.mjs",
+  "stavy:address": "node scripts/stavy/address.mjs",
+  "stavy:ls": "node scripts/stavy/ls.mjs --manifest public/stavy.json",
   "stavy:tests": "node scripts/stavy/gen-tests.mjs public/stavy.json --out tests/stavy",
   "stavy:update": `node ${initPath} .`,
 }

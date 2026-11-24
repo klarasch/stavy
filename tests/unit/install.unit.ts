@@ -119,6 +119,8 @@ describe("install and update", () => {
       "scripts/stavy/stavy-board.schema.json",
       "scripts/stavy/stavy.schema.json",
       ".claude/skills/stavy/SKILL.md",
+      ".claude/skills/stavy/reference/boards.md",
+      ".claude/skills/stavy/reference/fields.md",
       "STAVY.md",
       "docs/STAVY-UPDATING.md",
     ]) {
@@ -196,7 +198,9 @@ describe("install and update", () => {
     put(target, ".stavy/SKILL.local.md", "---\nname: acme-prototypes\n---\n\n- Be nice.\n")
     put(target, ".stavy/RULES.local.md", "- Never touch billing.\n")
     const r = update()
-    expect(r.pruned).toEqual([".claude/skills/stavy/SKILL.md"])
+    expect(r.pruned).toContain(".claude/skills/stavy/SKILL.md")
+    expect(r.pruned).toContain(".claude/skills/stavy/reference/boards.md")
+    expect(read(".claude/skills/acme-prototypes/reference/boards.md")).toContain("Boards")
     expect(existsSync(join(target, ".claude/skills/stavy"))).toBe(false)
     expect(read(".claude/skills/acme-prototypes/SKILL.md")).toContain("Be nice.")
     expect(read("STAVY.md")).toContain("Never touch billing.")

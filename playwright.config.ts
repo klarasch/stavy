@@ -16,7 +16,7 @@ export default defineConfig({
   projects: [
     { name: "viewer", testIgnore: /(writes|comments|auto-refresh)\.spec\.ts/ },
     { name: "writes", testMatch: /writes\.spec\.ts/, dependencies: ["viewer"] },
-    // Comments share one stavy-content/comments.json: their own group, after the manifest writes.
+    // Comments share one stavy-content/rounds/ folder: their own group, after the manifest writes.
     { name: "comments", testMatch: /comments\.spec\.ts/, dependencies: ["writes"] },
     // Auto-refresh edits and restores app source; the dev server's reload from
     // that would land in whichever test runs next, so it runs last.

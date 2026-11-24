@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { encodePayload, decodePayload, dimsEqual, uid, pathBetween, followPath, resolveAnchor, type Comment } from "../../src/stavy/comments/store"
+import { encodeRounds, decodeRounds, dimsEqual, uid, pathBetween, followPath, resolveAnchor, type Comment, type Round } from "../../src/stavy/comments/store"
 
 /* ------------------------------------------------------------------ */
 /* Fixtures                                                            */
@@ -15,6 +15,7 @@ function makeComment(overrides: Partial<Comment> = {}): Comment {
     body: "Looks off on mobile",
     author: "klara",
     createdAt: 1700000000000,
+    status: "open",
     resolved: false,
     replies: [],
     ...overrides,
@@ -74,126 +75,70 @@ describe("uid", () => {
 })
 
 /* ------------------------------------------------------------------ */
-/* encodePayload / decodePayload: round-tripping                       */
+/* encodeRounds / decodeRounds: the feedback link                       */
 /* ------------------------------------------------------------------ */
 
-describe("encodePayload / decodePayload: round trip", () => {
-  it("round-trips a single comment", async () => {
-    const list = [makeComment()]
-    const decoded = await decodePayload(await encodePayload(list))
-    expect(decoded).toEqual(list)
+const round = (comments: Comment[] = [makeComment()]): Round => ({
+  version: 1,
+  id: "2026-11-14-klara",
+  author: "klara",
+  date: "2026-11-14",
+  commit: "abc1234",
+  comments: comments.map(({ resolved: _r, replies: _p, status: _s, ...c }) => ({ ...c, createdAt: new Date(c.createdAt).toISOString() })),
+  events: [{ id: "e1", thread: "c1", type: "reply", body: "Agreed", at: "2026-11-14T12:00:00.000Z" }],
+})
+
+describe("encodeRounds / decodeRounds: round trip", () => {
+  it("round-trips rounds, comments and events", async () => {
+    const list = [round([makeComment(), makeComment({ id: "c2", body: "Unicode: přílišžluťoučký 🐎" })])]
+    expect(await decodeRounds(await encodeRounds(list))).toEqual(list)
   })
 
-  it("round-trips multiple comments with replies", async () => {
-    const list = [
-      makeComment({ id: "a", replies: [{ id: "r1", author: "bob", body: "fixed", createdAt: 1 }] }),
-      makeComment({ id: "b", resolved: true, target: "SubmitButton", path: [0, 2, 1] }),
-    ]
-    const decoded = await decodePayload(await encodePayload(list))
-    expect(decoded).toEqual(list)
+  it("emits the r1. (gzip) prefix where CompressionStream is available", async () => {
+    expect((await encodeRounds([round()])).startsWith("r1.")).toBe(true)
   })
 
-  it("round-trips an empty list", async () => {
-    const decoded = await decodePayload(await encodePayload([]))
-    expect(decoded).toEqual([])
-  })
-
-  it("round-trips unicode and special characters in the body", async () => {
-    const list = [makeComment({ body: "emoji check ✅🎉 — “curly quotes” & <tags>" })]
-    const decoded = await decodePayload(await encodePayload(list))
-    expect(decoded).toEqual(list)
-  })
-
-  it("produces a c1. (compressed) payload when CompressionStream is available", async () => {
-    const encoded = await encodePayload([makeComment()])
-    expect(encoded.startsWith("c1.")).toBe(true)
+  it("survives a round large enough to need chunked base64", async () => {
+    const many = Array.from({ length: 3000 }, (_, i) => makeComment({ id: `c${i}`, body: Math.random().toString(36).repeat(8) }))
+    const decoded = await decodeRounds(await encodeRounds([round(many)]))
+    expect(decoded[0].comments).toHaveLength(3000)
   })
 })
 
-/* ------------------------------------------------------------------ */
-/* decodePayload: legacy c0. format                                    */
-/* ------------------------------------------------------------------ */
-
-describe("decodePayload: legacy c0. format", () => {
-  it("decodes a hand-built c0. (uncompressed) payload", async () => {
-    const list = [makeComment({ id: "legacy" })]
-    const decoded = await decodePayload(legacyC0Payload(list))
-    expect(decoded).toEqual(list)
+describe("decodeRounds: the input shapes it accepts", () => {
+  it("accepts a #round= fragment and a full share link", async () => {
+    const payload = await encodeRounds([round()])
+    expect(await decodeRounds(`#round=${payload}`)).toEqual([round()])
+    expect(await decodeRounds(`https://example.com/app/stavy/?comments=1#round=${payload}`)).toEqual([round()])
   })
 
-  it("decodes an empty c0. payload", async () => {
-    const decoded = await decodePayload(legacyC0Payload([]))
-    expect(decoded).toEqual([])
-  })
-})
-
-/* ------------------------------------------------------------------ */
-/* decodePayload: input shapes it accepts besides a raw payload         */
-/* ------------------------------------------------------------------ */
-
-describe("decodePayload: alternate input shapes", () => {
-  it("accepts plain JSON array text", async () => {
-    const list = [makeComment()]
-    const decoded = await decodePayload(JSON.stringify(list))
-    expect(decoded).toEqual(list)
+  it("accepts a round as plain JSON, alone or as { rounds }", async () => {
+    expect(await decodeRounds(JSON.stringify(round()))).toEqual([round()])
+    expect(await decodeRounds(`  ${JSON.stringify({ v: 1, rounds: [round()] })}  `)).toEqual([round()])
   })
 
-  it("extracts the payload from a #c=... hash fragment", async () => {
-    const list = [makeComment()]
-    const payload = await encodePayload(list)
-    const decoded = await decodePayload(`#c=${payload}`)
-    expect(decoded).toEqual(list)
-  })
-
-  it("extracts the payload from a full share URL", async () => {
-    const list = [makeComment()]
-    const payload = await encodePayload(list)
-    const decoded = await decodePayload(`https://example.com/app/?comments=1#c=${payload}`)
-    expect(decoded).toEqual(list)
-  })
-
-  it("trims surrounding whitespace", async () => {
-    const list = [makeComment()]
-    const decoded = await decodePayload(`  ${JSON.stringify(list)}  `)
-    expect(decoded).toEqual(list)
+  it("turns an older link (#c=c0.…, a list of comments) into rounds, replies included", async () => {
+    const old = [makeComment({ replies: [{ id: "r1", author: "dana", body: "ok", createdAt: 1700000100000 }], resolved: true })]
+    const rounds = await decodeRounds(`#c=${legacyC0Payload(old)}`)
+    expect(rounds.map((r) => r.author).sort()).toEqual(["dana", "klara"])
+    expect(rounds.flatMap((r) => r.comments).map((c) => c.id)).toEqual(["c1"])
+    expect(rounds.flatMap((r) => r.events).map((e) => e.type).sort()).toEqual(["reply", "status"])
+    expect(await decodeRounds(JSON.stringify(old))).toEqual(rounds)
   })
 })
 
-/* ------------------------------------------------------------------ */
-/* decodePayload: malformed / truncated / garbage input                */
-/* ------------------------------------------------------------------ */
-
-describe("decodePayload: malformed input", () => {
-  it("rejects an empty string", async () => {
-    await expect(decodePayload("")).rejects.toThrow("Not a Stavy comments payload")
+describe("decodeRounds: malformed input", () => {
+  it("rejects what is not a payload", async () => {
+    await expect(decodeRounds("")).rejects.toThrow("Not a Stavy feedback payload")
+    await expect(decodeRounds("totally-unrelated-garbage")).rejects.toThrow("Not a Stavy feedback payload")
+    await expect(decodeRounds('{"hello":"world"}')).rejects.toThrow("Not a Stavy feedback payload")
   })
 
-  it("rejects text with no recognizable prefix", async () => {
-    await expect(decodePayload("totally-unrelated-garbage")).rejects.toThrow("Not a Stavy comments payload")
-  })
-
-  it("rejects a c1. payload with invalid base64", async () => {
-    await expect(decodePayload("c1.not-valid-base64!!!")).rejects.toThrow()
-  })
-
-  it("rejects a c1. payload whose bytes are not valid gzip", async () => {
-    const bogus = "c1." + b64urlEncode(new TextEncoder().encode("this is not gzip data"))
-    await expect(decodePayload(bogus)).rejects.toThrow()
-  })
-
-  it("rejects a truncated c1. payload (corrupted mid-stream)", async () => {
-    const full = await encodePayload([makeComment(), makeComment({ id: "c2" })])
-    const truncated = full.slice(0, Math.floor(full.length * 0.6))
-    await expect(decodePayload(truncated)).rejects.toThrow()
-  })
-
-  it("rejects a c0. payload whose bytes are not valid JSON", async () => {
-    const bogus = "c0." + b64urlEncode(new TextEncoder().encode("not json at all"))
-    await expect(decodePayload(bogus)).rejects.toThrow()
-  })
-
-  it("rejects malformed JSON passed directly as an array-looking string", async () => {
-    await expect(decodePayload("[not valid json")).rejects.toThrow()
+  it("rejects broken base64, broken gzip and broken JSON", async () => {
+    await expect(decodeRounds("r1.not-valid-base64!!!")).rejects.toThrow()
+    const full = await encodeRounds([round()])
+    await expect(decodeRounds(full.slice(0, Math.floor(full.length / 2)))).rejects.toThrow()
+    await expect(decodeRounds("[not valid json")).rejects.toThrow()
   })
 })
 
