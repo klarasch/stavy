@@ -15,7 +15,7 @@ export interface CommentsHere {
 
 const STORAGE_NOTE = {
   file: "Saved as review rounds in stavy-content/rounds/",
-  local: "Kept in this browser until you send them: Send feedback",
+  local: "Kept in this browser until you send them",
   module: "Saved through the workspace's comments adapter",
 } as const
 
@@ -32,7 +32,6 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
   const [flash, setFlash] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [importText, setImportText] = useState("")
-  const [sent, setSent] = useState(false)
 
   const list = useMemo(
     () =>
@@ -143,7 +142,7 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
           <PsButton
             primary={mode === "local"}
             className="h-7"
-            tip="Copy one link with these comments to send back to whoever shared this prototype; opening it offers to import them as a round"
+            tip="Copy a link with your comments"
             onClick={async () => {
               const url = await shareUrl(outgoing)
               // Chat apps and Safari are comfortable below ~60k characters.
@@ -151,9 +150,8 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
                 downloadText(`${manifest.product.name.toLowerCase()}-feedback-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ v: 1, rounds: outgoing }, null, 2), "application/json")
                 say("Too much for one link: downloaded a file to send instead (paste it into Import)")
               } else {
-                await copy(url, "Link copied: send it to whoever shared this prototype")
+                await copy(url, "Link copied")
               }
-              setSent(true)
             }}
             disabled={outgoing.length === 0}
           >
@@ -161,7 +159,7 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
           </PsButton>
           <PsButton
             className="h-7"
-            tip="Download the same feedback as a Markdown digest, for reading in chat or a ticket"
+            tip="Download your comments as Markdown"
             onClick={async () => {
               downloadText(`${manifest.product.name.toLowerCase()}-feedback-${new Date().toISOString().slice(0, 10)}.md`, await toMarkdown(outgoing, comments), "text/markdown")
               say("Digest downloaded")
@@ -170,15 +168,10 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
           >
             <FileText /> Digest .md
           </PsButton>
-          <PsButton className="h-7 ml-auto" active={importing} tip="Take in a feedback link or file from a reviewer" onClick={() => setImporting((v) => !v)}>
+          <PsButton className="h-7 ml-auto" active={importing} tip="Import feedback from a link or file" onClick={() => setImporting((v) => !v)}>
             <Upload /> Import
           </PsButton>
         </div>
-        {sent && mode === "local" && (
-          <div className="text-[11px]" style={{ color: "var(--ps-muted)" }} data-ps-sent>
-            Whoever maintains this prototype opens the link in their dev viewer and imports your round. The digest is the same feedback to read.
-          </div>
-        )}
         {importing && (
           <div className="flex flex-col gap-1.5">
             <textarea

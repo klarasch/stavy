@@ -483,9 +483,9 @@ test("importing a reviewer's round in the dev viewer writes the round file", asy
   await reviewer.goto("/stavy/?p=expenses&d_role=manager&d_state=loaded&comments=1")
   await reviewer.getByRole("button", { name: "Send feedback" }).click()
   await expect.poll(() => reviewer.evaluate(() => navigator.clipboard.readText())).toContain("#round=")
-  // Who gets the link isn't Stavy's to say: no role is named.
-  await expect(reviewer.locator("[data-ps-sent]")).toContainText("Whoever maintains this prototype")
-  await expect(reviewer.locator("[data-ps-sent]")).not.toContainText("designer")
+  // Sending says only that the link was copied: no instructions, no role.
+  await expect(reviewer.getByText("Link copied", { exact: true })).toBeVisible()
+  await expect(reviewer.getByText(/designer|imports your round/)).toHaveCount(0)
   const link = await reviewer.evaluate(() => navigator.clipboard.readText())
   await ctx.close()
 
