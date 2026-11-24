@@ -240,7 +240,8 @@ comments **in the browser** (local-first), so a static host needs nothing:
 2. **Comments → Send feedback.** One link carries the reviewer's round as a
    compressed payload in the URL hash; paste it in chat. **Digest .md** is
    the same feedback as Markdown, with a deep link per comment.
-3. The designer opens the link in their dev viewer and presses **Import**:
+3. Whoever maintains the prototype opens the link in their dev viewer and
+   presses **Import**:
    the round is written to `stavy-content/rounds/` and committed with the
    repo.
 

@@ -47,6 +47,8 @@ anything, they have to do.
   screen's states) in a few lines each, so agents don't read Stavy's scripts
   or viewer bundle. The skill's Cost section became Budget: register then
   stop, check in after about six states, one builder per feature.
+- **Send feedback names no role.** The reviewer is told to send the link to
+  whoever shared the prototype, not "the designer".
 - **"Where things live".** Agents start from a short list of paths in
   `STAVY.md` (screens, fixtures and scenes, shell, kit, what to ignore)
   instead of searching the repo each session. The first agent to find them

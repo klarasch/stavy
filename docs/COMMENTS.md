@@ -52,8 +52,8 @@ one file per author per day.
 
 A reviewer on a published build comments, then presses **Send feedback**:
 one link is copied (and **Digest .md** downloads the same feedback as
-Markdown to read). The designer opens the link in their dev viewer, which
-offers "Import round: 5 comments from Dana" and writes the round file.
+Markdown to read). Whoever maintains the prototype opens the link in
+their dev viewer, which offers "Import round: 5 comments from Dana" and writes the round file.
 `stavy:publish` writes `stavy-content/build.json` with the build's branch and
 commit; each comment made there records them.
 

@@ -143,7 +143,7 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
           <PsButton
             primary={mode === "local"}
             className="h-7"
-            tip="Copy one link with these comments to send to the designer; opening it offers to import them as a round"
+            tip="Copy one link with these comments to send back to whoever shared this prototype; opening it offers to import them as a round"
             onClick={async () => {
               const url = await shareUrl(outgoing)
               // Chat apps and Safari are comfortable below ~60k characters.
@@ -151,7 +151,7 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
                 downloadText(`${manifest.product.name.toLowerCase()}-feedback-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ v: 1, rounds: outgoing }, null, 2), "application/json")
                 say("Too much for one link: downloaded a file to send instead (paste it into Import)")
               } else {
-                await copy(url, "Link copied: send it to the designer")
+                await copy(url, "Link copied: send it to whoever shared this prototype")
               }
               setSent(true)
             }}
@@ -176,7 +176,7 @@ export function CommentsPanel({ onClose, onAdd, wireframe, here }: { onClose: ()
         </div>
         {sent && mode === "local" && (
           <div className="text-[11px]" style={{ color: "var(--ps-muted)" }} data-ps-sent>
-            The designer opens the link in their own viewer and imports your round. The digest is the same feedback to read.
+            Whoever maintains this prototype opens the link in their dev viewer and imports your round. The digest is the same feedback to read.
           </div>
         )}
         {importing && (
